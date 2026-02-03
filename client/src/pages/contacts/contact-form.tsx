@@ -21,6 +21,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
+import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
 import { ArrowLeft } from 'lucide-react'
 
@@ -35,6 +37,9 @@ type FormData = {
   phone: string
   linkedinUrl: string
   location: string
+  photoFile: string
+  photoUrl: string
+  referredById: string // "" or numeric string
   howConnected: string
   mutualConnections: string
   whereFound: string
@@ -48,11 +53,14 @@ const emptyForm: FormData = {
   companyId: '',
   companyName: '',
   ecosystem: 'ROLODEX',
-  status: 'NEW',
+  status: 'CONNECTED',
   email: '',
   phone: '',
   linkedinUrl: '',
   location: '',
+  photoFile: '',
+  photoUrl: '',
+  referredById: '',
   howConnected: '',
   mutualConnections: '',
   whereFound: '',
@@ -72,6 +80,9 @@ function contactToForm(contact: Contact): FormData {
     phone: contact.phone ?? '',
     linkedinUrl: contact.linkedinUrl ?? '',
     location: contact.location ?? '',
+    photoFile: contact.photoFile ?? '',
+    photoUrl: contact.photoUrl ?? '',
+    referredById: contact.referredById?.toString() ?? '',
     howConnected: contact.howConnected ?? '',
     mutualConnections: contact.mutualConnections ?? '',
     whereFound: contact.whereFound ?? '',
@@ -92,6 +103,9 @@ function formToPayload(form: FormData) {
     phone: form.phone.trim() || null,
     linkedinUrl: form.linkedinUrl.trim() || null,
     location: form.location.trim() || null,
+    photoFile: form.photoFile || null,
+    photoUrl: form.photoUrl || null,
+    referredById: form.referredById ? parseInt(form.referredById) : null,
     howConnected: form.howConnected.trim() || null,
     mutualConnections: form.mutualConnections.trim() || null,
     whereFound: form.whereFound.trim() || null,
@@ -107,12 +121,16 @@ export function ContactFormPage() {
 
   const [form, setForm] = useState<FormData>(emptyForm)
   const [companies, setCompanies] = useState<Company[]>([])
+  const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
+    api.get<Contact[]>('/contacts').then(
+      (data) => setAllContacts(data.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {})
 
     if (isEdit && id) {
       api
@@ -165,6 +183,12 @@ export function ContactFormPage() {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: '' }))
   }
 
+  // Filter out self from referredBy options
+  const currentId = id ? parseInt(id) : null
+  const referredByOptions: ComboboxOption[] = allContacts
+    .filter((c) => c.id !== currentId)
+    .map((c) => ({ value: c.id.toString(), label: c.name }))
+
   if (loading) {
     return <div className="text-muted-foreground">Loading...</div>
   }
@@ -202,6 +226,19 @@ export function ContactFormPage() {
               {errors.name && (
                 <p className="text-sm text-destructive">{errors.name}</p>
               )}
+            </div>
+
+            <div className="sm:col-span-2">
+              <PhotoUpload
+                value={form.photoFile || form.photoUrl}
+                onChange={(val) => {
+                  if (val.startsWith('http')) {
+                    setForm((prev) => ({ ...prev, photoUrl: val, photoFile: '' }))
+                  } else {
+                    setForm((prev) => ({ ...prev, photoFile: val, photoUrl: '' }))
+                  }
+                }}
+              />
             </div>
 
             <div className="space-y-2">
@@ -344,6 +381,18 @@ export function ContactFormPage() {
                 onChange={(e) => set('companyName', e.target.value)}
                 placeholder="Company name"
                 disabled={!!form.companyId}
+              />
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Referred By</Label>
+              <Combobox
+                options={referredByOptions}
+                value={form.referredById}
+                onChange={(val, _isNew) => set('referredById', val)}
+                placeholder="Search contacts..."
+                searchPlaceholder="Search contacts..."
+                allowFreeText={false}
               />
             </div>
 

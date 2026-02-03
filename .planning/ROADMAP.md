@@ -4,7 +4,7 @@
 
 | Phase | Name | Status | Description |
 |-------|------|--------|-------------|
-| 1 | Foundation | 🔲 Not Started | Project setup, DB schema, Contact & Company CRUD, basic UI shell |
+| 1 | Foundation | 🟡 In Progress | Project setup, DB schema, Contact & Company CRUD, basic UI shell |
 | 2 | Actions & Calendar | 🔲 Not Started | Action system, daily view, calendar, quick-add palette, nudge list |
 | 3 | Conversations & Relationships | 🔲 Not Started | Conversation logging, relationships, drag-drop photos, prep sheet |
 | 4 | Search, Import & Tags | 🔲 Not Started | Global search, date-range search, CSV import/export, tags, ideas, links |

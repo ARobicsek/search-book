@@ -21,7 +21,7 @@ router.get('/', async (_req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const company = await prisma.company.findUnique({
-      where: { id: parseInt(req.params.id) },
+      where: { id: parseInt(req.params.id as string) },
       include: {
         contacts: {
           select: {
@@ -66,7 +66,7 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/companies/:id — update
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     const existing = await prisma.company.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ error: 'Company not found' });
@@ -93,7 +93,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/companies/:id — hard delete
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     const existing = await prisma.company.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ error: 'Company not found' });

@@ -17,11 +17,30 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/contacts/without-actions — contacts with no pending actions
+router.get('/without-actions', async (_req: Request, res: Response) => {
+  try {
+    const contacts = await prisma.contact.findMany({
+      where: {
+        actions: {
+          none: { completed: false },
+        },
+      },
+      include: { company: { select: { id: true, name: true } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    res.json(contacts);
+  } catch (error) {
+    console.error('Error fetching contacts without actions:', error);
+    res.status(500).json({ error: 'Failed to fetch contacts without actions' });
+  }
+});
+
 // GET /api/contacts/:id — single contact with details
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const contact = await prisma.contact.findUnique({
-      where: { id: parseInt(req.params.id) },
+      where: { id: parseInt(req.params.id as string) },
       include: {
         company: true,
         referredBy: { select: { id: true, name: true } },
@@ -61,7 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/contacts/:id — update
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     const existing = await prisma.contact.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ error: 'Contact not found' });
@@ -89,7 +108,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/contacts/:id — hard delete
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     const existing = await prisma.contact.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ error: 'Contact not found' });

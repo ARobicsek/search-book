@@ -5,7 +5,7 @@
 | Phase | Name | Status | Description |
 |-------|------|--------|-------------|
 | 1 | Foundation | ✅ Complete | Project setup, DB schema, Contact & Company CRUD, basic UI shell |
-| 2 | Actions & Calendar | 🔲 Not Started | Action system, daily view, calendar, quick-add palette, nudge list |
+| 2 | Actions & Calendar | ✅ Complete | Action system, daily view, calendar, quick-add palette, nudge list |
 | 3 | Conversations & Relationships | 🔲 Not Started | Conversation logging, relationships, drag-drop photos, prep sheet |
 | 4 | Search, Import & Tags | 🔲 Not Started | Global search, date-range search, CSV import/export, tags, ideas, links |
 | 5 | Recurring Tasks & Dashboard | 🔲 Not Started | Recurring actions, contact flagging, weekly activity dashboard |
@@ -46,14 +46,14 @@
 - Nudge system for contacts without next actions
 
 ### Acceptance Criteria
-- [ ] Can create actions with due dates, types, priorities
-- [ ] Can link actions to contacts and companies
-- [ ] Daily view shows today's actions sorted by priority
-- [ ] Calendar shows actions on their due dates
-- [ ] Ctrl+K opens quick-add palette for contacts, actions, notes
-- [ ] Can mark actions complete (records completion date)
-- [ ] Overdue actions are visually highlighted
-- [ ] "Contacts without a next action" list is visible
+- [x] Can create actions with due dates, types, priorities
+- [x] Can link actions to contacts and companies
+- [x] Daily view shows today's actions sorted by priority
+- [x] Calendar shows actions on their due dates
+- [x] Ctrl+K opens quick-add palette for contacts, actions, notes
+- [x] Can mark actions complete (records completion date)
+- [x] Overdue actions are visually highlighted
+- [x] "Contacts without a next action" list is visible
 
 ---
 

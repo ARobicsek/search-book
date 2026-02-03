@@ -28,6 +28,12 @@
 | Delete behavior | Hard delete (no soft delete) | 2026-02-02 |
 | Contact list columns | Name, Title, Company, Ecosystem, Status, Location, Updated (7 cols) | 2026-02-02 |
 | Company detail page | Included in Phase 1 scope | 2026-02-02 |
+| Dashboard | Daily view (home page), weekly stats deferred to Phase 5 | 2026-02-03 |
+| Action list filter | Simple toggle bar (All/Pending/Completed/Overdue) | 2026-02-03 |
+| Calendar library | FullCalendar (month + week views, MIT license) | 2026-02-03 |
+| Command palette | shadcn Command component (cmdk-based), Ctrl+K hotkey | 2026-02-03 |
+| Quick-add Note | Saves to Ideas table | 2026-02-03 |
+| Nudge list location | Integrated directly into Dashboard | 2026-02-03 |
 
 ## Coach's Guidance Incorporated
 - 6 ecosystem types from coaching framework
@@ -49,3 +55,4 @@ None currently.
 | 2026-02-02 | Phase 1 discuss + plan complete. Decided: sidebar nav, TanStack Table, full-page grouped forms, all tables upfront, client/server monorepo, hard delete, 7-column contact list, company detail in Phase 1. 13-task plan approved. Starting execution. |
 | 2026-02-03 | Phase 1 execution: completed T1-T6. Scaffolding, Prisma schema (all tables), Contact/Company CRUD APIs, Tailwind+shadcn/ui setup, app shell with sidebar nav, routing, API utility, shared types. T7-T13 remain. |
 | 2026-02-03 | Phase 1 execution: completed T7-T13. Contact list (TanStack Table, 7 sortable columns, ecosystem/status badges), contact create/edit form (4 grouped sections, company dropdown+freetext, validation), contact detail page (all fields, edit/delete with confirmation, future-phase placeholders), company list (6 sortable columns, status badges), company create/edit form (grouped sections, validation), company detail page (info, linked contacts list, edit/delete), toast error handling on all API calls. **Phase 1 complete.** |
+| 2026-02-03 | Phase 2 execution: completed all tasks (T1-T12). Action types/enums (ActionType, ActionPriority, Action, Idea interfaces). Action CRUD API with filters (status, contactId, companyId), complete toggle endpoint. 8 sample actions in seed data. Action list page (TanStack Table, filter toggle bar, complete checkbox, badges). Action form (3 sections, query param pre-fill). Action detail page (badges, complete toggle, edit/delete). Dashboard with daily view (overdue/today/upcoming/unscheduled actions, nudge list). Calendar with FullCalendar (month/week views, color-coded by priority). Contact/Company detail pages updated with real actions list. Command palette (Ctrl+K) with quick-add for contacts/actions/notes. Ideas API endpoint. Sidebar and routing updated. Removed old home.tsx. Fixed TypeScript issues with Express route params. **Phase 2 complete.** |

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company } from '@/lib/types'
-import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
+import type { Company, Action } from '@/lib/types'
+import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,7 +22,24 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Trash2, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check } from 'lucide-react'
+
+const actionTypeColors: Record<string, string> = {
+  EMAIL: 'bg-blue-100 text-blue-800',
+  CALL: 'bg-green-100 text-green-800',
+  READ: 'bg-purple-100 text-purple-800',
+  WRITE: 'bg-indigo-100 text-indigo-800',
+  RESEARCH: 'bg-amber-100 text-amber-800',
+  FOLLOW_UP: 'bg-orange-100 text-orange-800',
+  INTRO: 'bg-cyan-100 text-cyan-800',
+  OTHER: 'bg-slate-100 text-slate-700',
+}
+
+const actionPriorityColors: Record<string, string> = {
+  HIGH: 'bg-red-100 text-red-800',
+  MEDIUM: 'bg-yellow-100 text-yellow-800',
+  LOW: 'bg-slate-100 text-slate-600',
+}
 
 const companyStatusColors: Record<string, string> = {
   RESEARCHING: 'bg-blue-100 text-blue-700',
@@ -77,6 +94,7 @@ export function CompanyDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const [company, setCompany] = useState<Company | null>(null)
+  const [actions, setActions] = useState<Action[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -91,7 +109,21 @@ export function CompanyDetailPage() {
         navigate('/companies')
       })
       .finally(() => setLoading(false))
+
+    api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => {})
   }, [id, navigate])
+
+  async function toggleActionComplete(action: Action) {
+    try {
+      await api.patch<Action>(`/actions/${action.id}/complete`)
+      const updated = await api.get<Action[]>(`/actions?companyId=${id}`)
+      setActions(updated)
+      toast.success(action.completed ? 'Marked incomplete' : 'Marked complete')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update'
+      toast.error(message)
+    }
+  }
 
   async function handleDelete() {
     setDeleting(true)
@@ -254,6 +286,61 @@ export function CompanyDetailPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No contacts linked to this company.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Actions */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Actions</CardTitle>
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/actions/new?companyId=${company.id}`}>
+              <Plus className="mr-1 h-3 w-3" />
+              New Action
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {actions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No actions yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {actions.map((action) => {
+                const overdue = !action.completed && action.dueDate && action.dueDate < new Date().toISOString().split('T')[0]
+                return (
+                  <div key={action.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
+                    <button
+                      onClick={() => toggleActionComplete(action)}
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                        action.completed
+                          ? 'border-green-500 bg-green-500 text-white'
+                          : 'border-muted-foreground/30 hover:border-green-500'
+                      }`}
+                    >
+                      {action.completed && <Check className="h-2.5 w-2.5" />}
+                    </button>
+                    <Link
+                      to={`/actions/${action.id}`}
+                      className={`flex-1 text-sm hover:underline ${action.completed ? 'text-muted-foreground line-through' : ''}`}
+                    >
+                      {action.title}
+                    </Link>
+                    <Badge variant="outline" className={`text-xs ${actionTypeColors[action.type]}`}>
+                      {getLabel(action.type, ACTION_TYPE_OPTIONS)}
+                    </Badge>
+                    <Badge variant="outline" className={`text-xs ${actionPriorityColors[action.priority]}`}>
+                      {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
+                    </Badge>
+                    {action.dueDate && (
+                      <span className={`text-xs ${overdue ? 'font-semibold text-red-600' : 'text-muted-foreground'}`}>
+                        {new Date(action.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </CardContent>
       </Card>

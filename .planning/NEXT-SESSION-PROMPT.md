@@ -41,6 +41,20 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 - Command palette (Ctrl+K) for quick-add contacts/actions/notes
 - Ideas API (POST only) for quick-add notes
 
+### User Feedback from Testing (Priority for Phase 3+):
+
+1. **Contact reference fields need combobox pattern** — Fields like "Who connected us" (referredBy) should support both free-text entry AND searching/selecting existing contacts. This applies to any field that references people.
+
+2. **Photo upload in contact forms** — Need ability to drag-drop/upload images directly in the contact create/edit form, not just on detail pages.
+
+3. **Conversation logging is high priority** — Must capture conversation content quickly with:
+   - Structured date field
+   - People discussed (searchable list + free-text for new names)
+   - Companies discussed (searchable list + free-text for new companies)
+   - This is core to the "capture info immediately after conversations" philosophy
+
+4. **Global search across all documentation** — Eventually need to search across contact cards, ideas, conversations, etc. for any person or company name. (Phase 4 scope)
+
 ### Phase 3 Goals (from ROADMAP.md):
 - Log conversations with flexible dating (day, month, or quarter precision)
 - Create follow-up actions from conversations
@@ -64,4 +78,4 @@ npm start
 - **Client (UI)**: http://localhost:5173 — Use this to interact with the app
 - **Server (API)**: http://localhost:3001 — JSON API only, not a webpage
 
-**Please start by discussing the Phase 3 approach and creating a task breakdown plan.**
+**Please start by discussing the Phase 3 approach and creating a task breakdown plan. Pay special attention to the user feedback items above — they represent real usage needs.**

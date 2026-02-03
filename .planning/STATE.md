@@ -45,6 +45,14 @@
 - Prep sheet view for pre-call preparation
 - Follow-up triggers: 7, 14, 30, 90 day intervals
 
+## User Feedback (from testing)
+| Feedback | Phase | Notes |
+|----------|-------|-------|
+| Contact reference fields (e.g. "Who connected us") need combobox: search existing + free-text | 3 | Applies to referredBy and any person-reference field |
+| Photo upload needed in contact create/edit form, not just detail page | 3 | Drag-drop or file picker in form |
+| Conversation logging is high priority — structured date, people/companies discussed as searchable+free-text fields | 3 | Core to "capture immediately after conversations" philosophy |
+| Global search across all documentation (contacts, ideas, conversations) for person/company names | 4 | Cross-entity full-text search |
+
 ## Blockers
 None currently.
 

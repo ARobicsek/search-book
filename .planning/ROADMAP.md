@@ -4,7 +4,7 @@
 
 | Phase | Name | Status | Description |
 |-------|------|--------|-------------|
-| 1 | Foundation | 🟡 In Progress | Project setup, DB schema, Contact & Company CRUD, basic UI shell |
+| 1 | Foundation | ✅ Complete | Project setup, DB schema, Contact & Company CRUD, basic UI shell |
 | 2 | Actions & Calendar | 🔲 Not Started | Action system, daily view, calendar, quick-add palette, nudge list |
 | 3 | Conversations & Relationships | 🔲 Not Started | Conversation logging, relationships, drag-drop photos, prep sheet |
 | 4 | Search, Import & Tags | 🔲 Not Started | Global search, date-range search, CSV import/export, tags, ideas, links |
@@ -26,13 +26,13 @@
 - Basic navigation (sidebar or top nav)
 
 ### Acceptance Criteria
-- [ ] `npm start` launches both backend (Express) and frontend (React)
-- [ ] Can create, view, edit, delete a contact with all fields
-- [ ] Can create, view, edit, delete a company
-- [ ] Can link a contact to a company
-- [ ] Contact list displays all contacts in a sortable table
-- [ ] Contact detail page shows all fields
-- [ ] Navigation between views works
+- [x] `npm start` launches both backend (Express) and frontend (React)
+- [x] Can create, view, edit, delete a contact with all fields
+- [x] Can create, view, edit, delete a company
+- [x] Can link a contact to a company
+- [x] Contact list displays all contacts in a sortable table
+- [x] Contact detail page shows all fields
+- [x] Navigation between views works
 
 ---
 

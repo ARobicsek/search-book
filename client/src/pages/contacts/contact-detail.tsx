@@ -70,6 +70,7 @@ import {
 const actionTypeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
   CALL: 'bg-green-100 text-green-800',
+  MEET: 'bg-teal-100 text-teal-800',
   READ: 'bg-purple-100 text-purple-800',
   WRITE: 'bg-indigo-100 text-indigo-800',
   RESEARCH: 'bg-amber-100 text-amber-800',
@@ -105,6 +106,7 @@ const statusColors: Record<string, string> = {
 
 const conversationTypeColors: Record<string, string> = {
   CALL: 'bg-green-100 text-green-800',
+  VIDEO_CALL: 'bg-teal-100 text-teal-800',
   EMAIL: 'bg-blue-100 text-blue-800',
   MEETING: 'bg-purple-100 text-purple-800',
   LINKEDIN: 'bg-sky-100 text-sky-800',

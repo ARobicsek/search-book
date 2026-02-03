@@ -73,7 +73,7 @@ export const COMPANY_STATUS_OPTIONS: { value: CompanyStatus; label: string }[] =
 
 // ─── Actions ─────────────────────────────────────────────────
 
-export type ActionType = 'EMAIL' | 'CALL' | 'READ' | 'WRITE' | 'RESEARCH' | 'FOLLOW_UP' | 'INTRO' | 'OTHER';
+export type ActionType = 'EMAIL' | 'CALL' | 'MEET' | 'READ' | 'WRITE' | 'RESEARCH' | 'FOLLOW_UP' | 'INTRO' | 'OTHER';
 export type ActionPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface Action {
@@ -101,6 +101,7 @@ export interface Action {
 export const ACTION_TYPE_OPTIONS: { value: ActionType; label: string }[] = [
   { value: 'EMAIL', label: 'Email' },
   { value: 'CALL', label: 'Call' },
+  { value: 'MEET', label: 'Meet' },
   { value: 'READ', label: 'Read' },
   { value: 'WRITE', label: 'Write' },
   { value: 'RESEARCH', label: 'Research' },
@@ -124,3 +125,65 @@ export interface Idea {
   tags: string | null;
   createdAt: string;
 }
+
+// ─── Conversations ──────────────────────────────────────────
+
+export type ConversationType = 'CALL' | 'VIDEO_CALL' | 'EMAIL' | 'MEETING' | 'LINKEDIN' | 'COFFEE' | 'EVENT' | 'OTHER';
+export type DatePrecision = 'DAY' | 'MONTH' | 'QUARTER' | 'YEAR';
+
+export interface Conversation {
+  id: number;
+  contactId: number;
+  contact: { id: number; name: string };
+  date: string;
+  datePrecision: DatePrecision;
+  type: ConversationType;
+  summary: string | null;
+  notes: string | null;
+  nextSteps: string | null;
+  photoFile: string | null;
+  createdAt: string;
+  contactsDiscussed: { contact: { id: number; name: string } }[];
+  companiesDiscussed: { company: { id: number; name: string } }[];
+  actions?: { id: number; title: string; completed: boolean }[];
+}
+
+export const CONVERSATION_TYPE_OPTIONS: { value: ConversationType; label: string }[] = [
+  { value: 'CALL', label: 'Call' },
+  { value: 'VIDEO_CALL', label: 'Video Call' },
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'MEETING', label: 'Meeting' },
+  { value: 'LINKEDIN', label: 'LinkedIn' },
+  { value: 'COFFEE', label: 'Coffee' },
+  { value: 'EVENT', label: 'Event' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+export const DATE_PRECISION_OPTIONS: { value: DatePrecision; label: string }[] = [
+  { value: 'DAY', label: 'Exact Day' },
+  { value: 'MONTH', label: 'Month' },
+  { value: 'QUARTER', label: 'Quarter' },
+  { value: 'YEAR', label: 'Year' },
+];
+
+// ─── Relationships ──────────────────────────────────────────
+
+export type RelationshipType = 'REFERRED_BY' | 'WORKS_WITH' | 'KNOWS' | 'INTRODUCED_BY' | 'REPORTS_TO';
+
+export interface Relationship {
+  id: number;
+  fromContactId: number;
+  fromContact: { id: number; name: string };
+  toContactId: number;
+  toContact: { id: number; name: string };
+  type: RelationshipType;
+  notes: string | null;
+}
+
+export const RELATIONSHIP_TYPE_OPTIONS: { value: RelationshipType; label: string }[] = [
+  { value: 'REFERRED_BY', label: 'Referred By' },
+  { value: 'WORKS_WITH', label: 'Works With' },
+  { value: 'KNOWS', label: 'Knows' },
+  { value: 'INTRODUCED_BY', label: 'Introduced By' },
+  { value: 'REPORTS_TO', label: 'Reports To' },
+];

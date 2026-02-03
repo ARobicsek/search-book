@@ -27,6 +27,7 @@ import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check } from 'lucide-rea
 const actionTypeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
   CALL: 'bg-green-100 text-green-800',
+  MEET: 'bg-teal-100 text-teal-800',
   READ: 'bg-purple-100 text-purple-800',
   WRITE: 'bg-indigo-100 text-indigo-800',
   RESEARCH: 'bg-amber-100 text-amber-800',

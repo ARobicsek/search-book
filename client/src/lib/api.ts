@@ -27,6 +27,13 @@ export const api = {
       body: JSON.stringify(data),
     }).then(handleResponse<T>);
   },
+  patch<T>(path: string, data?: unknown): Promise<T> {
+    return fetch(`${API_BASE}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: data !== undefined ? JSON.stringify(data) : undefined,
+    }).then(handleResponse<T>);
+  },
   delete(path: string): Promise<void> {
     return fetch(`${API_BASE}${path}`, {
       method: 'DELETE',

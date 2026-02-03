@@ -70,3 +70,57 @@ export const COMPANY_STATUS_OPTIONS: { value: CompanyStatus; label: string }[] =
   { value: 'ON_HOLD', label: 'On Hold' },
   { value: 'CLOSED', label: 'Closed' },
 ];
+
+// ─── Actions ─────────────────────────────────────────────────
+
+export type ActionType = 'EMAIL' | 'CALL' | 'READ' | 'WRITE' | 'RESEARCH' | 'FOLLOW_UP' | 'INTRO' | 'OTHER';
+export type ActionPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface Action {
+  id: number;
+  title: string;
+  description: string | null;
+  type: ActionType;
+  dueDate: string | null;
+  completed: boolean;
+  completedDate: string | null;
+  contactId: number | null;
+  contact: { id: number; name: string } | null;
+  companyId: number | null;
+  company: { id: number; name: string } | null;
+  conversationId: number | null;
+  conversation: { id: number; summary: string | null } | null;
+  priority: ActionPriority;
+  recurring: boolean;
+  recurringIntervalDays: number | null;
+  recurringEndDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const ACTION_TYPE_OPTIONS: { value: ActionType; label: string }[] = [
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'CALL', label: 'Call' },
+  { value: 'READ', label: 'Read' },
+  { value: 'WRITE', label: 'Write' },
+  { value: 'RESEARCH', label: 'Research' },
+  { value: 'FOLLOW_UP', label: 'Follow Up' },
+  { value: 'INTRO', label: 'Intro' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+export const ACTION_PRIORITY_OPTIONS: { value: ActionPriority; label: string }[] = [
+  { value: 'HIGH', label: 'High' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'LOW', label: 'Low' },
+];
+
+// ─── Ideas ──────────────────────────────────────────────────
+
+export interface Idea {
+  id: number;
+  title: string;
+  description: string | null;
+  tags: string | null;
+  createdAt: string;
+}

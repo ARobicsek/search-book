@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { PrismaClient } from '../src/generated/prisma/client';
 
 const prisma = new PrismaClient();
@@ -113,6 +114,95 @@ async function main() {
       status: 'NEW',
       howConnected: 'Alumni event speaker',
       notes: 'Research on executive transitions. Could be a good reference.',
+    },
+  });
+
+  // Actions — mix of dates relative to today
+  const today = new Date();
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+
+  await prisma.action.create({
+    data: {
+      title: 'Follow up with Sarah on Q2 priorities',
+      type: 'FOLLOW_UP',
+      priority: 'HIGH',
+      dueDate: fmt(today),
+      contactId: sarah.id,
+      companyId: acmeCorp.id,
+    },
+  });
+
+  await prisma.action.create({
+    data: {
+      title: 'Send thank-you email to Marcus',
+      type: 'EMAIL',
+      priority: 'MEDIUM',
+      dueDate: fmt(today),
+      contactId: marcus.id,
+    },
+  });
+
+  await prisma.action.create({
+    data: {
+      title: 'Research Global Finance Partners leadership team',
+      description: 'Look into recent executive hires and org structure changes.',
+      type: 'RESEARCH',
+      priority: 'MEDIUM',
+      dueDate: fmt(addDays(today, -2)),
+      companyId: globalFinance.id,
+    },
+  });
+
+  await prisma.action.create({
+    data: {
+      title: 'Prepare talking points for David Kim call',
+      description: 'Review his recent speaking engagements and mutual connections.',
+      type: 'WRITE',
+      priority: 'HIGH',
+      dueDate: fmt(addDays(today, 3)),
+      contactId: sarah.id,
+    },
+  });
+
+  await prisma.action.create({
+    data: {
+      title: 'Read Dr. Rodriguez latest paper on exec transitions',
+      type: 'READ',
+      priority: 'LOW',
+      dueDate: fmt(addDays(today, 7)),
+    },
+  });
+
+  await prisma.action.create({
+    data: {
+      title: 'Schedule intro call with Acme VP of Product',
+      type: 'INTRO',
+      priority: 'HIGH',
+      dueDate: fmt(addDays(today, 5)),
+      companyId: acmeCorp.id,
+      contactId: sarah.id,
+    },
+  });
+
+  await prisma.action.create({
+    data: {
+      title: 'Update resume with consulting project results',
+      type: 'WRITE',
+      priority: 'MEDIUM',
+      dueDate: fmt(addDays(today, -5)),
+      completed: true,
+      completedDate: fmt(addDays(today, -4)),
+    },
+  });
+
+  await prisma.action.create({
+    data: {
+      title: 'Send LinkedIn connection request to Summit team',
+      type: 'EMAIL',
+      priority: 'LOW',
+      dueDate: fmt(addDays(today, 14)),
+      companyId: summitConsulting.id,
     },
   });
 

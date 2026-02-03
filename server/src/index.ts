@@ -1,7 +1,10 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import contactsRouter from './routes/contacts';
 import companiesRouter from './routes/companies';
+import actionsRouter from './routes/actions';
+import ideasRouter from './routes/ideas';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -17,6 +20,8 @@ app.get('/api/health', (_req, res) => {
 // Routes
 app.use('/api/contacts', contactsRouter);
 app.use('/api/companies', companiesRouter);
+app.use('/api/actions', actionsRouter);
+app.use('/api/ideas', ideasRouter);
 
 app.listen(PORT, () => {
   console.log(`SearchBook API running on http://localhost:${PORT}`);

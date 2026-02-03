@@ -454,6 +454,17 @@ export function ContactDetailPage() {
             </CardContent>
           </Card>
 
+          {contact.personalDetails && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Personal Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm whitespace-pre-wrap">{contact.personalDetails}</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Actions */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">

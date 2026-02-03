@@ -25,6 +25,7 @@ export interface Contact {
   whereFound: string | null;
   openQuestions: string | null;
   notes: string | null;
+  personalDetails: string | null;
   createdAt: string;
   updatedAt: string;
 }

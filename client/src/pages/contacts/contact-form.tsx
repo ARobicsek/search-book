@@ -21,10 +21,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ChevronDown } from 'lucide-react'
 
 type FormData = {
   name: string
@@ -45,6 +50,7 @@ type FormData = {
   whereFound: string
   openQuestions: string
   notes: string
+  personalDetails: string
 }
 
 const emptyForm: FormData = {
@@ -66,6 +72,7 @@ const emptyForm: FormData = {
   whereFound: '',
   openQuestions: '',
   notes: '',
+  personalDetails: '',
 }
 
 function contactToForm(contact: Contact): FormData {
@@ -88,6 +95,7 @@ function contactToForm(contact: Contact): FormData {
     whereFound: contact.whereFound ?? '',
     openQuestions: contact.openQuestions ?? '',
     notes: contact.notes ?? '',
+    personalDetails: contact.personalDetails ?? '',
   }
 }
 
@@ -111,6 +119,7 @@ function formToPayload(form: FormData) {
     whereFound: form.whereFound.trim() || null,
     openQuestions: form.openQuestions.trim() || null,
     notes: form.notes.trim() || null,
+    personalDetails: form.personalDetails.trim() || null,
   }
 }
 
@@ -126,6 +135,17 @@ export function ContactFormPage() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Progressive disclosure: auto-open if fields have data
+  const hasContactDetails = !!(form.phone || form.linkedinUrl)
+  const hasConnectionDetails = !!(form.howConnected || form.mutualConnections)
+  const hasResearch = !!(form.whereFound || form.openQuestions || form.notes)
+  const hasPersonalDetails = !!form.personalDetails
+
+  const [contactDetailsOpen, setContactDetailsOpen] = useState(hasContactDetails)
+  const [connectionDetailsOpen, setConnectionDetailsOpen] = useState(hasConnectionDetails)
+  const [researchOpen, setResearchOpen] = useState(hasResearch)
+  const [personalDetailsOpen, setPersonalDetailsOpen] = useState(hasPersonalDetails)
+
   useEffect(() => {
     api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
     api.get<Contact[]>('/contacts').then(
@@ -135,7 +155,15 @@ export function ContactFormPage() {
     if (isEdit && id) {
       api
         .get<Contact>(`/contacts/${id}`)
-        .then((contact) => setForm(contactToForm(contact)))
+        .then((contact) => {
+          const f = contactToForm(contact)
+          setForm(f)
+          // Open sections that have data
+          if (f.phone || f.linkedinUrl) setContactDetailsOpen(true)
+          if (f.howConnected || f.mutualConnections) setConnectionDetailsOpen(true)
+          if (f.whereFound || f.openQuestions || f.notes) setResearchOpen(true)
+          if (f.personalDetails) setPersonalDetailsOpen(true)
+        })
         .catch((err) => {
           toast.error(err.message)
           navigate('/contacts')
@@ -162,6 +190,18 @@ export function ContactFormPage() {
     setSaving(true)
     try {
       const payload = formToPayload(form)
+
+      // If user typed a new company name (not from dropdown), auto-create the company
+      if (!payload.companyId && payload.companyName) {
+        try {
+          const newCompany = await api.post<Company>('/companies', { name: payload.companyName })
+          payload.companyId = newCompany.id
+          payload.companyName = null
+        } catch {
+          // If company creation fails, still save the contact with freetext company name
+        }
+      }
+
       if (isEdit) {
         await api.put(`/contacts/${id}`, payload)
         toast.success('Contact updated')
@@ -182,6 +222,12 @@ export function ContactFormPage() {
     setForm((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: '' }))
   }
+
+  // Company combobox options: search existing + type new
+  const companyOptions: ComboboxOption[] = companies.map((c) => ({
+    value: c.id.toString(),
+    label: c.name,
+  }))
 
   // Filter out self from referredBy options
   const currentId = id ? parseInt(id) : null
@@ -262,6 +308,46 @@ export function ContactFormPage() {
             </div>
 
             <div className="space-y-2">
+              <Label>Company</Label>
+              <Combobox
+                options={companyOptions}
+                value={form.companyId || form.companyName}
+                onChange={(val, isNew) => {
+                  if (isNew) {
+                    // User typed a new company name
+                    setForm((prev) => ({ ...prev, companyId: '', companyName: val }))
+                  } else {
+                    // User selected an existing company
+                    setForm((prev) => ({ ...prev, companyId: val, companyName: '' }))
+                  }
+                }}
+                placeholder="Search or type new company..."
+                searchPlaceholder="Search companies..."
+                allowFreeText={true}
+              />
+              {form.companyName && !form.companyId && (
+                <p className="text-xs text-muted-foreground">
+                  A new company card will be created automatically.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={form.email}
+                onChange={(e) => set('email', e.target.value)}
+                placeholder="email@example.com"
+                aria-invalid={!!errors.email}
+              />
+              {errors.email && (
+                <p className="text-sm text-destructive">{errors.email}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="ecosystem">Ecosystem</Label>
               <Select value={form.ecosystem} onValueChange={(v) => set('ecosystem', v)}>
                 <SelectTrigger id="ecosystem" className="w-full">
@@ -292,97 +378,6 @@ export function ContactFormPage() {
                 </SelectContent>
               </Select>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Contact Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Contact Details</CardTitle>
-            <CardDescription>How to reach this person</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => set('email', e.target.value)}
-                placeholder="email@example.com"
-                aria-invalid={!!errors.email}
-              />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                value={form.phone}
-                onChange={(e) => set('phone', e.target.value)}
-                placeholder="(555) 123-4567"
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="linkedinUrl">LinkedIn URL</Label>
-              <Input
-                id="linkedinUrl"
-                value={form.linkedinUrl}
-                onChange={(e) => set('linkedinUrl', e.target.value)}
-                placeholder="https://linkedin.com/in/..."
-                aria-invalid={!!errors.linkedinUrl}
-              />
-              {errors.linkedinUrl && (
-                <p className="text-sm text-destructive">{errors.linkedinUrl}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Connections */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Connections</CardTitle>
-            <CardDescription>Company and how you know them</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="companyId">Company</Label>
-              <Select
-                value={form.companyId || '_none'}
-                onValueChange={(v) => set('companyId', v === '_none' ? '' : v)}
-              >
-                <SelectTrigger id="companyId" className="w-full">
-                  <SelectValue placeholder="Select a company" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">None</SelectItem>
-                  {companies.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="companyName">
-                Company (freetext){' '}
-                <span className="text-xs text-muted-foreground">if not in list</span>
-              </Label>
-              <Input
-                id="companyName"
-                value={form.companyName}
-                onChange={(e) => set('companyName', e.target.value)}
-                placeholder="Company name"
-                disabled={!!form.companyId}
-              />
-            </div>
 
             <div className="space-y-2 sm:col-span-2">
               <Label>Referred By</Label>
@@ -395,71 +390,177 @@ export function ContactFormPage() {
                 allowFreeText={false}
               />
             </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="howConnected">How Connected</Label>
-              <Input
-                id="howConnected"
-                value={form.howConnected}
-                onChange={(e) => set('howConnected', e.target.value)}
-                placeholder="How you know them or who introduced you"
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="mutualConnections">Mutual Connections</Label>
-              <Textarea
-                id="mutualConnections"
-                value={form.mutualConnections}
-                onChange={(e) => set('mutualConnections', e.target.value)}
-                placeholder="Who you know in common"
-                rows={2}
-              />
-            </div>
           </CardContent>
         </Card>
 
-        {/* Research */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Research</CardTitle>
-            <CardDescription>What you know and want to learn</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="whereFound">Where Found</Label>
-              <Textarea
-                id="whereFound"
-                value={form.whereFound}
-                onChange={(e) => set('whereFound', e.target.value)}
-                placeholder="Where you've seen their work"
-                rows={2}
-              />
-            </div>
+        {/* Contact Details — Progressive Disclosure */}
+        <Collapsible open={contactDetailsOpen} onOpenChange={setContactDetailsOpen}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Phone & LinkedIn</CardTitle>
+                    <CardDescription>Additional contact methods</CardDescription>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${contactDetailsOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={form.phone}
+                    onChange={(e) => set('phone', e.target.value)}
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="openQuestions">Open Questions</Label>
-              <Textarea
-                id="openQuestions"
-                value={form.openQuestions}
-                onChange={(e) => set('openQuestions', e.target.value)}
-                placeholder="Things you still need to learn about/from them"
-                rows={3}
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="linkedinUrl">LinkedIn URL</Label>
+                  <Input
+                    id="linkedinUrl"
+                    value={form.linkedinUrl}
+                    onChange={(e) => set('linkedinUrl', e.target.value)}
+                    placeholder="https://linkedin.com/in/..."
+                    aria-invalid={!!errors.linkedinUrl}
+                  />
+                  {errors.linkedinUrl && (
+                    <p className="text-sm text-destructive">{errors.linkedinUrl}</p>
+                  )}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={form.notes}
-                onChange={(e) => set('notes', e.target.value)}
-                placeholder="General personalized research notes"
-                rows={4}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        {/* How Connected — Progressive Disclosure */}
+        <Collapsible open={connectionDetailsOpen} onOpenChange={setConnectionDetailsOpen}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>How Connected</CardTitle>
+                    <CardDescription>Connection details and mutual contacts</CardDescription>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${connectionDetailsOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="howConnected">How Connected</Label>
+                  <Input
+                    id="howConnected"
+                    value={form.howConnected}
+                    onChange={(e) => set('howConnected', e.target.value)}
+                    placeholder="How you know them or who introduced you"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="mutualConnections">Mutual Connections</Label>
+                  <Textarea
+                    id="mutualConnections"
+                    value={form.mutualConnections}
+                    onChange={(e) => set('mutualConnections', e.target.value)}
+                    placeholder="Who you know in common"
+                    rows={2}
+                  />
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
+        {/* Research — Progressive Disclosure */}
+        <Collapsible open={researchOpen} onOpenChange={setResearchOpen}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Research</CardTitle>
+                    <CardDescription>What you know and want to learn</CardDescription>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${researchOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="whereFound">Where Found</Label>
+                  <Textarea
+                    id="whereFound"
+                    value={form.whereFound}
+                    onChange={(e) => set('whereFound', e.target.value)}
+                    placeholder="Where you've seen their work"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="openQuestions">Open Questions</Label>
+                  <Textarea
+                    id="openQuestions"
+                    value={form.openQuestions}
+                    onChange={(e) => set('openQuestions', e.target.value)}
+                    placeholder="Things you still need to learn about/from them"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={form.notes}
+                    onChange={(e) => set('notes', e.target.value)}
+                    placeholder="General personalized research notes"
+                    rows={4}
+                  />
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
+        {/* Personal Details — Progressive Disclosure */}
+        <Collapsible open={personalDetailsOpen} onOpenChange={setPersonalDetailsOpen}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Personal Details</CardTitle>
+                    <CardDescription>Family, hobbies, personal info</CardDescription>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${personalDetailsOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label htmlFor="personalDetails">Personal Details</Label>
+                  <Textarea
+                    id="personalDetails"
+                    value={form.personalDetails}
+                    onChange={(e) => set('personalDetails', e.target.value)}
+                    placeholder="Kids ages, hobbies, interests, birthdays, etc."
+                    rows={4}
+                  />
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
         {/* Actions */}
         <div className="flex items-center gap-3">

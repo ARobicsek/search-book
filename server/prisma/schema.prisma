@@ -33,15 +33,17 @@ model Contact {
   whereFound        String?
   openQuestions     String?
   notes             String?
+  personalDetails   String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  tags              ContactTag[]
-  conversations     Conversation[]
-  actions           Action[]
-  linksTo           Link[]
-  relationshipsFrom Relationship[] @relation("RelFrom")
-  relationshipsTo   Relationship[] @relation("RelTo")
+  tags                     ContactTag[]
+  conversations            Conversation[]
+  actions                  Action[]
+  linksTo                  Link[]
+  relationshipsFrom        Relationship[] @relation("RelFrom")
+  relationshipsTo          Relationship[] @relation("RelTo")
+  discussedInConversations ConversationContact[] @relation("DiscussedInConversations")
 }
 
 // ─── Companies ───────────────────────────────────────────────
@@ -58,10 +60,11 @@ model Company {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  contacts Contact[]
-  tags     CompanyTag[]
-  actions  Action[]
-  links    Link[]
+  contacts                 Contact[]
+  tags                     CompanyTag[]
+  actions                  Action[]
+  links                    Link[]
+  discussedInConversations ConversationCompany[]
 }
 
 // ─── Tags ────────────────────────────────────────────────────
@@ -106,7 +109,29 @@ model Conversation {
   photoFile     String?
   createdAt     DateTime @default(now())
 
-  actions Action[]
+  actions            Action[]
+  contactsDiscussed  ConversationContact[]
+  companiesDiscussed ConversationCompany[]
+}
+
+// Junction: people discussed in a conversation
+model ConversationContact {
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contactId      Int
+  contact        Contact      @relation("DiscussedInConversations", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, contactId])
+}
+
+// Junction: companies discussed in a conversation
+model ConversationCompany {
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  companyId      Int
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, companyId])
 }
 
 // ─── Actions ─────────────────────────────────────────────────

@@ -57,4 +57,11 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 - [ ] Contact detail shows full history (conversations, actions, relationships)
 - [ ] Prep sheet view shows last conversation, open questions, relationships at a glance
 
+### Running the app:
+```bash
+npm start
+```
+- **Client (UI)**: http://localhost:5173 — Use this to interact with the app
+- **Server (API)**: http://localhost:3001 — JSON API only, not a webpage
+
 **Please start by discussing the Phase 3 approach and creating a task breakdown plan.**

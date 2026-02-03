@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Action, ActionType, ActionPriority, Contact } from '@/lib/types'
+import type { Action, ActionType, ActionPriority } from '@/lib/types'
 import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Check, Plus, AlertTriangle, CalendarDays, UserX } from 'lucide-react'
+import { Check, Plus, AlertTriangle, CalendarDays } from 'lucide-react'
 
 const typeColors: Record<ActionType, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -104,21 +104,18 @@ function ActionRow({ action, onToggle, showDate }: ActionRowProps) {
 export function DashboardPage() {
   const [allPending, setAllPending] = useState<Action[]>([])
   const [overdueActions, setOverdueActions] = useState<Action[]>([])
-  const [nudgeContacts, setNudgeContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
 
   const today = new Date().toISOString().split('T')[0]
 
   const fetchData = useCallback(async () => {
     try {
-      const [pending, overdue, nudge] = await Promise.all([
+      const [pending, overdue] = await Promise.all([
         api.get<Action[]>('/actions?status=pending'),
         api.get<Action[]>('/actions?status=overdue'),
-        api.get<Contact[]>('/contacts/without-actions'),
       ])
       setAllPending(pending)
       setOverdueActions(overdue)
-      setNudgeContacts(nudge)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load dashboard'
       toast.error(message)
@@ -271,38 +268,6 @@ export function DashboardPage() {
         </Card>
       )}
 
-      {/* Contacts without actions (nudge list) */}
-      {nudgeContacts.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <UserX className="h-5 w-5" />
-              Needs Attention ({nudgeContacts.length})
-            </CardTitle>
-            <CardDescription>Contacts without a pending action</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              {nudgeContacts.map((contact) => (
-                <div key={contact.id} className="flex items-center justify-between rounded-md px-2 py-2 hover:bg-muted/50">
-                  <Link
-                    to={`/contacts/${contact.id}`}
-                    className="text-sm font-medium hover:underline"
-                  >
-                    {contact.name}
-                  </Link>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/actions/new?contactId=${contact.id}`}>
-                      <Plus className="mr-1 h-3 w-3" />
-                      Add Action
-                    </Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

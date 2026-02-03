@@ -13,19 +13,24 @@ import {
 } from '@/components/ui/sidebar'
 
 const mainNav = [
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard, exact: true },
   { title: 'Contacts', url: '/contacts', icon: BookUser },
   { title: 'Companies', url: '/companies', icon: Building2 },
+  { title: 'Actions', url: '/actions', icon: ListTodo },
+  { title: 'Calendar', url: '/calendar', icon: CalendarDays },
 ]
 
 const futureNav = [
-  { title: 'Dashboard', url: '#', icon: LayoutDashboard, disabled: true },
-  { title: 'Calendar', url: '#', icon: CalendarDays, disabled: true },
-  { title: 'Actions', url: '#', icon: ListTodo, disabled: true },
   { title: 'Ideas', url: '#', icon: Lightbulb, disabled: true },
 ]
 
 export function AppSidebar() {
   const location = useLocation()
+
+  function isActive(item: typeof mainNav[number]) {
+    if (item.exact) return location.pathname === item.url
+    return location.pathname.startsWith(item.url)
+  }
 
   return (
     <Sidebar>
@@ -42,7 +47,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {mainNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location.pathname.startsWith(item.url)}>
+                  <SidebarMenuButton asChild isActive={isActive(item)}>
                     <Link to={item.url}>
                       <item.icon />
                       <span>{item.title}</span>

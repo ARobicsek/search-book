@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Contacts ────────────────────────────────────────────────
+
+model Contact {
+  id                Int      @id @default(autoincrement())
+  name              String
+  title             String?
+  companyId         Int?
+  company           Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyName       String?
+  ecosystem         String   @default("RECRUITER") // RECRUITER, ROLODEX, TARGET, INFLUENCER, ACADEMIA, INTRO_SOURCE
+  email             String?
+  phone             String?
+  linkedinUrl       String?
+  location          String?
+  photoUrl          String?
+  photoFile         String?
+  status            String   @default("NEW") // NEW, CONNECTED, AWAITING_RESPONSE, FOLLOW_UP_NEEDED, WARM_LEAD, ON_HOLD, CLOSED
+  howConnected      String?
+  referredById      Int?
+  referredBy        Contact?  @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals         Contact[] @relation("Referrals")
+  mutualConnections String?
+  whereFound        String?
+  openQuestions     String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tags              ContactTag[]
+  conversations     Conversation[]
+  actions           Action[]
+  linksTo           Link[]
+  relationshipsFrom Relationship[] @relation("RelFrom")
+  relationshipsTo   Relationship[] @relation("RelTo")
+}
+
+// ─── Companies ───────────────────────────────────────────────
+
+model Company {
+  id         Int      @id @default(autoincrement())
+  name       String
+  industry   String?
+  size       String?
+  website    String?
+  hqLocation String?
+  notes      String?
+  status     String   @default("RESEARCHING") // RESEARCHING, ACTIVE_TARGET, CONNECTED, ON_HOLD, CLOSED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  contacts Contact[]
+  tags     CompanyTag[]
+  actions  Action[]
+  links    Link[]
+}
+
+// ─── Tags ────────────────────────────────────────────────────
+
+model Tag {
+  id        Int          @id @default(autoincrement())
+  name      String       @unique
+  contacts  ContactTag[]
+  companies CompanyTag[]
+}
+
+model ContactTag {
+  contactId Int
+  tagId     Int
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+}
+
+model CompanyTag {
+  companyId Int
+  tagId     Int
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, tagId])
+}
+
+// ─── Conversations ───────────────────────────────────────────
+
+model Conversation {
+  id            Int      @id @default(autoincrement())
+  contactId     Int
+  contact       Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  date          String
+  datePrecision String   @default("DAY") // DAY, MONTH, QUARTER, YEAR
+  type          String   @default("OTHER") // CALL, EMAIL, MEETING, LINKEDIN, COFFEE, EVENT, OTHER
+  summary       String?
+  notes         String?
+  nextSteps     String?
+  photoFile     String?
+  createdAt     DateTime @default(now())
+
+  actions Action[]
+}
+
+// ─── Actions ─────────────────────────────────────────────────
+
+model Action {
+  id                    Int           @id @default(autoincrement())
+  title                 String
+  description           String?
+  type                  String        @default("OTHER") // EMAIL, CALL, READ, WRITE, RESEARCH, FOLLOW_UP, INTRO, OTHER
+  dueDate               String?
+  completed             Boolean       @default(false)
+  completedDate         String?
+  contactId             Int?
+  contact               Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  companyId             Int?
+  company               Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  conversationId        Int?
+  conversation          Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  priority              String        @default("MEDIUM") // HIGH, MEDIUM, LOW
+  recurring             Boolean       @default(false)
+  recurringIntervalDays Int?
+  recurringEndDate      String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+// ─── Ideas ───────────────────────────────────────────────────
+
+model Idea {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  tags        String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── Links ───────────────────────────────────────────────────
+
+model Link {
+  id          Int      @id @default(autoincrement())
+  url         String
+  title       String
+  description String?
+  contactId   Int?
+  contact     Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  companyId   Int?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+}
+
+// ─── Relationships ───────────────────────────────────────────
+
+model Relationship {
+  id            Int     @id @default(autoincrement())
+  fromContactId Int
+  fromContact   Contact @relation("RelFrom", fields: [fromContactId], references: [id], onDelete: Cascade)
+  toContactId   Int
+  toContact     Contact @relation("RelTo", fields: [toContactId], references: [id], onDelete: Cascade)
+  type          String  // REFERRED_BY, WORKS_WITH, KNOWS, INTRODUCED_BY, REPORTS_TO
+  notes         String?
+}

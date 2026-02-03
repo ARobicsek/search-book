@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import contactsRouter from './routes/contacts';
+import companiesRouter from './routes/companies';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,6 +16,7 @@ app.get('/api/health', (_req, res) => {
 
 // Routes
 app.use('/api/contacts', contactsRouter);
+app.use('/api/companies', companiesRouter);
 
 app.listen(PORT, () => {
   console.log(`SearchBook API running on http://localhost:${PORT}`);

@@ -1,0 +1,298 @@
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  type ColumnDef,
+  type SortingState,
+  flexRender,
+} from '@tanstack/react-table'
+import { ArrowUpDown, Plus } from 'lucide-react'
+import { api } from '@/lib/api'
+import type { Contact, Ecosystem, ContactStatus } from '@/lib/types'
+import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { toast } from 'sonner'
+
+const ecosystemColors: Record<Ecosystem, string> = {
+  RECRUITER: 'bg-blue-100 text-blue-800',
+  ROLODEX: 'bg-purple-100 text-purple-800',
+  TARGET: 'bg-green-100 text-green-800',
+  INFLUENCER: 'bg-amber-100 text-amber-800',
+  ACADEMIA: 'bg-rose-100 text-rose-800',
+  INTRO_SOURCE: 'bg-cyan-100 text-cyan-800',
+}
+
+const statusColors: Record<ContactStatus, string> = {
+  NEW: 'bg-slate-100 text-slate-700',
+  CONNECTED: 'bg-green-100 text-green-700',
+  AWAITING_RESPONSE: 'bg-yellow-100 text-yellow-700',
+  FOLLOW_UP_NEEDED: 'bg-orange-100 text-orange-700',
+  WARM_LEAD: 'bg-emerald-100 text-emerald-700',
+  ON_HOLD: 'bg-gray-100 text-gray-500',
+  CLOSED: 'bg-red-100 text-red-700',
+}
+
+function getLabel(value: string, options: { value: string; label: string }[]) {
+  return options.find((o) => o.value === value)?.label ?? value
+}
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function getCompanyDisplay(contact: Contact): string {
+  if (contact.company) return contact.company.name
+  if (contact.companyName) return contact.companyName
+  return ''
+}
+
+const columns: ColumnDef<Contact>[] = [
+  {
+    accessorKey: 'name',
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Name
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <Link
+        to={`/contacts/${row.original.id}`}
+        className="font-medium text-foreground hover:underline"
+      >
+        {row.original.name}
+      </Link>
+    ),
+  },
+  {
+    accessorKey: 'title',
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Title
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ getValue }) => (
+      <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+    ),
+  },
+  {
+    id: 'company',
+    accessorFn: (row) => getCompanyDisplay(row),
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Company
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const contact = row.original
+      if (contact.company) {
+        return (
+          <Link
+            to={`/companies/${contact.company.id}`}
+            className="hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contact.company.name}
+          </Link>
+        )
+      }
+      return <span className="text-muted-foreground">{contact.companyName ?? '—'}</span>
+    },
+  },
+  {
+    accessorKey: 'ecosystem',
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Ecosystem
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ getValue }) => {
+      const value = getValue() as Ecosystem
+      return (
+        <Badge variant="outline" className={ecosystemColors[value]}>
+          {getLabel(value, ECOSYSTEM_OPTIONS)}
+        </Badge>
+      )
+    },
+  },
+  {
+    accessorKey: 'status',
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Status
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ getValue }) => {
+      const value = getValue() as ContactStatus
+      return (
+        <Badge variant="outline" className={statusColors[value]}>
+          {getLabel(value, CONTACT_STATUS_OPTIONS)}
+        </Badge>
+      )
+    },
+  },
+  {
+    accessorKey: 'location',
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Location
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ getValue }) => (
+      <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+    ),
+  },
+  {
+    accessorKey: 'updatedAt',
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Updated
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ getValue }) => (
+      <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
+    ),
+  },
+]
+
+export function ContactListPage() {
+  const navigate = useNavigate()
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [loading, setLoading] = useState(true)
+  const [sorting, setSorting] = useState<SortingState>([])
+
+  useEffect(() => {
+    api
+      .get<Contact[]>('/contacts')
+      .then(setContacts)
+      .catch((err) => toast.error(err.message || 'Failed to load contacts'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const table = useReactTable({
+    data: contacts,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Contacts</h1>
+          <p className="text-sm text-muted-foreground">
+            {loading ? '' : `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/contacts/new">
+            <Plus className="mr-2 h-4 w-4" />
+            New Contact
+          </Link>
+        </Button>
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  Loading...
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No contacts yet.{' '}
+                  <Link to="/contacts/new" className="text-primary hover:underline">
+                    Add your first contact
+                  </Link>
+                </TableCell>
+              </TableRow>
+            ) : (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/contacts/${row.original.id}`)}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+}

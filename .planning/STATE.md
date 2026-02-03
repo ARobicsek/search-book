@@ -20,6 +20,14 @@
 | Methodology | GSD (Get Shit Done) framework | 2026-02-02 |
 | OS | Windows | 2026-02-02 |
 | Google Drive | User will install Drive for Desktop; backup to synced folder | 2026-02-02 |
+| Navigation | Collapsible left sidebar with icons + labels | 2026-02-02 |
+| Table library | TanStack Table (with shadcn DataTable recipe) | 2026-02-02 |
+| Form layout | Full-page forms with grouped/collapsible sections | 2026-02-02 |
+| DB schema timing | All tables created upfront in Phase 1 | 2026-02-02 |
+| Folder structure | client/ + server/ at root, root package.json with concurrently | 2026-02-02 |
+| Delete behavior | Hard delete (no soft delete) | 2026-02-02 |
+| Contact list columns | Name, Title, Company, Ecosystem, Status, Location, Updated (7 cols) | 2026-02-02 |
+| Company detail page | Included in Phase 1 scope | 2026-02-02 |
 
 ## Coach's Guidance Incorporated
 - 6 ecosystem types from coaching framework
@@ -38,3 +46,4 @@ None currently.
 | Date | What Happened |
 |------|---------------|
 | 2026-02-02 | Initial planning session. Defined architecture, data model, features, phases. Wrote PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md. |
+| 2026-02-02 | Phase 1 discuss + plan complete. Decided: sidebar nav, TanStack Table, full-page grouped forms, all tables upfront, client/server monorepo, hard delete, 7-column contact list, company detail in Phase 1. 13-task plan approved. Starting execution. |

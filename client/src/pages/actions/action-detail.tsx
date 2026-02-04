@@ -114,9 +114,12 @@ export function ActionDetailPage() {
   async function handleToggleComplete() {
     setToggling(true)
     try {
-      const updated = await api.patch<Action>(`/actions/${id}/complete`)
-      setAction(updated)
-      toast.success(updated.completed ? 'Marked complete' : 'Marked incomplete')
+      const result = await api.patch<{ action: Action; nextAction: Action | null }>(`/actions/${id}/complete`)
+      setAction(result.action)
+      toast.success(result.action.completed ? 'Marked complete' : 'Marked incomplete')
+      if (result.nextAction?.dueDate) {
+        toast.info(`Next occurrence created for ${result.nextAction.dueDate}`)
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update')
     } finally {

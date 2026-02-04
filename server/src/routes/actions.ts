@@ -12,7 +12,7 @@ const actionIncludes = {
 // GET /api/actions — list all actions with optional filters
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { status, contactId, companyId } = req.query;
+    const { status, contactId, companyId, sortBy } = req.query;
     const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
 
     // Build where clause from query params
@@ -30,10 +30,14 @@ router.get('/', async (req: Request, res: Response) => {
       where.dueDate = { lt: today };
     }
 
+    const orderBy = sortBy === 'completedDate'
+      ? [{ completedDate: 'desc' as const }, { priority: 'asc' as const }]
+      : [{ dueDate: 'asc' as const }, { priority: 'asc' as const }];
+
     const actions = await prisma.action.findMany({
       where,
       include: actionIncludes,
-      orderBy: [{ dueDate: 'asc' }, { priority: 'asc' }],
+      orderBy,
     });
     res.json(actions);
   } catch (error) {
@@ -123,7 +127,39 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
       data: { completed, completedDate },
       include: actionIncludes,
     });
-    res.json(action);
+
+    // If completing a recurring action, auto-create next occurrence
+    let nextAction = null;
+    if (completed && existing.recurring && existing.recurringIntervalDays) {
+      const baseDate = existing.dueDate
+        ? new Date(existing.dueDate + 'T00:00:00')
+        : new Date();
+      baseDate.setDate(baseDate.getDate() + existing.recurringIntervalDays);
+      const nextDueDate = baseDate.toLocaleDateString('en-CA');
+
+      // Only create if before end date (or no end date)
+      const shouldCreate = !existing.recurringEndDate || nextDueDate <= existing.recurringEndDate;
+
+      if (shouldCreate) {
+        nextAction = await prisma.action.create({
+          data: {
+            title: existing.title,
+            description: existing.description,
+            type: existing.type,
+            priority: existing.priority,
+            dueDate: nextDueDate,
+            contactId: existing.contactId,
+            companyId: existing.companyId,
+            recurring: true,
+            recurringIntervalDays: existing.recurringIntervalDays,
+            recurringEndDate: existing.recurringEndDate,
+          },
+          include: actionIncludes,
+        });
+      }
+    }
+
+    res.json({ action, nextAction });
   } catch (error) {
     console.error('Error toggling action completion:', error);
     res.status(500).json({ error: 'Failed to toggle action completion' });

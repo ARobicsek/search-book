@@ -222,10 +222,13 @@ export function ContactDetailPage() {
 
   async function toggleActionComplete(action: Action) {
     try {
-      await api.patch<Action>(`/actions/${action.id}/complete`)
+      const result = await api.patch<{ action: Action; nextAction: Action | null }>(`/actions/${action.id}/complete`)
       const updated = await api.get<Action[]>(`/actions?contactId=${id}`)
       setActions(updated)
       toast.success(action.completed ? 'Marked incomplete' : 'Marked complete')
+      if (result.nextAction?.dueDate) {
+        toast.info(`Next occurrence created for ${result.nextAction.dueDate}`)
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update'
       toast.error(message)

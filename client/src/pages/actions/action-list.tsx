@@ -71,9 +71,12 @@ export function ActionListPage() {
   const [filter, setFilter] = useState<FilterStatus>('pending')
 
   const fetchActions = useCallback(() => {
-    const params = filter !== 'all' ? `?status=${filter}` : ''
+    const params = new URLSearchParams()
+    if (filter !== 'all') params.set('status', filter)
+    if (filter === 'completed') params.set('sortBy', 'completedDate')
+    const qs = params.toString() ? `?${params}` : ''
     api
-      .get<Action[]>(`/actions${params}`)
+      .get<Action[]>(`/actions${qs}`)
       .then(setActions)
       .catch((err) => toast.error(err.message || 'Failed to load actions'))
       .finally(() => setLoading(false))
@@ -87,9 +90,12 @@ export function ActionListPage() {
   const toggleComplete = async (e: React.MouseEvent, action: Action) => {
     e.stopPropagation()
     try {
-      await api.patch<Action>(`/actions/${action.id}/complete`)
+      const result = await api.patch<{ action: Action; nextAction: Action | null }>(`/actions/${action.id}/complete`)
       fetchActions()
       toast.success(action.completed ? 'Marked incomplete' : 'Marked complete')
+      if (result.nextAction?.dueDate) {
+        toast.info(`Next occurrence created for ${result.nextAction.dueDate}`)
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update action'
       toast.error(message)
@@ -254,6 +260,26 @@ export function ActionListPage() {
         )
       },
     },
+    ...(filter === 'completed'
+      ? [
+          {
+            accessorKey: 'completedDate' as const,
+            header: ({ column }: { column: { toggleSorting: (asc: boolean) => void; getIsSorted: () => string | false } }) => (
+              <Button
+                variant="ghost"
+                className="-ml-4"
+                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+              >
+                Completed
+                <ArrowUpDown className="ml-1 h-4 w-4" />
+              </Button>
+            ),
+            cell: ({ getValue }: { getValue: () => unknown }) => (
+              <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
+            ),
+          } as ColumnDef<Action>,
+        ]
+      : []),
   ]
 
   const table = useReactTable({

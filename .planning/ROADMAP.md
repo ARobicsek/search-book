@@ -8,7 +8,7 @@
 | 2 | Actions & Calendar | ✅ Complete | Action system, daily view, calendar, quick-add palette, nudge list |
 | 3 | Conversations & Relationships | ✅ Complete | Conversation logging, relationships, drag-drop photos, prep sheet |
 | 4 | Search, Import & Tags | ✅ Complete | Global search, date-range search, CSV import/export, tags, ideas, links |
-| 5 | Recurring Tasks & Dashboard | 🔄 In Progress | Recurring actions, contact flagging, weekly activity dashboard, PWA |
+| 5 | Recurring Tasks & Dashboard | ✅ Complete | Recurring actions, contact flagging, weekly activity dashboard, PWA |
 | 6 | Backup & Polish | 🔲 Not Started | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
 
 ---
@@ -107,10 +107,10 @@
 - Analytics dashboard
 
 ### Acceptance Criteria
-- [ ] Completing a recurring action auto-creates the next occurrence
-- [ ] Can flag multiple contacts for action by a specific date
+- [x] Completing a recurring action auto-creates the next occurrence
+- [x] Can flag multiple contacts for action by a specific date
 - [x] Dashboard shows: outreach by ecosystem, completed vs due, overdue count, contacts needing attention
-- [ ] Action history log shows all completed actions with dates
+- [x] Action history log shows all completed actions with dates
 - [x] PWA: Offline-first with service worker caching
 - [x] PWA: Installable with manifest
 - [x] Analytics: Contacts added over time chart

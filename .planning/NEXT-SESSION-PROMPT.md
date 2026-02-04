@@ -10,33 +10,36 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 **Before doing anything, read these files:**
 - `.planning/STATE.md` — Session history and decisions
-- `.planning/ROADMAP.md` — Phase 4 & 5 acceptance criteria
+- `.planning/ROADMAP.md` — Phase 5 & 6 acceptance criteria
 
 **GSD methodology.** Atomic commits per task.
 
 ---
 
-## Phase 4: COMPLETE
+## Phase 5: COMPLETE
 
 ### What was done this session:
-- **Date Range Filter** — Filter contacts by last outreach date (server computes lastOutreachDate from conversations), "Include never contacted" option, added "Last Outreach" column to table
+- **Feedback fixes** — PWA manifest error (devOptions), company default status CONNECTED, idea dialog outside-click protection, prep notes date label simplified, Open Questions removed from contact card, missing checkbox component installed
+- **Recurring action automation** — Completing a recurring action auto-creates next occurrence (dueDate + intervalDays), respects recurringEndDate, toast on all 5 completion call sites
+- **Contact flagging + batch action** — Flag column on contacts table, "Flagged" filter, batch action toolbar ("Create Action for Flagged" dialog with title/type/priority/dueDate), flags auto-clear after creation
+- **Action history log** — "Completed Date" column visible on Completed filter, server-side sort by completedDate
 
-## Phase 5: IN PROGRESS
+## Phase 6: NOT STARTED
 
-### What was done this session:
-- **PWA Support** — vite-plugin-pwa with manifest, service worker (NetworkFirst for API, CacheFirst for photos), PWA update prompt component, placeholder icons
-- **Analytics Dashboard** — 6 API endpoints, Recharts visualizations (bar/line/pie charts), overview cards, period toggle (week/month), added to sidebar
+### Acceptance Criteria (from ROADMAP.md):
+- [ ] One-click backup of DB + photos to specified folder
+- [ ] Can restore from backup
+- [ ] Loading states and error handling throughout
+- [ ] Keyboard shortcuts documented in-app
+- [ ] Duplicate detection or cleanup tool
 
-### Key Files Added:
-- `client/src/components/pwa-update-prompt.tsx` — Update notification
-- `client/src/pages/analytics.tsx` — Analytics dashboard
-- `server/src/routes/analytics.ts` — Analytics API
-- `client/public/` — PWA icons
+---
 
-### Remaining Phase 5 items:
-- [ ] Recurring action automation (completing creates next occurrence)
-- [ ] Contact flagging for batch action
-- [ ] Action history log
+## Feedback to address before Phase 6:
+1. **Default conversation type to Video Call** — In Log Conversation dialog, the type dropdown should default to `VIDEO_CALL` instead of whatever the current default is
+2. **MultiCombobox: individual item removal** — Currently only "Clear All" works. Need per-item X button to remove individual selections (contacts/companies discussed, etc.)
+3. **Ideas: link people and companies** — Add MultiCombobox fields for contacts and companies in the Ideas dialog (similar to conversation log). Requires schema changes (IdeaContact, IdeaCompany junction tables or contactIds/companyIds fields)
+4. **Side-by-side Prep Notes + Log Conversation** — When logging a conversation on a contact's page, the user needs to see their Prep Notes at the same time. Options: split view, expandable sidebar, or show prep notes inline in the conversation dialog
 
 ---
 
@@ -52,4 +55,4 @@ Run `cd server && npx prisma generate` if you see Prisma client errors.
 
 ---
 
-**I have feedback to share before continuing.**
+**Start with the 4 feedback items above, then proceed to Phase 6.**

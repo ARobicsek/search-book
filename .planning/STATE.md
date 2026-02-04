@@ -95,6 +95,19 @@
 | 29 | "How Connected" placeholder wrong | Changed from "How you know them or who introduced you" to "How did you get connected?" |
 | 30 | Mutual Connections should be combobox | Converted from Textarea to MultiCombobox with allowFreeText; stores contact names as comma-separated string |
 
+## User Feedback Session 5 (Phase 5 testing)
+| # | Feedback | Resolution |
+|---|----------|------------|
+| 31 | 500 error + manifest syntax error on startup | Fixed: added devOptions to VitePWA; installed missing checkbox component |
+| 32 | Company created from contact card should default to CONNECTED | Fixed: pass status: 'CONNECTED' in auto-create |
+| 33 | Idea dialog closes on outside click, losing data | Fixed: added onInteractOutside preventDefault |
+| 34 | Prep notes date label too verbose | Fixed: changed to "Date" |
+| 35 | Remove Open Questions from contact card | Fixed: removed from overview + prep sheet tabs |
+| 36 | Log Conversation should default to Video Call | Noted for next session |
+| 37 | MultiCombobox: can't remove individual items, only "Clear All" | Noted for next session |
+| 38 | Ideas should support linking people and companies via combobox | Noted for next session |
+| 39 | Need to see Prep Notes while logging a conversation | Noted for next session |
+
 ## Blockers
 None currently.
 
@@ -113,3 +126,4 @@ None currently.
 | 2026-02-03 | Phase 3 feedback round 3: 5 user feedback items addressed. (1) Chrome tab title — verified already correct, user needs Ctrl+Shift+R to clear cache. (2) Conversation notes field — increased rows from 3 to 6, dialog widened to max-w-xl. (3) 500 error on contacts PUT — fixed by always deleting referredByName from payload before API call. (4) "How Connected" placeholder — changed to "How did you get connected?". (5) Mutual Connections — converted from Textarea to MultiCombobox with allowFreeText, stores as comma-separated string. **Phase 3 feedback round 3 complete.** |
 | 2026-02-04 | Phase 4 started. Completed: (1) Global search+filter on contacts/companies list pages (TanStack Table filtering, ecosystem/status dropdowns). (2) CSV export for contacts. (3) CSV import with column mapping (3-step wizard). (4) Tags CRUD (assign to contacts via badge UI). (5) Ideas full CRUD (list page, dialogs, search). Remaining: date range filter. **Phase 4 ~90% complete.** |
 | 2026-02-04 | Phase 4 completed + Phase 5 started. (1) Date range filter for last outreach — server computes lastOutreachDate from most recent conversation, filter by date range with "include never contacted" option, added Last Outreach column to table. **Phase 4 complete.** (2) PWA support — vite-plugin-pwa with manifest, service worker (NetworkFirst for API, CacheFirst for photos), PWA update prompt component, generated placeholder icons. (3) Analytics dashboard — 6 API endpoints (overview, contacts/conversations over time, by ecosystem/status, actions completed), Recharts visualizations (bar/line/pie charts), period toggle (week/month), overview cards. Added Analytics to sidebar. **Phase 5 analytics complete.** |
+| 2026-02-04 | Phase 5 completed + feedback fixes. Feedback: (31) Fixed PWA manifest syntax error — added devOptions to VitePWA config. (32) Default company status to CONNECTED when auto-created from contact form. (33) Idea dialog prevents close on outside click. (34) Prep notes date label simplified to "Date". (35) Open Questions removed from contact detail (overview + prep sheet tabs). (36) Added missing shadcn checkbox component. Phase 5 remaining: (1) Recurring action automation — completing a recurring action auto-creates next occurrence with offset dueDate, respects recurringEndDate, toast notifications on all 5 completion call sites. (2) Contact flagging — flagged field on Contact, flag toggle column on contacts table, "Flagged" filter button, batch action toolbar with "Create Action for Flagged" dialog (title/type/priority/dueDate), flags auto-clear after batch creation. (3) Action history log — "Completed Date" column when Completed filter active, server-side sortBy=completedDate support. **Phase 5 complete.** |

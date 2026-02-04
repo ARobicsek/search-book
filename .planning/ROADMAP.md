@@ -7,8 +7,8 @@
 | 1 | Foundation | ✅ Complete | Project setup, DB schema, Contact & Company CRUD, basic UI shell |
 | 2 | Actions & Calendar | ✅ Complete | Action system, daily view, calendar, quick-add palette, nudge list |
 | 3 | Conversations & Relationships | ✅ Complete | Conversation logging, relationships, drag-drop photos, prep sheet |
-| 4 | Search, Import & Tags | 🔲 Not Started | Global search, date-range search, CSV import/export, tags, ideas, links |
-| 5 | Recurring Tasks & Dashboard | 🔲 Not Started | Recurring actions, contact flagging, weekly activity dashboard |
+| 4 | Search, Import & Tags | ✅ Complete | Global search, date-range search, CSV import/export, tags, ideas, links |
+| 5 | Recurring Tasks & Dashboard | 🔄 In Progress | Recurring actions, contact flagging, weekly activity dashboard, PWA |
 | 6 | Backup & Polish | 🔲 Not Started | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
 
 ---
@@ -87,12 +87,12 @@
 - Links management
 
 ### Acceptance Criteria
-- [ ] Can search contacts/companies by name, role, company, keywords, ecosystem, status
-- [ ] Can filter by date range of last outreach
-- [ ] Can import contacts from CSV with column mapping
-- [ ] Can export contacts to CSV
-- [ ] Can create, assign, and filter by tags
-- [ ] Ideas CRUD works
+- [x] Can search contacts/companies by name, role, company, keywords, ecosystem, status
+- [x] Can filter by date range of last outreach
+- [x] Can import contacts from CSV with column mapping
+- [x] Can export contacts to CSV
+- [x] Can create, assign, and filter by tags
+- [x] Ideas CRUD works
 - [x] Links CRUD works, linked to contacts/companies (done in Phase 3 feedback)
 
 ---
@@ -103,12 +103,19 @@
 - Recurring action automation
 - Contact flagging for batch action
 - Weekly activity dashboard
+- PWA support (offline-first, installable)
+- Analytics dashboard
 
 ### Acceptance Criteria
 - [ ] Completing a recurring action auto-creates the next occurrence
 - [ ] Can flag multiple contacts for action by a specific date
-- [ ] Dashboard shows: outreach by ecosystem, completed vs due, overdue count, contacts needing attention
+- [x] Dashboard shows: outreach by ecosystem, completed vs due, overdue count, contacts needing attention
 - [ ] Action history log shows all completed actions with dates
+- [x] PWA: Offline-first with service worker caching
+- [x] PWA: Installable with manifest
+- [x] Analytics: Contacts added over time chart
+- [x] Analytics: Conversations logged over time chart
+- [x] Analytics: Distribution by ecosystem and status
 
 ---
 

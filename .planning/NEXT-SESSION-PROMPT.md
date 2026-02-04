@@ -16,30 +16,27 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## Phase 4: MOSTLY COMPLETE
+## Phase 4: COMPLETE
 
 ### What was done this session:
-- **Search/Filter** — Global search on contacts/companies list (name, title, notes, etc.), ecosystem/status filter dropdowns, clear button
-- **CSV Export** — Downloads filtered contacts as CSV with all fields
-- **CSV Import** — 3-step wizard (upload → column mapping → preview), auto-maps columns, normalizes ecosystem/status values
-- **Tags System** — Tags API (CRUD), assign tags to contacts, badge UI on contact detail with add/remove
-- **Ideas UI** — Full CRUD (list page with cards, create/edit/delete dialogs, search), added to sidebar
+- **Date Range Filter** — Filter contacts by last outreach date (server computes lastOutreachDate from conversations), "Include never contacted" option, added "Last Outreach" column to table
+
+## Phase 5: IN PROGRESS
+
+### What was done this session:
+- **PWA Support** — vite-plugin-pwa with manifest, service worker (NetworkFirst for API, CacheFirst for photos), PWA update prompt component, placeholder icons
+- **Analytics Dashboard** — 6 API endpoints, Recharts visualizations (bar/line/pie charts), overview cards, period toggle (week/month), added to sidebar
 
 ### Key Files Added:
-- `client/src/components/csv-import-dialog.tsx` — Import wizard
-- `client/src/pages/ideas/idea-list.tsx` — Ideas page
-- `server/src/routes/tags.ts` — Tags API
+- `client/src/components/pwa-update-prompt.tsx` — Update notification
+- `client/src/pages/analytics.tsx` — Analytics dashboard
+- `server/src/routes/analytics.ts` — Analytics API
+- `client/public/` — PWA icons
 
-### Remaining Phase 4 item:
-- [ ] Date range filter for last outreach (optional, could defer to Phase 5)
-
-## Phase 5: NOT STARTED
-
-### Acceptance Criteria (from ROADMAP.md):
-- [ ] Offline-first with service worker caching
-- [ ] Mobile-responsive design
-- [ ] Installable PWA with manifest
-- [ ] Basic analytics dashboard (contacts added over time, conversations logged, etc.)
+### Remaining Phase 5 items:
+- [ ] Recurring action automation (completing creates next occurrence)
+- [ ] Contact flagging for batch action
+- [ ] Action history log
 
 ---
 
@@ -53,4 +50,6 @@ npm start
 ### Note:
 Run `cd server && npx prisma generate` if you see Prisma client errors.
 
-**Decide: finish date range filter OR start Phase 5.**
+---
+
+**I have feedback to share before continuing.**

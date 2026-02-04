@@ -966,7 +966,7 @@ function ConversationsTab({
 
       {/* Conversation form dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg" onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
           </DialogHeader>
@@ -1020,7 +1020,7 @@ function ConversationsTab({
                 value={form.notes}
                 onChange={(e) => set('notes', e.target.value)}
                 placeholder="Detailed notes..."
-                rows={3}
+                rows={6}
               />
             </div>
 

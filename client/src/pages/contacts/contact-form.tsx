@@ -26,7 +26,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
+import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
 import { ArrowLeft, ChevronDown, Plus, Trash2 } from 'lucide-react'
@@ -48,7 +48,7 @@ type FormData = {
   referredById: string // "" or numeric string
   referredByName: string // freetext for new referrer
   howConnected: string
-  mutualConnections: string
+  mutualConnections: string[] // array of contact names
   whereFound: string
   openQuestions: string
   notes: string
@@ -72,7 +72,7 @@ const emptyForm: FormData = {
   referredById: '',
   referredByName: '',
   howConnected: '',
-  mutualConnections: '',
+  mutualConnections: [],
   whereFound: '',
   openQuestions: '',
   notes: '',
@@ -80,6 +80,11 @@ const emptyForm: FormData = {
 }
 
 function contactToForm(contact: Contact): FormData {
+  // Parse mutualConnections string into array (comma-separated)
+  const mutualConnectionsArr = contact.mutualConnections
+    ? contact.mutualConnections.split(',').map((s) => s.trim()).filter(Boolean)
+    : []
+
   return {
     name: contact.name,
     title: contact.title ?? '',
@@ -97,7 +102,7 @@ function contactToForm(contact: Contact): FormData {
     referredById: contact.referredById?.toString() ?? '',
     referredByName: '',
     howConnected: contact.howConnected ?? '',
-    mutualConnections: contact.mutualConnections ?? '',
+    mutualConnections: mutualConnectionsArr,
     whereFound: contact.whereFound ?? '',
     openQuestions: contact.openQuestions ?? '',
     notes: contact.notes ?? '',
@@ -106,6 +111,11 @@ function contactToForm(contact: Contact): FormData {
 }
 
 function formToPayload(form: FormData) {
+  // Join mutualConnections array into comma-separated string
+  const mutualConnectionsStr = form.mutualConnections.length > 0
+    ? form.mutualConnections.join(', ')
+    : null
+
   return {
     name: form.name.trim(),
     title: form.title.trim() || null,
@@ -123,7 +133,7 @@ function formToPayload(form: FormData) {
     referredById: form.referredById ? parseInt(form.referredById) : null,
     referredByName: !form.referredById ? (form.referredByName.trim() || null) : null,
     howConnected: form.howConnected.trim() || null,
-    mutualConnections: form.mutualConnections.trim() || null,
+    mutualConnections: mutualConnectionsStr,
     whereFound: form.whereFound.trim() || null,
     openQuestions: form.openQuestions.trim() || null,
     notes: form.notes.trim() || null,
@@ -146,7 +156,7 @@ export function ContactFormPage() {
 
   // Progressive disclosure: auto-open if fields have data
   const hasContactDetails = !!(form.phone || form.linkedinUrl)
-  const hasConnectionDetails = !!(form.howConnected || form.mutualConnections)
+  const hasConnectionDetails = !!(form.howConnected || form.mutualConnections.length > 0)
   const hasResearch = !!(form.whereFound || form.openQuestions || form.notes)
   const hasPersonalDetails = !!form.personalDetails
 
@@ -169,7 +179,7 @@ export function ContactFormPage() {
           setForm(f)
           // Open sections that have data
           if (f.phone || f.linkedinUrl) setContactDetailsOpen(true)
-          if (f.howConnected || f.mutualConnections) setConnectionDetailsOpen(true)
+          if (f.howConnected || f.mutualConnections.length > 0) setConnectionDetailsOpen(true)
           if (f.whereFound || f.openQuestions || f.notes) setResearchOpen(true)
           if (f.personalDetails) setPersonalDetailsOpen(true)
         })
@@ -226,9 +236,9 @@ export function ContactFormPage() {
         } catch {
           // If referrer creation fails, just proceed without the link
         }
-        // Remove referredByName from payload since Contact model doesn't have this field
-        delete (payload as { referredByName?: string | null }).referredByName
       }
+      // Always remove referredByName from payload since Contact model doesn't have this field
+      delete (payload as { referredByName?: string | null }).referredByName
 
       if (isEdit) {
         await api.put(`/contacts/${id}`, payload)
@@ -514,18 +524,19 @@ export function ContactFormPage() {
                     id="howConnected"
                     value={form.howConnected}
                     onChange={(e) => set('howConnected', e.target.value)}
-                    placeholder="How you know them or who introduced you"
+                    placeholder="How did you get connected?"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="mutualConnections">Mutual Connections</Label>
-                  <Textarea
-                    id="mutualConnections"
-                    value={form.mutualConnections}
-                    onChange={(e) => set('mutualConnections', e.target.value)}
-                    placeholder="Who you know in common"
-                    rows={2}
+                  <Label>Mutual Connections</Label>
+                  <MultiCombobox
+                    options={allContacts.map((c) => ({ value: c.name, label: c.name }))}
+                    values={form.mutualConnections}
+                    onChange={(vals) => setForm((prev) => ({ ...prev, mutualConnections: vals }))}
+                    placeholder="Search or type name..."
+                    searchPlaceholder="Search contacts..."
+                    allowFreeText={true}
                   />
                 </div>
               </CardContent>

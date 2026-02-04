@@ -216,7 +216,7 @@ export function ContactFormPage() {
       // If user typed a new company name (not from dropdown), auto-create the company
       if (!payload.companyId && payload.companyName) {
         try {
-          const newCompany = await api.post<Company>('/companies', { name: payload.companyName })
+          const newCompany = await api.post<Company>('/companies', { name: payload.companyName, status: 'CONNECTED' })
           payload.companyId = newCompany.id
           payload.companyName = null
         } catch {

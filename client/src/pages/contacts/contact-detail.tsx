@@ -7,6 +7,7 @@ import type {
   Conversation,
   Relationship,
   LinkRecord,
+  PrepNote,
   ConversationType,
   DatePrecision,
   RelationshipType,
@@ -174,6 +175,7 @@ export function ContactDetailPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [links, setLinks] = useState<LinkRecord[]>([])
+  const [prepNotes, setPrepNotes] = useState<PrepNote[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -194,6 +196,7 @@ export function ContactDetailPage() {
     api.get<Conversation[]>(`/conversations?contactId=${id}`).then(setConversations).catch(() => {})
     api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => {})
     api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
+    api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => {})
   }, [id, navigate])
 
   useEffect(() => {
@@ -580,6 +583,7 @@ export function ContactDetailPage() {
             relationships={relationships}
             actions={actions}
             links={links}
+            prepNotes={prepNotes}
             onRefresh={loadData}
           />
         </TabsContent>
@@ -1370,6 +1374,7 @@ function PrepSheetTab({
   relationships,
   actions,
   links,
+  prepNotes,
   onRefresh,
 }: {
   contact: Contact
@@ -1377,12 +1382,19 @@ function PrepSheetTab({
   relationships: Relationship[]
   actions: Action[]
   links: LinkRecord[]
+  prepNotes: PrepNote[]
   onRefresh: () => void
 }) {
   const lastConversation = conversations.length > 0 ? conversations[0] : null
   const pendingActions = actions.filter((a) => !a.completed)
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [newLinkTitle, setNewLinkTitle] = useState('')
+
+  // Prep note form state
+  const [newPrepDate, setNewPrepDate] = useState(new Date().toLocaleDateString('en-CA'))
+  const [newPrepContent, setNewPrepContent] = useState('')
+  const [newPrepUrl, setNewPrepUrl] = useState('')
+  const [newPrepUrlTitle, setNewPrepUrlTitle] = useState('')
 
   async function addLink() {
     if (!newLinkUrl.trim()) return
@@ -1408,6 +1420,37 @@ function PrepSheetTab({
       toast.success('Link removed')
     } catch {
       toast.error('Failed to remove link')
+    }
+  }
+
+  async function addPrepNote() {
+    if (!newPrepContent.trim()) return
+    try {
+      await api.post('/prepnotes', {
+        content: newPrepContent.trim(),
+        url: newPrepUrl.trim() || null,
+        urlTitle: newPrepUrlTitle.trim() || null,
+        date: newPrepDate,
+        contactId: contact.id,
+      })
+      setNewPrepContent('')
+      setNewPrepUrl('')
+      setNewPrepUrlTitle('')
+      setNewPrepDate(new Date().toLocaleDateString('en-CA'))
+      onRefresh()
+      toast.success('Prep note added')
+    } catch {
+      toast.error('Failed to add prep note')
+    }
+  }
+
+  async function deletePrepNote(noteId: number) {
+    try {
+      await api.delete(`/prepnotes/${noteId}`)
+      onRefresh()
+      toast.success('Prep note removed')
+    } catch {
+      toast.error('Failed to remove prep note')
     }
   }
 
@@ -1455,13 +1498,101 @@ function PrepSheetTab({
         </CardContent>
       </Card>
 
-      {/* Links */}
+      {/* Prep Notes */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Links</CardTitle>
+          <CardTitle className="text-base">Prep Notes</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Add thoughts, ideas, and links for upcoming conversations. Each note is dated so you can track prep over time.
+          </p>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {links.length > 0 && (
+        <CardContent className="space-y-4">
+          {/* Existing prep notes */}
+          {prepNotes.length > 0 && (
+            <div className="space-y-3">
+              {prepNotes.map((note) => (
+                <div key={note.id} className="rounded-md border p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </Badge>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                      {note.url && (
+                        <a
+                          href={note.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          {note.urlTitle || note.url}
+                        </a>
+                      )}
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deletePrepNote(note.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Add new prep note form */}
+          <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Date (for which conversation?)</Label>
+                <Input
+                  type="date"
+                  value={newPrepDate}
+                  onChange={(e) => setNewPrepDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Notes / Thoughts</Label>
+              <Textarea
+                value={newPrepContent}
+                onChange={(e) => setNewPrepContent(e.target.value)}
+                placeholder="Ideas for conversation, talking points, questions to ask..."
+                rows={3}
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Link URL (optional)</Label>
+                <Input
+                  value={newPrepUrl}
+                  onChange={(e) => setNewPrepUrl(e.target.value)}
+                  placeholder="https://docs.google.com/..."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Link Label (optional)</Label>
+                <Input
+                  value={newPrepUrlTitle}
+                  onChange={(e) => setNewPrepUrlTitle(e.target.value)}
+                  placeholder="My notes doc"
+                />
+              </div>
+            </div>
+            <Button size="sm" onClick={addPrepNote} disabled={!newPrepContent.trim()}>
+              <Plus className="mr-1 h-3 w-3" />
+              Add Prep Note
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Links (legacy, kept for existing data) */}
+      {links.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Links</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
             <ul className="space-y-2">
               {links.map((link) => (
                 <li key={link.id} className="flex items-center justify-between gap-2">
@@ -1479,29 +1610,29 @@ function PrepSheetTab({
                 </li>
               ))}
             </ul>
-          )}
-          <div className="flex gap-2 items-end">
-            <div className="flex-1 grid gap-2 sm:grid-cols-2">
-              <Input
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-                placeholder="URL (Google Drive, webpage, etc.)"
-                onKeyDown={(e) => e.key === 'Enter' && addLink()}
-              />
-              <Input
-                value={newLinkTitle}
-                onChange={(e) => setNewLinkTitle(e.target.value)}
-                placeholder="Label (optional)"
-                onKeyDown={(e) => e.key === 'Enter' && addLink()}
-              />
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                <Input
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  placeholder="URL (Google Drive, webpage, etc.)"
+                  onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                />
+                <Input
+                  value={newLinkTitle}
+                  onChange={(e) => setNewLinkTitle(e.target.value)}
+                  placeholder="Label (optional)"
+                  onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                />
+              </div>
+              <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+                <Plus className="mr-1 h-3 w-3" />
+                Add
+              </Button>
             </div>
-            <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
-              <Plus className="mr-1 h-3 w-3" />
-              Add
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Open Questions */}
       <Card>

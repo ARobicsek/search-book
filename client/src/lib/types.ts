@@ -201,3 +201,15 @@ export interface LinkRecord {
   companyId: number | null;
   createdAt: string;
 }
+
+// ─── Prep Notes ─────────────────────────────────────────────
+
+export interface PrepNote {
+  id: number;
+  content: string;
+  url: string | null;
+  urlTitle: string | null;
+  date: string;
+  contactId: number;
+  createdAt: string;
+}

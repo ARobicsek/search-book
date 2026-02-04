@@ -10,6 +10,7 @@ import uploadRouter from './routes/upload';
 import conversationsRouter from './routes/conversations';
 import relationshipsRouter from './routes/relationships';
 import linksRouter from './routes/links';
+import prepnotesRouter from './routes/prepnotes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,6 +35,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/relationships', relationshipsRouter);
 app.use('/api/links', linksRouter);
+app.use('/api/prepnotes', prepnotesRouter);
 
 app.listen(PORT, () => {
   console.log(`SearchBook API running on http://localhost:${PORT}`);

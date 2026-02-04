@@ -308,7 +308,7 @@ export function CompanyDetailPage() {
           ) : (
             <div className="space-y-2">
               {actions.map((action) => {
-                const overdue = !action.completed && action.dueDate && action.dueDate < new Date().toISOString().split('T')[0]
+                const overdue = !action.completed && action.dueDate && action.dueDate < new Date().toLocaleDateString('en-CA')
                 return (
                   <div key={action.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
                     <button

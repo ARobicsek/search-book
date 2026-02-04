@@ -106,7 +106,7 @@ export function DashboardPage() {
   const [overdueActions, setOverdueActions] = useState<Action[]>([])
   const [loading, setLoading] = useState(true)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local timezone
 
   const fetchData = useCallback(async () => {
     try {

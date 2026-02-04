@@ -13,7 +13,7 @@ const actionIncludes = {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { status, contactId, companyId } = req.query;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
 
     // Build where clause from query params
     const where: Record<string, unknown> = {};
@@ -117,7 +117,7 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
       return;
     }
     const completed = !existing.completed;
-    const completedDate = completed ? new Date().toISOString().split('T')[0] : null;
+    const completedDate = completed ? new Date().toLocaleDateString('en-CA') : null;
     const action = await prisma.action.update({
       where: { id },
       data: { completed, completedDate },

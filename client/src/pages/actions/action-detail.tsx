@@ -73,7 +73,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function isOverdue(action: Action): boolean {
   if (action.completed || !action.dueDate) return false
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local timezone
   return action.dueDate < today
 }
 

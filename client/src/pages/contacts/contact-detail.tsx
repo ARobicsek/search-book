@@ -491,7 +491,7 @@ export function ContactDetailPage() {
                     const overdue =
                       !action.completed &&
                       action.dueDate &&
-                      action.dueDate < new Date().toISOString().split('T')[0]
+                      action.dueDate < new Date().toLocaleDateString('en-CA')
                     return (
                       <div
                         key={action.id}
@@ -645,7 +645,7 @@ function ConversationsTab({
   })
 
   const emptyForm = {
-    date: new Date().toISOString().split('T')[0],
+    date: new Date().toLocaleDateString('en-CA'),
     datePrecision: 'DAY' as DatePrecision,
     type: 'OTHER' as ConversationType,
     summary: '',

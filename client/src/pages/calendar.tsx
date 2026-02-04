@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 
 function getEventColor(action: Action): string {
   if (action.completed) return '#86efac' // green-300
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA')
   if (action.dueDate && action.dueDate < today) return '#fca5a5' // red-300
   if (action.priority === 'HIGH') return '#f87171' // red-400
   if (action.priority === 'MEDIUM') return '#fbbf24' // amber-400
@@ -20,7 +20,7 @@ function getEventColor(action: Action): string {
 
 function getTextColor(action: Action): string {
   if (action.completed) return '#166534' // green-800
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA')
   if (action.dueDate && action.dueDate < today) return '#991b1b' // red-800
   if (action.priority === 'HIGH') return '#7f1d1d'
   if (action.priority === 'MEDIUM') return '#78350f'

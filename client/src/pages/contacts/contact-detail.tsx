@@ -25,6 +25,7 @@ import {
   CONVERSATION_TYPE_OPTIONS,
   DATE_PRECISION_OPTIONS,
   RELATIONSHIP_TYPE_OPTIONS,
+  parseContactEmails,
 } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -301,6 +302,21 @@ export function ContactDetailPage() {
                   ) : companyDisplay ? (
                     <span className="text-sm text-muted-foreground">{companyDisplay}</span>
                   ) : null}
+                  {/* Show additional current companies from employment history */}
+                  {contact.employmentHistory
+                    ?.filter((eh) => !eh.endDate && eh.companyId !== contact.companyId)
+                    .map((eh) => (
+                      <span key={eh.id} className="text-sm text-muted-foreground">
+                        {companyDisplay ? '/ ' : 'at '}
+                        {eh.company ? (
+                          <Link to={`/companies/${eh.company.id}`} className="text-primary hover:underline">
+                            {eh.company.name}
+                          </Link>
+                        ) : (
+                          eh.companyName
+                        )}
+                      </span>
+                    ))}
                 </div>
                 {contact.roleDescription && (
                   <p className="mt-1 text-sm text-muted-foreground">{contact.roleDescription}</p>
@@ -394,11 +410,13 @@ export function ContactDetailPage() {
             <CardContent>
               <dl className="grid gap-4 sm:grid-cols-2">
                 <Field label="Email">
-                  {contact.email && (
-                    <a href={`mailto:${contact.email}`} className="text-primary hover:underline">
-                      {contact.email}
-                    </a>
-                  )}
+                  {parseContactEmails(contact).map((email, i) => (
+                    <div key={i}>
+                      <a href={`mailto:${email}`} className="text-primary hover:underline">
+                        {email}
+                      </a>
+                    </div>
+                  ))}
                 </Field>
                 <Field label="Phone">{contact.phone}</Field>
                 <Field label="LinkedIn">

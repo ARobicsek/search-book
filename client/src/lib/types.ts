@@ -12,6 +12,7 @@ export interface Contact {
   companyName: string | null;
   ecosystem: Ecosystem;
   email: string | null;
+  additionalEmails: string | null;
   phone: string | null;
   linkedinUrl: string | null;
   location: string | null;
@@ -31,6 +32,19 @@ export interface Contact {
   createdAt: string;
   updatedAt: string;
   lastOutreachDate?: string | null;
+  employmentHistory?: EmploymentHistory[];
+}
+
+export function parseContactEmails(contact: Contact): string[] {
+  const emails: string[] = [];
+  if (contact.email) emails.push(contact.email);
+  if (contact.additionalEmails) {
+    try {
+      const additional = JSON.parse(contact.additionalEmails);
+      if (Array.isArray(additional)) emails.push(...additional);
+    } catch { /* ignore parse errors */ }
+  }
+  return emails;
 }
 
 export interface Company {

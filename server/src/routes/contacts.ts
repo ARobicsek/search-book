@@ -81,6 +81,10 @@ router.get('/:id', async (req: Request, res: Response) => {
         company: true,
         referredBy: { select: { id: true, name: true } },
         referrals: { select: { id: true, name: true } },
+        employmentHistory: {
+          include: { company: { select: { id: true, name: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     if (!contact) {
@@ -94,16 +98,30 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Helper: convert emails array to email + additionalEmails fields
+function processEmails(data: Record<string, unknown>): Record<string, unknown> {
+  if ('emails' in data && Array.isArray(data.emails)) {
+    const emails = (data.emails as string[]).filter((e) => e.trim());
+    const { emails: _, ...rest } = data;
+    return {
+      ...rest,
+      email: emails[0] || null,
+      additionalEmails: emails.length > 1 ? JSON.stringify(emails.slice(1)) : null,
+    };
+  }
+  return data;
+}
+
 // POST /api/contacts — create
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, ...rest } = req.body;
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    const { name, ...rest } = processEmails(req.body);
+    if (!name || typeof name !== 'string' || (name as string).trim().length === 0) {
       res.status(400).json({ error: 'Name is required' });
       return;
     }
     const contact = await prisma.contact.create({
-      data: { name: name.trim(), ...rest },
+      data: { name: (name as string).trim(), ...rest } as any,
       include: { company: { select: { id: true, name: true } } },
     });
     res.status(201).json(contact);
@@ -122,16 +140,17 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Contact not found' });
       return;
     }
-    if (req.body.name !== undefined) {
-      if (typeof req.body.name !== 'string' || req.body.name.trim().length === 0) {
+    const data = processEmails(req.body) as any;
+    if (data.name !== undefined) {
+      if (typeof data.name !== 'string' || data.name.trim().length === 0) {
         res.status(400).json({ error: 'Name cannot be empty' });
         return;
       }
-      req.body.name = req.body.name.trim();
+      data.name = data.name.trim();
     }
     const contact = await prisma.contact.update({
       where: { id },
-      data: req.body,
+      data,
       include: { company: { select: { id: true, name: true } } },
     });
     res.json(contact);

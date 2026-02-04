@@ -20,6 +20,7 @@ model Contact {
   companyName       String?
   ecosystem         String   @default("RECRUITER") // RECRUITER, ROLODEX, TARGET, INFLUENCER, ACADEMIA, INTRO_SOURCE
   email             String?
+  additionalEmails  String?  // JSON array: ["email2@x.com", "email3@x.com"]
   phone             String?
   linkedinUrl       String?
   location          String?

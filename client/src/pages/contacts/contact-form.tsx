@@ -39,7 +39,7 @@ type FormData = {
   companyName: string
   ecosystem: string
   status: string
-  email: string
+  emails: string[]
   phone: string
   linkedinUrl: string
   location: string
@@ -63,7 +63,7 @@ const emptyForm: FormData = {
   companyName: '',
   ecosystem: 'ROLODEX',
   status: 'CONNECTED',
-  email: '',
+  emails: [''],
   phone: '',
   linkedinUrl: '',
   location: '',
@@ -93,7 +93,17 @@ function contactToForm(contact: Contact): FormData {
     companyName: contact.companyName ?? '',
     ecosystem: contact.ecosystem,
     status: contact.status,
-    email: contact.email ?? '',
+    emails: (() => {
+      const all: string[] = [];
+      if (contact.email) all.push(contact.email);
+      if (contact.additionalEmails) {
+        try {
+          const additional = JSON.parse(contact.additionalEmails);
+          if (Array.isArray(additional)) all.push(...additional);
+        } catch { /* ignore */ }
+      }
+      return all.length > 0 ? all : [''];
+    })(),
     phone: contact.phone ?? '',
     linkedinUrl: contact.linkedinUrl ?? '',
     location: contact.location ?? '',
@@ -124,7 +134,7 @@ function formToPayload(form: FormData) {
     companyName: !form.companyId ? (form.companyName.trim() || null) : null,
     ecosystem: form.ecosystem,
     status: form.status,
-    email: form.email.trim() || null,
+    emails: form.emails.map((e) => e.trim()).filter(Boolean),
     phone: form.phone.trim() || null,
     linkedinUrl: form.linkedinUrl.trim() || null,
     location: form.location.trim() || null,
@@ -197,8 +207,8 @@ export function ContactFormPage() {
   function validate(): boolean {
     const errs: Record<string, string> = {}
     if (!form.name.trim()) errs.name = 'Name is required'
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      errs.email = 'Invalid email format'
+    const invalidEmail = form.emails.find((e) => e.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim()))
+    if (invalidEmail) errs.email = `Invalid email format: ${invalidEmail}`
     if (form.linkedinUrl && !form.linkedinUrl.startsWith('http'))
       errs.linkedinUrl = 'URL must start with http'
     setErrors(errs)
@@ -391,19 +401,49 @@ export function ContactFormPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => set('email', e.target.value)}
-                placeholder="email@example.com"
-                aria-invalid={!!errors.email}
-              />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email}</p>
-              )}
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Emails</Label>
+              <div className="space-y-2">
+                {form.emails.map((email, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        const newEmails = [...form.emails]
+                        newEmails[i] = e.target.value
+                        setForm((prev) => ({ ...prev, emails: newEmails }))
+                      }}
+                      placeholder="email@example.com"
+                    />
+                    {form.emails.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            emails: prev.emails.filter((_, idx) => idx !== i),
+                          }))
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setForm((prev) => ({ ...prev, emails: [...prev.emails, ''] }))}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add Email
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-2">

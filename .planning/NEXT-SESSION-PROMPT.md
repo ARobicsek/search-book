@@ -10,35 +10,36 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 **Before doing anything, read these files:**
 - `.planning/STATE.md` — Session history and decisions
-- `.planning/ROADMAP.md` — Phase 3 & 4 acceptance criteria
+- `.planning/ROADMAP.md` — Phase 4 & 5 acceptance criteria
 
 **GSD methodology.** Atomic commits per task.
 
 ---
 
-## Phase 3: COMPLETE (all feedback rounds addressed)
+## Phase 4: MOSTLY COMPLETE
 
-### Feedback Round 3 Changes (items #26-30):
-- Chrome tab title — verified correct, browser cache issue (hard refresh with Ctrl+Shift+R)
-- Conversation notes field — increased to 6 rows, dialog widened to sm:max-w-xl
-- 500 error on PUT /api/contacts/:id — fixed referredByName payload issue
-- "How Connected" placeholder — changed to "How did you get connected?"
-- Mutual Connections — converted to MultiCombobox with allowFreeText
+### What was done this session:
+- **Search/Filter** — Global search on contacts/companies list (name, title, notes, etc.), ecosystem/status filter dropdowns, clear button
+- **CSV Export** — Downloads filtered contacts as CSV with all fields
+- **CSV Import** — 3-step wizard (upload → column mapping → preview), auto-maps columns, normalizes ecosystem/status values
+- **Tags System** — Tags API (CRUD), assign tags to contacts, badge UI on contact detail with add/remove
+- **Ideas UI** — Full CRUD (list page with cards, create/edit/delete dialogs, search), added to sidebar
 
-### Key Files Changed (Round 3):
-- `client/src/pages/contacts/contact-form.tsx` — Mutual Connections combobox, placeholder fix, referredByName fix
-- `client/src/pages/contacts/contact-detail.tsx` — Larger notes field (rows=6), wider dialog (max-w-xl)
+### Key Files Added:
+- `client/src/components/csv-import-dialog.tsx` — Import wizard
+- `client/src/pages/ideas/idea-list.tsx` — Ideas page
+- `server/src/routes/tags.ts` — Tags API
 
-## Phase 4: Search, Import & Tags — READY TO START
+### Remaining Phase 4 item:
+- [ ] Date range filter for last outreach (optional, could defer to Phase 5)
 
-### Acceptance Criteria:
-- [ ] Can search contacts/companies by name, role, company, keywords, ecosystem, status
-- [ ] Can filter by date range of last outreach
-- [ ] Can import contacts from CSV with column mapping
-- [ ] Can export contacts to CSV
-- [ ] Can create, assign, and filter by tags
-- [ ] Ideas CRUD works (API exists, needs UI)
-- [x] Links CRUD works (done in feedback round 1)
+## Phase 5: NOT STARTED
+
+### Acceptance Criteria (from ROADMAP.md):
+- [ ] Offline-first with service worker caching
+- [ ] Mobile-responsive design
+- [ ] Installable PWA with manifest
+- [ ] Basic analytics dashboard (contacts added over time, conversations logged, etc.)
 
 ---
 
@@ -48,9 +49,8 @@ npm start
 ```
 - **Client**: http://localhost:5173
 - **Server**: http://localhost:3001
-- **Desktop shortcut**: Double-click SearchBook on Desktop
 
 ### Note:
-Run `cd server && npx prisma generate` if you see Prisma client errors (file may be locked if server is running).
+Run `cd server && npx prisma generate` if you see Prisma client errors.
 
-**Start Phase 4 implementation.**
+**Decide: finish date range filter OR start Phase 5.**

@@ -62,10 +62,12 @@ router.post('/', async (req: Request, res: Response) => {
       summary,
       notes,
       nextSteps,
+      links,
       photoFile,
       contactsDiscussed,   // number[] of contact IDs
       companiesDiscussed,  // number[] of company IDs
-      createAction,        // optional: { title, type, dueDate, priority }
+      createAction,        // optional single action (legacy): { title, type, dueDate, priority }
+      createActions,       // optional array of actions: { title, type, dueDate, priority }[]
     } = req.body;
 
     if (!contactId || !date) {
@@ -101,14 +103,20 @@ router.post('/', async (req: Request, res: Response) => {
       include: conversationIncludes,
     });
 
-    // Optionally create a follow-up action linked to this conversation
-    if (createAction?.title) {
+    // Create multiple follow-up actions
+    const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];
+    // Legacy support: single createAction
+    if (createAction?.title?.trim()) {
+      actionsToCreate.push(createAction);
+    }
+
+    for (const action of actionsToCreate) {
       await prisma.action.create({
         data: {
-          title: createAction.title,
-          type: createAction.type || 'FOLLOW_UP',
-          dueDate: createAction.dueDate || null,
-          priority: createAction.priority || 'MEDIUM',
+          title: action.title.trim(),
+          type: action.type || 'FOLLOW_UP',
+          dueDate: action.dueDate || null,
+          priority: action.priority || 'MEDIUM',
           contactId,
           conversationId: conversation.id,
         },
@@ -121,7 +129,22 @@ router.post('/', async (req: Request, res: Response) => {
       await prisma.contact.update({ where: { id: contactId }, data: { status: 'CONNECTED' } });
     }
 
-    // Re-fetch to include the action
+    // Save links if provided
+    if (links?.length) {
+      for (const link of links as { url: string; title: string }[]) {
+        if (link.url?.trim()) {
+          await prisma.link.create({
+            data: {
+              url: link.url.trim(),
+              title: link.title?.trim() || link.url.trim(),
+              contactId,
+            },
+          });
+        }
+      }
+    }
+
+    // Re-fetch to include the actions
     const result = await prisma.conversation.findUnique({
       where: { id: conversation.id },
       include: conversationIncludes,
@@ -148,6 +171,8 @@ router.put('/:id', async (req: Request, res: Response) => {
       contactsDiscussed,
       companiesDiscussed,
       createAction,
+      createActions,
+      links,
       ...data
     } = req.body;
 

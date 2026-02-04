@@ -6,6 +6,7 @@ import type {
   Action,
   Conversation,
   Relationship,
+  LinkRecord,
   ConversationType,
   DatePrecision,
   RelationshipType,
@@ -172,6 +173,7 @@ export function ContactDetailPage() {
   const [actions, setActions] = useState<Action[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [links, setLinks] = useState<LinkRecord[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -191,6 +193,7 @@ export function ContactDetailPage() {
     api.get<Action[]>(`/actions?contactId=${id}`).then(setActions).catch(() => {})
     api.get<Conversation[]>(`/conversations?contactId=${id}`).then(setConversations).catch(() => {})
     api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => {})
+    api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
   }, [id, navigate])
 
   useEffect(() => {
@@ -573,6 +576,8 @@ export function ContactDetailPage() {
             conversations={conversations}
             relationships={relationships}
             actions={actions}
+            links={links}
+            onRefresh={loadData}
           />
         </TabsContent>
       </Tabs>
@@ -587,6 +592,25 @@ export function ContactDetailPage() {
 }
 
 // ─── Conversations Tab component ────────────────────────────
+
+interface ActionFormEntry {
+  title: string
+  type: ActionType
+  dueDate: string
+  priority: ActionPriority
+}
+
+const emptyAction: ActionFormEntry = {
+  title: '',
+  type: 'FOLLOW_UP',
+  dueDate: '',
+  priority: 'MEDIUM',
+}
+
+interface LinkEntry {
+  url: string
+  title: string
+}
 
 function ConversationsTab({
   contactId,
@@ -607,6 +631,16 @@ function ConversationsTab({
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Local copies of options that can grow when new entries are added
+  const [localContactOptions, setLocalContactOptions] = useState(contactOptions)
+  const [localCompanyOptions, setLocalCompanyOptions] = useState(companyOptions)
+
+  // Keep local options in sync with parent
+  useState(() => {
+    setLocalContactOptions(contactOptions)
+    setLocalCompanyOptions(companyOptions)
+  })
+
   const emptyForm = {
     date: new Date().toISOString().split('T')[0],
     datePrecision: 'DAY' as DatePrecision,
@@ -616,11 +650,8 @@ function ConversationsTab({
     nextSteps: '',
     contactsDiscussed: [] as string[],
     companiesDiscussed: [] as string[],
-    // Follow-up action fields
-    actionTitle: '',
-    actionType: 'FOLLOW_UP' as ActionType,
-    actionDueDate: '',
-    actionPriority: 'MEDIUM' as ActionPriority,
+    actions: [{ ...emptyAction }] as ActionFormEntry[],
+    links: [] as LinkEntry[],
   }
 
   const [form, setForm] = useState(emptyForm)
@@ -628,11 +659,15 @@ function ConversationsTab({
   function openNew() {
     setEditId(null)
     setForm(emptyForm)
+    setLocalContactOptions(contactOptions)
+    setLocalCompanyOptions(companyOptions)
     setDialogOpen(true)
   }
 
   function openEdit(conv: Conversation) {
     setEditId(conv.id)
+    setLocalContactOptions(contactOptions)
+    setLocalCompanyOptions(companyOptions)
     setForm({
       date: conv.date,
       datePrecision: conv.datePrecision as DatePrecision,
@@ -642,12 +677,51 @@ function ConversationsTab({
       nextSteps: conv.nextSteps || '',
       contactsDiscussed: conv.contactsDiscussed.map((cd) => cd.contact.id.toString()),
       companiesDiscussed: conv.companiesDiscussed.map((cd) => cd.company.id.toString()),
-      actionTitle: '',
-      actionType: 'FOLLOW_UP',
-      actionDueDate: '',
-      actionPriority: 'MEDIUM',
+      actions: [{ ...emptyAction }],
+      links: [],
     })
     setDialogOpen(true)
+  }
+
+  async function resolveNewEntries() {
+    // Create contacts for any free-text entries (non-numeric IDs)
+    const resolvedContacts: string[] = []
+    for (const val of form.contactsDiscussed) {
+      if (/^\d+$/.test(val)) {
+        resolvedContacts.push(val)
+      } else {
+        // Create new contact
+        try {
+          const newContact = await api.post<{ id: number; name: string }>('/contacts', {
+            name: val,
+            status: 'CONNECTED',
+            ecosystem: 'ROLODEX',
+          })
+          resolvedContacts.push(newContact.id.toString())
+        } catch {
+          toast.error(`Failed to create contact "${val}"`)
+        }
+      }
+    }
+
+    // Create companies for any free-text entries
+    const resolvedCompanies: string[] = []
+    for (const val of form.companiesDiscussed) {
+      if (/^\d+$/.test(val)) {
+        resolvedCompanies.push(val)
+      } else {
+        try {
+          const newCompany = await api.post<{ id: number; name: string }>('/companies', {
+            name: val,
+          })
+          resolvedCompanies.push(newCompany.id.toString())
+        } catch {
+          toast.error(`Failed to create company "${val}"`)
+        }
+      }
+    }
+
+    return { resolvedContacts, resolvedCompanies }
   }
 
   async function handleSubmit() {
@@ -657,6 +731,8 @@ function ConversationsTab({
     }
     setSaving(true)
     try {
+      const { resolvedContacts, resolvedCompanies } = await resolveNewEntries()
+
       const payload: Record<string, unknown> = {
         contactId,
         date: form.date,
@@ -665,16 +741,27 @@ function ConversationsTab({
         summary: form.summary.trim() || null,
         notes: form.notes.trim() || null,
         nextSteps: form.nextSteps.trim() || null,
-        contactsDiscussed: form.contactsDiscussed.map(Number),
-        companiesDiscussed: form.companiesDiscussed.map(Number),
+        contactsDiscussed: resolvedContacts.map(Number),
+        companiesDiscussed: resolvedCompanies.map(Number),
       }
-      if (!editId && form.actionTitle.trim()) {
-        payload.createAction = {
-          title: form.actionTitle.trim(),
-          type: form.actionType,
-          dueDate: form.actionDueDate || null,
-          priority: form.actionPriority,
+
+      // Multiple actions support
+      if (!editId) {
+        const validActions = form.actions.filter((a) => a.title.trim())
+        if (validActions.length > 0) {
+          payload.createActions = validActions.map((a) => ({
+            title: a.title.trim(),
+            type: a.type,
+            dueDate: a.dueDate || null,
+            priority: a.priority,
+          }))
         }
+      }
+
+      // Links
+      const validLinks = form.links.filter((l) => l.url.trim())
+      if (validLinks.length > 0) {
+        payload.links = validLinks
       }
 
       if (editId) {
@@ -710,6 +797,44 @@ function ConversationsTab({
 
   function set<K extends keyof typeof emptyForm>(key: K, val: (typeof emptyForm)[K]) {
     setForm((prev) => ({ ...prev, [key]: val }))
+  }
+
+  function updateAction(index: number, field: keyof ActionFormEntry, value: string) {
+    setForm((prev) => {
+      const actions = [...prev.actions]
+      actions[index] = { ...actions[index], [field]: value }
+      return { ...prev, actions }
+    })
+  }
+
+  function addAction() {
+    setForm((prev) => ({ ...prev, actions: [...prev.actions, { ...emptyAction }] }))
+  }
+
+  function removeAction(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      actions: prev.actions.filter((_, i) => i !== index),
+    }))
+  }
+
+  function addLink() {
+    setForm((prev) => ({ ...prev, links: [...prev.links, { url: '', title: '' }] }))
+  }
+
+  function updateLink(index: number, field: keyof LinkEntry, value: string) {
+    setForm((prev) => {
+      const links = [...prev.links]
+      links[index] = { ...links[index], [field]: value }
+      return { ...prev, links }
+    })
+  }
+
+  function removeLink(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      links: prev.links.filter((_, i) => i !== index),
+    }))
   }
 
   return (
@@ -865,72 +990,110 @@ function ConversationsTab({
             <div className="space-y-2">
               <Label>People Discussed</Label>
               <MultiCombobox
-                options={contactOptions}
+                options={localContactOptions}
                 values={form.contactsDiscussed}
                 onChange={(v) => set('contactsDiscussed', v)}
-                placeholder="Select contacts..."
+                placeholder="Search or type new name..."
                 searchPlaceholder="Search contacts..."
+                allowFreeText={true}
               />
             </div>
 
             <div className="space-y-2">
               <Label>Companies Discussed</Label>
               <MultiCombobox
-                options={companyOptions}
+                options={localCompanyOptions}
                 values={form.companiesDiscussed}
                 onChange={(v) => set('companiesDiscussed', v)}
-                placeholder="Select companies..."
+                placeholder="Search or type new name..."
                 searchPlaceholder="Search companies..."
+                allowFreeText={true}
               />
             </div>
 
-            {/* Follow-up action (only on create) */}
+            {/* Links */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Links</Label>
+                <Button type="button" variant="ghost" size="sm" onClick={addLink}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add Link
+                </Button>
+              </div>
+              {form.links.map((link, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                    <Input
+                      value={link.url}
+                      onChange={(e) => updateLink(i, 'url', e.target.value)}
+                      placeholder="URL (e.g. https://drive.google.com/...)"
+                    />
+                    <Input
+                      value={link.title}
+                      onChange={(e) => updateLink(i, 'title', e.target.value)}
+                      placeholder="Label (optional)"
+                    />
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeLink(i)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            {/* Follow-up actions (only on create) */}
             {!editId && (
               <>
                 <Separator />
-                <p className="text-sm font-medium text-muted-foreground">Create Follow-Up Action (optional)</p>
-                <div className="space-y-2">
-                  <Label>Action Title</Label>
-                  <Input
-                    value={form.actionTitle}
-                    onChange={(e) => set('actionTitle', e.target.value)}
-                    placeholder="e.g. Send follow-up email"
-                  />
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-muted-foreground">Follow-Up Actions</p>
+                  <Button type="button" variant="ghost" size="sm" onClick={addAction}>
+                    <Plus className="mr-1 h-3 w-3" />
+                    Add Action
+                  </Button>
                 </div>
-                {form.actionTitle && (
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label>Type</Label>
-                      <Select value={form.actionType} onValueChange={(v) => set('actionType', v as ActionType)}>
-                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ACTION_TYPE_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                {form.actions.map((action, i) => (
+                  <div key={i} className="space-y-2 rounded-md border p-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">Action {i + 1}</Label>
+                      {form.actions.length > 1 && (
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Due Date</Label>
-                      <Input
-                        type="date"
-                        value={form.actionDueDate}
-                        onChange={(e) => set('actionDueDate', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Priority</Label>
-                      <Select value={form.actionPriority} onValueChange={(v) => set('actionPriority', v as ActionPriority)}>
-                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ACTION_PRIORITY_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <Input
+                      value={action.title}
+                      onChange={(e) => updateAction(i, 'title', e.target.value)}
+                      placeholder="e.g. Send follow-up email"
+                    />
+                    {action.title && (
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <Select value={action.type} onValueChange={(v) => updateAction(i, 'type', v)}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {ACTION_TYPE_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="date"
+                          value={action.dueDate}
+                          onChange={(e) => updateAction(i, 'dueDate', e.target.value)}
+                        />
+                        <Select value={action.priority} onValueChange={(v) => updateAction(i, 'priority', v)}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {ACTION_PRIORITY_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </>
             )}
           </div>
@@ -1198,14 +1361,47 @@ function PrepSheetTab({
   conversations,
   relationships,
   actions,
+  links,
+  onRefresh,
 }: {
   contact: Contact
   conversations: Conversation[]
   relationships: Relationship[]
   actions: Action[]
+  links: LinkRecord[]
+  onRefresh: () => void
 }) {
   const lastConversation = conversations.length > 0 ? conversations[0] : null
   const pendingActions = actions.filter((a) => !a.completed)
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkTitle, setNewLinkTitle] = useState('')
+
+  async function addLink() {
+    if (!newLinkUrl.trim()) return
+    try {
+      await api.post('/links', {
+        url: newLinkUrl.trim(),
+        title: newLinkTitle.trim() || newLinkUrl.trim(),
+        contactId: contact.id,
+      })
+      setNewLinkUrl('')
+      setNewLinkTitle('')
+      onRefresh()
+      toast.success('Link added')
+    } catch {
+      toast.error('Failed to add link')
+    }
+  }
+
+  async function deleteLink(linkId: number) {
+    try {
+      await api.delete(`/links/${linkId}`)
+      onRefresh()
+      toast.success('Link removed')
+    } catch {
+      toast.error('Failed to remove link')
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -1248,6 +1444,54 @@ function PrepSheetTab({
           ) : (
             <p className="text-sm text-muted-foreground">No conversations logged yet.</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Links */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Links</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {links.length > 0 && (
+            <ul className="space-y-2">
+              {links.map((link) => (
+                <li key={link.id} className="flex items-center justify-between gap-2">
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline truncate"
+                  >
+                    {link.title}
+                  </a>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1 grid gap-2 sm:grid-cols-2">
+              <Input
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+                placeholder="URL (Google Drive, webpage, etc.)"
+                onKeyDown={(e) => e.key === 'Enter' && addLink()}
+              />
+              <Input
+                value={newLinkTitle}
+                onChange={(e) => setNewLinkTitle(e.target.value)}
+                placeholder="Label (optional)"
+                onKeyDown={(e) => e.key === 'Enter' && addLink()}
+              />
+            </div>
+            <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+              <Plus className="mr-1 h-3 w-3" />
+              Add
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

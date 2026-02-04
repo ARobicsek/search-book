@@ -188,3 +188,15 @@ export const RELATIONSHIP_TYPE_OPTIONS: { value: RelationshipType; label: string
   { value: 'INTRODUCED_BY', label: 'Introduced By' },
   { value: 'REPORTS_TO', label: 'Reports To' },
 ];
+
+// ─── Links ──────────────────────────────────────────────────
+
+export interface LinkRecord {
+  id: number;
+  url: string;
+  title: string;
+  description: string | null;
+  contactId: number | null;
+  companyId: number | null;
+  createdAt: string;
+}

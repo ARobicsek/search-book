@@ -261,16 +261,26 @@ export function ContactFormPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {isEdit ? 'Edit Contact' : 'New Contact'}
-        </h1>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isEdit ? 'Edit Contact' : 'New Contact'}
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="submit" form="contact-form" disabled={saving}>
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Contact'}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+            Cancel
+          </Button>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form id="contact-form" onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Info */}
         <Card>
           <CardHeader>

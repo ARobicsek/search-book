@@ -34,6 +34,7 @@ import { ArrowLeft, ChevronDown } from 'lucide-react'
 type FormData = {
   name: string
   title: string
+  roleDescription: string
   companyId: string // "" or numeric string
   companyName: string
   ecosystem: string
@@ -57,6 +58,7 @@ type FormData = {
 const emptyForm: FormData = {
   name: '',
   title: '',
+  roleDescription: '',
   companyId: '',
   companyName: '',
   ecosystem: 'ROLODEX',
@@ -81,6 +83,7 @@ function contactToForm(contact: Contact): FormData {
   return {
     name: contact.name,
     title: contact.title ?? '',
+    roleDescription: contact.roleDescription ?? '',
     companyId: contact.companyId?.toString() ?? '',
     companyName: contact.companyName ?? '',
     ecosystem: contact.ecosystem,
@@ -106,6 +109,7 @@ function formToPayload(form: FormData) {
   return {
     name: form.name.trim(),
     title: form.title.trim() || null,
+    roleDescription: form.roleDescription.trim() || null,
     companyId: form.companyId ? parseInt(form.companyId) : null,
     companyName: !form.companyId ? (form.companyName.trim() || null) : null,
     ecosystem: form.ecosystem,
@@ -318,12 +322,23 @@ export function ContactFormPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="title">Title / Role</Label>
+              <Label htmlFor="title">Title</Label>
               <Input
                 id="title"
                 value={form.title}
                 onChange={(e) => set('title', e.target.value)}
                 placeholder="e.g. VP of Engineering"
+              />
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="roleDescription">Role Description</Label>
+              <Textarea
+                id="roleDescription"
+                value={form.roleDescription}
+                onChange={(e) => set('roleDescription', e.target.value)}
+                placeholder="Describe their responsibilities, team size, focus areas..."
+                rows={2}
               />
             </div>
 

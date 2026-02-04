@@ -285,6 +285,9 @@ export function ContactDetailPage() {
                     <span className="text-sm text-muted-foreground">{companyDisplay}</span>
                   ) : null}
                 </div>
+                {contact.roleDescription && (
+                  <p className="mt-1 text-sm text-muted-foreground">{contact.roleDescription}</p>
+                )}
               </div>
             </div>
             <div className="mt-2 flex gap-2">
@@ -1584,6 +1587,9 @@ function PrepSheetTab({
           <dl className="grid gap-3 sm:grid-cols-2">
             {contact.title && (
               <Field label="Title">{contact.title}</Field>
+            )}
+            {contact.roleDescription && (
+              <Field label="Role Description" className="sm:col-span-2">{contact.roleDescription}</Field>
             )}
             {(contact.company || contact.companyName) && (
               <Field label="Company">

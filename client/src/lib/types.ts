@@ -6,6 +6,7 @@ export interface Contact {
   id: number;
   name: string;
   title: string | null;
+  roleDescription: string | null;
   companyId: number | null;
   company: { id: number; name: string } | null;
   companyName: string | null;

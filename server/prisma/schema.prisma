@@ -14,6 +14,7 @@ model Contact {
   id                Int      @id @default(autoincrement())
   name              String
   title             String?
+  roleDescription   String?
   companyId         Int?
   company           Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   companyName       String?

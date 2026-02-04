@@ -9,7 +9,7 @@
 | 3 | Conversations & Relationships | ✅ Complete | Conversation logging, relationships, drag-drop photos, prep sheet |
 | 4 | Search, Import & Tags | ✅ Complete | Global search, date-range search, CSV import/export, tags, ideas, links |
 | 5 | Recurring Tasks & Dashboard | ✅ Complete | Recurring actions, contact flagging, weekly activity dashboard, PWA |
-| 6 | Backup & Polish | 🔲 Not Started | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
+| 6 | Backup & Polish | ✅ Complete | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
 
 ---
 
@@ -127,8 +127,8 @@
 - Documentation
 
 ### Acceptance Criteria
-- [ ] One-click backup of DB + photos to specified folder
-- [ ] Can restore from backup
-- [ ] Loading states and error handling throughout
-- [ ] Keyboard shortcuts documented in-app
-- [ ] Duplicate detection or cleanup tool
+- [x] One-click backup of DB + photos to specified folder
+- [x] Can restore from backup
+- [x] Loading states and error handling throughout
+- [x] Keyboard shortcuts documented in-app
+- [x] Duplicate detection or cleanup tool

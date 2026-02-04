@@ -3,14 +3,44 @@ import prisma from '../db';
 
 const router = Router();
 
-// GET /api/contacts — list all contacts
-router.get('/', async (_req: Request, res: Response) => {
+// GET /api/contacts — list all contacts with optional date range filter
+router.get('/', async (req: Request, res: Response) => {
   try {
+    const { lastOutreachFrom, lastOutreachTo, includeNoOutreach } = req.query;
+    const includeNone = includeNoOutreach !== 'false'; // default true
+
     const contacts = await prisma.contact.findMany({
-      include: { company: { select: { id: true, name: true } } },
+      include: {
+        company: { select: { id: true, name: true } },
+        conversations: {
+          select: { date: true },
+          orderBy: { date: 'desc' },
+          take: 1,
+        },
+      },
       orderBy: { updatedAt: 'desc' },
     });
-    res.json(contacts);
+
+    // Map to add lastOutreachDate and remove raw conversations array
+    let result = contacts.map((c) => {
+      const { conversations, ...rest } = c;
+      return {
+        ...rest,
+        lastOutreachDate: conversations[0]?.date ?? null,
+      };
+    });
+
+    // Apply date range filter if params provided
+    if (lastOutreachFrom || lastOutreachTo) {
+      result = result.filter((c) => {
+        if (!c.lastOutreachDate) return includeNone;
+        if (lastOutreachFrom && c.lastOutreachDate < (lastOutreachFrom as string)) return false;
+        if (lastOutreachTo && c.lastOutreachDate > (lastOutreachTo as string)) return false;
+        return true;
+      });
+    }
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching contacts:', error);
     res.status(500).json({ error: 'Failed to fetch contacts' });

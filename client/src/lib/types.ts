@@ -29,6 +29,7 @@ export interface Contact {
   personalDetails: string | null;
   createdAt: string;
   updatedAt: string;
+  lastOutreachDate?: string | null;
 }
 
 export interface Company {

@@ -10,7 +10,7 @@ import {
   type ColumnFiltersState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus, Search, X, Download, Upload } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus } from '@/lib/types'
@@ -34,6 +34,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { toast } from 'sonner'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 
 const ecosystemColors: Record<Ecosystem, string> = {
   RECRUITER: 'bg-blue-100 text-blue-800',
@@ -213,6 +220,25 @@ const columns: ColumnDef<Contact>[] = [
       <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
     ),
   },
+  {
+    accessorKey: 'lastOutreachDate',
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="-ml-4"
+        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+      >
+        Last Outreach
+        <ArrowUpDown className="ml-1 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ getValue }) => {
+      const value = getValue() as string | null
+      return (
+        <span className="text-muted-foreground">{value ? formatDate(value) : '—'}</span>
+      )
+    },
+  },
 ]
 
 export function ContactListPage() {
@@ -224,11 +250,20 @@ export function ContactListPage() {
   const [globalFilter, setGlobalFilter] = useState('')
   const [ecosystemFilter, setEcosystemFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [lastOutreachFrom, setLastOutreachFrom] = useState<string>('')
+  const [lastOutreachTo, setLastOutreachTo] = useState<string>('')
+  const [includeNoOutreach, setIncludeNoOutreach] = useState(true)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
 
   function loadContacts() {
+    const params = new URLSearchParams()
+    if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
+    if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
+    if (!includeNoOutreach) params.set('includeNoOutreach', 'false')
+
+    const url = params.toString() ? `/contacts?${params}` : '/contacts'
     api
-      .get<Contact[]>('/contacts')
+      .get<Contact[]>(url)
       .then(setContacts)
       .catch((err) => toast.error(err.message || 'Failed to load contacts'))
       .finally(() => setLoading(false))
@@ -236,7 +271,7 @@ export function ContactListPage() {
 
   useEffect(() => {
     loadContacts()
-  }, [])
+  }, [lastOutreachFrom, lastOutreachTo, includeNoOutreach])
 
   // Apply ecosystem and status filters
   const filteredData = useMemo(() => {
@@ -277,12 +312,16 @@ export function ContactListPage() {
     },
   })
 
-  const hasFilters = globalFilter || ecosystemFilter !== 'all' || statusFilter !== 'all'
+  const hasDateFilter = lastOutreachFrom || lastOutreachTo
+  const hasFilters = globalFilter || ecosystemFilter !== 'all' || statusFilter !== 'all' || hasDateFilter
 
   function clearFilters() {
     setGlobalFilter('')
     setEcosystemFilter('all')
     setStatusFilter('all')
+    setLastOutreachFrom('')
+    setLastOutreachTo('')
+    setIncludeNoOutreach(true)
   }
 
   function exportToCsv() {
@@ -420,6 +459,61 @@ export function ContactListPage() {
             ))}
           </SelectContent>
         </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className={hasDateFilter ? 'border-primary' : ''}>
+              <Calendar className="mr-2 h-4 w-4" />
+              {hasDateFilter
+                ? `${lastOutreachFrom || '...'} to ${lastOutreachTo || '...'}`
+                : 'Last Outreach'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80" align="start">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="from-date">From</Label>
+                <Input
+                  id="from-date"
+                  type="date"
+                  value={lastOutreachFrom}
+                  onChange={(e) => setLastOutreachFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="to-date">To</Label>
+                <Input
+                  id="to-date"
+                  type="date"
+                  value={lastOutreachTo}
+                  onChange={(e) => setLastOutreachTo(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="include-no-outreach"
+                  checked={includeNoOutreach}
+                  onCheckedChange={(checked) => setIncludeNoOutreach(checked === true)}
+                />
+                <Label htmlFor="include-no-outreach" className="text-sm font-normal">
+                  Include never contacted
+                </Label>
+              </div>
+              {hasDateFilter && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    setLastOutreachFrom('')
+                    setLastOutreachTo('')
+                  }}
+                >
+                  Clear dates
+                </Button>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="mr-1 h-4 w-4" />

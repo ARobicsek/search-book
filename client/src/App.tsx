@@ -16,6 +16,7 @@ import { CalendarPage } from '@/pages/calendar'
 import { IdeaListPage } from '@/pages/ideas/idea-list'
 import { AnalyticsPage } from '@/pages/analytics'
 import { SettingsPage } from '@/pages/settings'
+import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      <KeyboardShortcutsDialog />
       <Toaster />
       <PWAUpdatePrompt />
     </BrowserRouter>

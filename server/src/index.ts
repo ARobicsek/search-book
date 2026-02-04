@@ -13,6 +13,7 @@ import linksRouter from './routes/links';
 import prepnotesRouter from './routes/prepnotes';
 import employmentHistoryRouter from './routes/employmenthistory';
 import tagsRouter from './routes/tags';
+import analyticsRouter from './routes/analytics';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +41,7 @@ app.use('/api/links', linksRouter);
 app.use('/api/prepnotes', prepnotesRouter);
 app.use('/api/employment-history', employmentHistoryRouter);
 app.use('/api/tags', tagsRouter);
+app.use('/api/analytics', analyticsRouter);
 
 app.listen(PORT, () => {
   console.log(`SearchBook API running on http://localhost:${PORT}`);

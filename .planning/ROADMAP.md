@@ -6,7 +6,7 @@
 |-------|------|--------|-------------|
 | 1 | Foundation | ✅ Complete | Project setup, DB schema, Contact & Company CRUD, basic UI shell |
 | 2 | Actions & Calendar | ✅ Complete | Action system, daily view, calendar, quick-add palette, nudge list |
-| 3 | Conversations & Relationships | 🔲 Not Started | Conversation logging, relationships, drag-drop photos, prep sheet |
+| 3 | Conversations & Relationships | ✅ Complete | Conversation logging, relationships, drag-drop photos, prep sheet |
 | 4 | Search, Import & Tags | 🔲 Not Started | Global search, date-range search, CSV import/export, tags, ideas, links |
 | 5 | Recurring Tasks & Dashboard | 🔲 Not Started | Recurring actions, contact flagging, weekly activity dashboard |
 | 6 | Backup & Polish | 🔲 Not Started | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
@@ -67,13 +67,13 @@
 - Pre-call prep sheet view
 
 ### Acceptance Criteria
-- [ ] Can log conversations with day, month, or quarter precision dates
-- [ ] Can create follow-up actions directly from conversation "next steps"
-- [ ] Can record relationships (referred_by, knows, etc.)
-- [ ] Can drag-drop JPG/PNG photos onto contact profile
-- [ ] Can paste photo URLs
-- [ ] Contact detail shows full history (conversations, actions, relationships)
-- [ ] Prep sheet view shows last conversation, open questions, relationships at a glance
+- [x] Can log conversations with day, month, or quarter precision dates
+- [x] Can create follow-up actions directly from conversation "next steps"
+- [x] Can record relationships (referred_by, knows, etc.)
+- [x] Can drag-drop JPG/PNG photos onto contact profile
+- [x] Can paste photo URLs
+- [x] Contact detail shows full history (conversations, actions, relationships)
+- [x] Prep sheet view shows last conversation, open questions, relationships at a glance
 
 ---
 
@@ -93,7 +93,7 @@
 - [ ] Can export contacts to CSV
 - [ ] Can create, assign, and filter by tags
 - [ ] Ideas CRUD works
-- [ ] Links CRUD works, linked to contacts/companies
+- [x] Links CRUD works, linked to contacts/companies (done in Phase 3 feedback)
 
 ---
 

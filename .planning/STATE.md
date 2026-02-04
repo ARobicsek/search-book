@@ -70,6 +70,22 @@
 | 12 | Personal details free text field | Added personalDetails to Contact model with collapsible section |
 | 13 | Remove Needs Attention from Dashboard | Removed nudge list section entirely |
 
+## User Feedback Session 3 (Phase 3 testing continued)
+| # | Feedback | Resolution |
+|---|----------|------------|
+| 14 | Change Chrome tab title to SearchBook | Updated index.html title |
+| 15 | Modal shouldn't close on outside click | Added onInteractOutside handler to DialogContent for conversation/relationship dialogs |
+| 16 | Add new contacts from 'who connected us' field | Enabled allowFreeText on referredBy Combobox; auto-creates contact on save |
+| 17 | Show next step due date on card | Added due date display to action items in conversation cards |
+| 18 | Prep sheet needs text notes + doc links | Combined with #24 → PrepNote model with dated entries |
+| 19 | Save button at top of contact form | Added save/cancel buttons in header row alongside title |
+| 20 | Track company history (X→Y) | Added EmploymentHistory model; "Move to history" button in contact form |
+| 21 | Role description field | Added roleDescription field to Contact model; textarea in form, display in detail/prep sheet |
+| 22 | Alphabetical sort in comboboxes | Added .sort() to filteredOptions in Combobox and MultiCombobox |
+| 23 | Timezone bug (tomorrow shows as today) | Changed toISOString().split('T')[0] to toLocaleDateString('en-CA') for local timezone |
+| 24 | Dated prep elements | Created PrepNote model (content, url, urlTitle, date); Prep Notes section in PrepSheet tab |
+| 25 | Cloud backup | Noted for Phase 6 (Google Drive backup already in roadmap) |
+
 ## Blockers
 None currently.
 
@@ -84,3 +100,4 @@ None currently.
 | 2026-02-03 | Phase 3 started: Conversations & Relationships. Completed T1-T5 of 13 tasks. T1: Added ConversationContact and ConversationCompany junction tables to Prisma schema (db push applied). T2: Added Conversation, Relationship types and enums to client types.ts. T3: Created photo upload backend (multer, /api/upload endpoint, static serving at /photos). T4: Added uploadFile method to API utility. T5: Created reusable Combobox and MultiCombobox components (shadcn popover + command). Also installed shadcn tabs component. **Phase 3 in progress (5/13 tasks complete).** |
 | 2026-02-03 | Phase 3 feedback fixes: All 13 user feedback items addressed. Photo display fix (proxy + sizing), auto-status CONNECTED, desktop launcher, search+add-new for contacts/companies in conversation log, multiple actions per conversation, Meet action type, Video Call conversation type, links in prep sheet + conversation log, company combobox with auto-create, default status CONNECTED, progressive disclosure (collapsible sections), personal details field, removed Needs Attention from dashboard. Links CRUD API created. Collapsible component installed. **Phase 3 feedback complete.** |
 | 2026-02-03 | Phase 3 completed T6-T13. T6: PhotoUpload UI component (drag-drop, click-to-browse, URL paste, preview with remove). T7: Conversations API (CRUD with junction tables for contactsDiscussed/companiesDiscussed, optional follow-up action creation). T8: Relationships API (CRUD, bidirectional contactId filter). T9: Contact detail page refactored to tabs (Overview, Conversations, Relationships, Prep Sheet). T10: Conversation UI (card list + dialog form with date precision, type, summary, notes, nextSteps, multi-select contacts/companies discussed, optional follow-up action). T11: Relationship UI (card list + dialog form with type, direction, contact select, notes). T12: Contact form updated with PhotoUpload component and referredBy Combobox. T13: Prep Sheet tab (last conversation, open questions, pending actions, relationships, key info). Both client and server pass TypeScript checks. **Phase 3 complete.** |
+| 2026-02-03 | Phase 3 feedback round 2: All 12 user feedback items (#14-25) addressed. Chrome tab title fixed. Modal outside-click prevented. ReferredBy field now allows adding new contacts. Action due dates shown on cards. Save button added at top of contact form. RoleDescription field added to Contact. Combobox options sorted alphabetically. Timezone bug fixed (local vs UTC). PrepNote model created for dated prep elements with text/links. EmploymentHistory model created for tracking company changes. Item #25 (cloud backup) noted for Phase 6. **Phase 3 feedback round 2 complete.** |

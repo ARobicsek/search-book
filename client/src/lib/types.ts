@@ -213,3 +213,17 @@ export interface PrepNote {
   contactId: number;
   createdAt: string;
 }
+
+// ─── Employment History ─────────────────────────────────────
+
+export interface EmploymentHistory {
+  id: number;
+  contactId: number;
+  companyId: number | null;
+  company: { id: number; name: string } | null;
+  companyName: string | null;
+  title: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  createdAt: string;
+}

@@ -8,6 +8,7 @@ import type {
   Relationship,
   LinkRecord,
   PrepNote,
+  EmploymentHistory,
   ConversationType,
   DatePrecision,
   RelationshipType,
@@ -176,6 +177,7 @@ export function ContactDetailPage() {
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [links, setLinks] = useState<LinkRecord[]>([])
   const [prepNotes, setPrepNotes] = useState<PrepNote[]>([])
+  const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistory[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -197,6 +199,7 @@ export function ContactDetailPage() {
     api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => {})
     api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
     api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => {})
+    api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => {})
   }, [id, navigate])
 
   useEffect(() => {
@@ -470,6 +473,38 @@ export function ContactDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm whitespace-pre-wrap">{contact.personalDetails}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Previous Companies */}
+          {employmentHistory.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Previous Companies</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {employmentHistory.map((eh) => (
+                    <li key={eh.id} className="flex items-center gap-2 text-sm">
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
+                      {eh.title && <span>{eh.title}</span>}
+                      {eh.title && (eh.company || eh.companyName) && <span className="text-muted-foreground">at</span>}
+                      {eh.company ? (
+                        <Link to={`/companies/${eh.company.id}`} className="text-primary hover:underline">
+                          {eh.company.name}
+                        </Link>
+                      ) : eh.companyName ? (
+                        <span>{eh.companyName}</span>
+                      ) : null}
+                      {(eh.startDate || eh.endDate) && (
+                        <span className="text-xs text-muted-foreground">
+                          ({eh.startDate || '?'} — {eh.endDate || 'present'})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </CardContent>
             </Card>
           )}

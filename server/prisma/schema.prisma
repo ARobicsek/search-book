@@ -43,6 +43,7 @@ model Contact {
   actions                  Action[]
   linksTo                  Link[]
   prepNotes                PrepNote[]
+  employmentHistory        EmploymentHistory[]
   relationshipsFrom        Relationship[] @relation("RelFrom")
   relationshipsTo          Relationship[] @relation("RelTo")
   discussedInConversations ConversationContact[] @relation("DiscussedInConversations")
@@ -67,6 +68,22 @@ model Company {
   actions                  Action[]
   links                    Link[]
   discussedInConversations ConversationCompany[]
+  employmentHistory        EmploymentHistory[]
+}
+
+// ─── Employment History ─────────────────────────────────────
+
+model EmploymentHistory {
+  id          Int      @id @default(autoincrement())
+  contactId   Int
+  contact     Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  companyId   Int?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyName String?  // Fallback if company doesn't exist in system
+  title       String?  // Role at that company
+  startDate   String?  // YYYY-MM or YYYY
+  endDate     String?  // YYYY-MM or YYYY, null = current
+  createdAt   DateTime @default(now())
 }
 
 // ─── Tags ────────────────────────────────────────────────────

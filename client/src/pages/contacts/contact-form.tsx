@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Contact, Company } from '@/lib/types'
+import type { Contact, Company, EmploymentHistory } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,7 +29,7 @@ import {
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
-import { ArrowLeft, ChevronDown } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Trash2 } from 'lucide-react'
 
 type FormData = {
   name: string
@@ -139,6 +139,7 @@ export function ContactFormPage() {
   const [form, setForm] = useState<FormData>(emptyForm)
   const [companies, setCompanies] = useState<Company[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
+  const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistory[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -177,6 +178,9 @@ export function ContactFormPage() {
           navigate('/contacts')
         })
         .finally(() => setLoading(false))
+
+      // Fetch employment history
+      api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => {})
     }
   }, [id, isEdit, navigate])
 
@@ -612,6 +616,89 @@ export function ContactFormPage() {
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* Previous Companies — only show when editing */}
+        {isEdit && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Previous Companies</CardTitle>
+              <CardDescription>Track company history as they change jobs</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Existing history entries */}
+              {employmentHistory.length > 0 && (
+                <ul className="space-y-2">
+                  {employmentHistory.map((eh) => (
+                    <li key={eh.id} className="flex items-center justify-between gap-2 text-sm border rounded-md p-2">
+                      <div>
+                        {eh.title && <span className="font-medium">{eh.title}</span>}
+                        {eh.title && (eh.company || eh.companyName) && <span className="text-muted-foreground"> at </span>}
+                        <span>{eh.company?.name || eh.companyName}</span>
+                        {(eh.startDate || eh.endDate) && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            ({eh.startDate || '?'} — {eh.endDate || 'present'})
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={async () => {
+                          try {
+                            await api.delete(`/employment-history/${eh.id}`)
+                            setEmploymentHistory((prev) => prev.filter((e) => e.id !== eh.id))
+                            toast.success('History entry removed')
+                          } catch {
+                            toast.error('Failed to remove history entry')
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Move current company to history */}
+              {(form.companyId || form.companyName) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const endDate = prompt('End date (YYYY-MM or YYYY):', new Date().toISOString().slice(0, 7))
+                    if (endDate === null) return
+
+                    try {
+                      const newHistory = await api.post<EmploymentHistory>('/employment-history', {
+                        contactId: parseInt(id!),
+                        companyId: form.companyId ? parseInt(form.companyId) : null,
+                        companyName: form.companyName || null,
+                        title: form.title || null,
+                        endDate: endDate || null,
+                      })
+                      setEmploymentHistory((prev) => [newHistory, ...prev])
+                      setForm((prev) => ({ ...prev, companyId: '', companyName: '', title: '' }))
+                      toast.success('Moved to history. Now set the new company.')
+                    } catch {
+                      toast.error('Failed to move company to history')
+                    }
+                  }}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Move current company to history
+                </Button>
+              )}
+
+              {employmentHistory.length === 0 && !form.companyId && !form.companyName && (
+                <p className="text-sm text-muted-foreground">No previous companies recorded.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-3">

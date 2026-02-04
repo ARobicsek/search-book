@@ -128,6 +128,14 @@ export interface Idea {
   createdAt: string;
 }
 
+// ─── Tags ───────────────────────────────────────────────────
+
+export interface Tag {
+  id: number;
+  name: string;
+  _count?: { contacts: number; companies: number };
+}
+
 // ─── Conversations ──────────────────────────────────────────
 
 export type ConversationType = 'CALL' | 'VIDEO_CALL' | 'EMAIL' | 'MEETING' | 'LINKEDIN' | 'COFFEE' | 'EVENT' | 'OTHER';

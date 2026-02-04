@@ -9,6 +9,7 @@ import type {
   LinkRecord,
   PrepNote,
   EmploymentHistory,
+  Tag,
   ConversationType,
   DatePrecision,
   RelationshipType,
@@ -66,6 +67,8 @@ import {
   Users,
   FileText,
   User,
+  X,
+  Tag as TagIcon,
 } from 'lucide-react'
 
 // ─── Color maps ─────────────────────────────────────────────
@@ -178,6 +181,8 @@ export function ContactDetailPage() {
   const [links, setLinks] = useState<LinkRecord[]>([])
   const [prepNotes, setPrepNotes] = useState<PrepNote[]>([])
   const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistory[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
+  const [allTags, setAllTags] = useState<Tag[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -200,6 +205,7 @@ export function ContactDetailPage() {
     api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
     api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => {})
     api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => {})
+    api.get<Tag[]>(`/tags/contact/${id}`).then(setTags).catch(() => {})
   }, [id, navigate])
 
   useEffect(() => {
@@ -211,6 +217,7 @@ export function ContactDetailPage() {
     api.get<{ id: number; name: string }[]>('/companies').then(
       (data) => setAllCompanies(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
     ).catch(() => {})
+    api.get<Tag[]>('/tags').then(setAllTags).catch(() => {})
   }, [loadData])
 
   async function toggleActionComplete(action: Action) {
@@ -583,6 +590,105 @@ export function ContactDetailPage() {
                     )
                   })}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tags */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TagIcon className="h-4 w-4" />
+                Tags
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <Badge key={tag.id} variant="secondary" className="gap-1 pr-1">
+                    {tag.name}
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.delete(`/tags/${tag.id}/contacts/${contact.id}`)
+                          setTags((prev) => prev.filter((t) => t.id !== tag.id))
+                          toast.success('Tag removed')
+                        } catch {
+                          toast.error('Failed to remove tag')
+                        }
+                      }}
+                      className="ml-1 rounded-full hover:bg-muted p-0.5"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {allTags.filter((t) => !tags.some((ct) => ct.id === t.id)).length > 0 && (
+                  <select
+                    className="text-xs border rounded px-2 py-1 bg-background"
+                    value=""
+                    onChange={async (e) => {
+                      const tagId = parseInt(e.target.value)
+                      if (!tagId) return
+                      try {
+                        await api.post(`/tags/${tagId}/contacts/${contact.id}`)
+                        const tag = allTags.find((t) => t.id === tagId)
+                        if (tag) setTags((prev) => [...prev, tag])
+                        toast.success('Tag added')
+                      } catch {
+                        toast.error('Failed to add tag')
+                      }
+                    }}
+                  >
+                    <option value="">+ Add tag</option>
+                    {allTags
+                      .filter((t) => !tags.some((ct) => ct.id === t.id))
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                  </select>
+                )}
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs">
+                      <Plus className="mr-1 h-3 w-3" />
+                      New Tag
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-xs">
+                    <DialogHeader>
+                      <DialogTitle>Create Tag</DialogTitle>
+                    </DialogHeader>
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault()
+                        const form = e.target as HTMLFormElement
+                        const input = form.elements.namedItem('tagName') as HTMLInputElement
+                        const name = input.value.trim()
+                        if (!name) return
+                        try {
+                          const newTag = await api.post<Tag>('/tags', { name })
+                          setAllTags((prev) => [...prev, newTag].sort((a, b) => a.name.localeCompare(b.name)))
+                          await api.post(`/tags/${newTag.id}/contacts/${contact.id}`)
+                          setTags((prev) => [...prev, newTag])
+                          input.value = ''
+                          toast.success('Tag created and added')
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : 'Failed to create tag')
+                        }
+                      }}
+                      className="space-y-4"
+                    >
+                      <Input name="tagName" placeholder="Tag name" autoFocus />
+                      <DialogFooter>
+                        <Button type="submit" size="sm">Create & Add</Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+              {tags.length === 0 && allTags.length === 0 && (
+                <p className="text-sm text-muted-foreground">No tags yet. Create one to get started.</p>
               )}
             </CardContent>
           </Card>

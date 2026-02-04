@@ -919,7 +919,7 @@ function ConversationsTab({
 
       {/* Conversation form dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
           </DialogHeader>
@@ -1269,7 +1269,7 @@ function RelationshipsTab({
 
       {/* Add relationship dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Add Relationship</DialogTitle>
           </DialogHeader>

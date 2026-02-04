@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
+import { PWAUpdatePrompt } from '@/components/pwa-update-prompt'
 import { Layout } from '@/components/layout'
 import { DashboardPage } from '@/pages/dashboard'
 import { ContactListPage } from '@/pages/contacts/contact-list'
@@ -38,6 +39,7 @@ function App() {
         </Route>
       </Routes>
       <Toaster />
+      <PWAUpdatePrompt />
     </BrowserRouter>
   )
 }

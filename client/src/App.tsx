@@ -15,6 +15,7 @@ import { ActionDetailPage } from '@/pages/actions/action-detail'
 import { CalendarPage } from '@/pages/calendar'
 import { IdeaListPage } from '@/pages/ideas/idea-list'
 import { AnalyticsPage } from '@/pages/analytics'
+import { SettingsPage } from '@/pages/settings'
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/ideas" element={<IdeaListPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

@@ -30,6 +30,12 @@ router.get('/', async (req: Request, res: Response) => {
       };
     });
 
+    // Apply flagged filter if param provided
+    const { flagged } = req.query;
+    if (flagged === 'true') {
+      result = result.filter((c) => c.flagged);
+    }
+
     // Apply date range filter if params provided
     if (lastOutreachFrom || lastOutreachTo) {
       result = result.filter((c) => {
@@ -132,6 +138,67 @@ router.put('/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error updating contact:', error);
     res.status(500).json({ error: 'Failed to update contact' });
+  }
+});
+
+// PATCH /api/contacts/:id/flag — toggle flagged status
+router.patch('/:id/flag', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const existing = await prisma.contact.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Contact not found' });
+      return;
+    }
+    const contact = await prisma.contact.update({
+      where: { id },
+      data: { flagged: !existing.flagged },
+      include: { company: { select: { id: true, name: true } } },
+    });
+    res.json(contact);
+  } catch (error) {
+    console.error('Error toggling contact flag:', error);
+    res.status(500).json({ error: 'Failed to toggle contact flag' });
+  }
+});
+
+// POST /api/contacts/batch-action — create one action per contact
+router.post('/batch-action', async (req: Request, res: Response) => {
+  try {
+    const { contactIds, actionData } = req.body;
+    if (!Array.isArray(contactIds) || contactIds.length === 0) {
+      res.status(400).json({ error: 'contactIds must be a non-empty array' });
+      return;
+    }
+    if (!actionData || !actionData.title) {
+      res.status(400).json({ error: 'actionData with title is required' });
+      return;
+    }
+
+    const actions = await Promise.all(
+      contactIds.map((contactId: number) =>
+        prisma.action.create({
+          data: {
+            title: actionData.title,
+            type: actionData.type || 'OTHER',
+            priority: actionData.priority || 'MEDIUM',
+            dueDate: actionData.dueDate || null,
+            contactId,
+          },
+        })
+      )
+    );
+
+    // Clear flags on the contacts
+    await prisma.contact.updateMany({
+      where: { id: { in: contactIds } },
+      data: { flagged: false },
+    });
+
+    res.status(201).json({ created: actions.length });
+  } catch (error) {
+    console.error('Error creating batch actions:', error);
+    res.status(500).json({ error: 'Failed to create batch actions' });
   }
 });
 

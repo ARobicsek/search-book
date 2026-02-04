@@ -10,11 +10,11 @@ import {
   type ColumnFiltersState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus } from '@/lib/types'
-import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
+import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -41,6 +41,14 @@ import {
 } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 const ecosystemColors: Record<Ecosystem, string> = {
   RECRUITER: 'bg-blue-100 text-blue-800',
@@ -79,7 +87,30 @@ function getCompanyDisplay(contact: Contact): string {
   return ''
 }
 
-const columns: ColumnDef<Contact>[] = [
+function buildColumns(onToggleFlag: (contact: Contact) => void): ColumnDef<Contact>[] {
+  return [
+  {
+    id: 'flag',
+    header: () => <Flag className="h-4 w-4 text-muted-foreground" />,
+    cell: ({ row }) => (
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleFlag(row.original)
+        }}
+        className="flex items-center justify-center"
+      >
+        <Flag
+          className={`h-4 w-4 ${
+            row.original.flagged
+              ? 'fill-amber-500 text-amber-500'
+              : 'text-muted-foreground/30 hover:text-amber-400'
+          }`}
+        />
+      </button>
+    ),
+    size: 40,
+  },
   {
     accessorKey: 'name',
     header: ({ column }) => (
@@ -240,6 +271,7 @@ const columns: ColumnDef<Contact>[] = [
     },
   },
 ]
+}
 
 export function ContactListPage() {
   const navigate = useNavigate()
@@ -254,6 +286,63 @@ export function ContactListPage() {
   const [lastOutreachTo, setLastOutreachTo] = useState<string>('')
   const [includeNoOutreach, setIncludeNoOutreach] = useState(true)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false)
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
+  const [batchForm, setBatchForm] = useState({
+    title: '',
+    type: 'FOLLOW_UP',
+    priority: 'MEDIUM',
+    dueDate: '',
+  })
+  const [batchSaving, setBatchSaving] = useState(false)
+
+  async function toggleFlag(contact: Contact) {
+    try {
+      await api.patch(`/contacts/${contact.id}/flag`)
+      setContacts((prev) =>
+        prev.map((c) => (c.id === contact.id ? { ...c, flagged: !c.flagged } : c))
+      )
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to toggle flag'
+      toast.error(message)
+    }
+  }
+
+  async function clearAllFlags() {
+    const flaggedContacts = contacts.filter((c) => c.flagged)
+    try {
+      await Promise.all(flaggedContacts.map((c) => api.patch(`/contacts/${c.id}/flag`)))
+      setContacts((prev) => prev.map((c) => ({ ...c, flagged: false })))
+      setShowFlaggedOnly(false)
+      toast.success('Flags cleared')
+    } catch {
+      toast.error('Failed to clear flags')
+    }
+  }
+
+  async function handleBatchAction() {
+    const flaggedIds = contacts.filter((c) => c.flagged).map((c) => c.id)
+    if (flaggedIds.length === 0) return
+    setBatchSaving(true)
+    try {
+      await api.post('/contacts/batch-action', {
+        contactIds: flaggedIds,
+        actionData: batchForm,
+      })
+      toast.success(`Created ${flaggedIds.length} action${flaggedIds.length > 1 ? 's' : ''}`)
+      setContacts((prev) => prev.map((c) => ({ ...c, flagged: false })))
+      setBatchDialogOpen(false)
+      setBatchForm({ title: '', type: 'FOLLOW_UP', priority: 'MEDIUM', dueDate: '' })
+      setShowFlaggedOnly(false)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create batch actions'
+      toast.error(message)
+    } finally {
+      setBatchSaving(false)
+    }
+  }
+
+  const columns = useMemo(() => buildColumns(toggleFlag), [contacts])
 
   function loadContacts() {
     const params = new URLSearchParams()
@@ -273,7 +362,7 @@ export function ContactListPage() {
     loadContacts()
   }, [lastOutreachFrom, lastOutreachTo, includeNoOutreach])
 
-  // Apply ecosystem and status filters
+  // Apply ecosystem, status, and flagged filters
   const filteredData = useMemo(() => {
     let data = contacts
     if (ecosystemFilter !== 'all') {
@@ -282,8 +371,13 @@ export function ContactListPage() {
     if (statusFilter !== 'all') {
       data = data.filter((c) => c.status === statusFilter)
     }
+    if (showFlaggedOnly) {
+      data = data.filter((c) => c.flagged)
+    }
     return data
-  }, [contacts, ecosystemFilter, statusFilter])
+  }, [contacts, ecosystemFilter, statusFilter, showFlaggedOnly])
+
+  const flaggedCount = contacts.filter((c) => c.flagged).length
 
   const table = useReactTable({
     data: filteredData,
@@ -313,7 +407,7 @@ export function ContactListPage() {
   })
 
   const hasDateFilter = lastOutreachFrom || lastOutreachTo
-  const hasFilters = globalFilter || ecosystemFilter !== 'all' || statusFilter !== 'all' || hasDateFilter
+  const hasFilters = globalFilter || ecosystemFilter !== 'all' || statusFilter !== 'all' || hasDateFilter || showFlaggedOnly
 
   function clearFilters() {
     setGlobalFilter('')
@@ -322,6 +416,7 @@ export function ContactListPage() {
     setLastOutreachFrom('')
     setLastOutreachTo('')
     setIncludeNoOutreach(true)
+    setShowFlaggedOnly(false)
   }
 
   function exportToCsv() {
@@ -514,6 +609,14 @@ export function ContactListPage() {
             </div>
           </PopoverContent>
         </Popover>
+        <Button
+          variant={showFlaggedOnly ? 'default' : 'outline'}
+          onClick={() => setShowFlaggedOnly(!showFlaggedOnly)}
+          className={showFlaggedOnly ? '' : ''}
+        >
+          <Flag className="mr-2 h-4 w-4" />
+          Flagged{flaggedCount > 0 ? ` (${flaggedCount})` : ''}
+        </Button>
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="mr-1 h-4 w-4" />
@@ -521,6 +624,23 @@ export function ContactListPage() {
           </Button>
         )}
       </div>
+
+      {/* Batch action toolbar */}
+      {flaggedCount > 0 && (
+        <div className="flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2">
+          <Flag className="h-4 w-4 fill-amber-500 text-amber-500" />
+          <span className="text-sm font-medium">
+            {flaggedCount} contact{flaggedCount !== 1 ? 's' : ''} flagged
+          </span>
+          <div className="flex-1" />
+          <Button size="sm" variant="outline" onClick={clearAllFlags}>
+            Clear Flags
+          </Button>
+          <Button size="sm" onClick={() => setBatchDialogOpen(true)}>
+            Create Action for Flagged
+          </Button>
+        </div>
+      )}
 
       <div className="rounded-md border">
         <Table>
@@ -577,6 +697,80 @@ export function ContactListPage() {
         onOpenChange={setImportDialogOpen}
         onImportComplete={loadContacts}
       />
+
+      {/* Batch action dialog */}
+      <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Create Action for {flaggedCount} Contact{flaggedCount !== 1 ? 's' : ''}</DialogTitle>
+            <DialogDescription>
+              This will create one action per flagged contact.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="batch-title">Title *</Label>
+              <Input
+                id="batch-title"
+                value={batchForm.title}
+                onChange={(e) => setBatchForm({ ...batchForm, title: e.target.value })}
+                placeholder="e.g. Follow up"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={batchForm.type}
+                  onValueChange={(v) => setBatchForm({ ...batchForm, type: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACTION_TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select
+                  value={batchForm.priority}
+                  onValueChange={(v) => setBatchForm({ ...batchForm, priority: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACTION_PRIORITY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="batch-due">Due Date</Label>
+              <Input
+                id="batch-due"
+                type="date"
+                value={batchForm.dueDate}
+                onChange={(e) => setBatchForm({ ...batchForm, dueDate: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBatchAction} disabled={batchSaving || !batchForm.title.trim()}>
+              {batchSaving ? 'Creating...' : `Create ${flaggedCount} Action${flaggedCount !== 1 ? 's' : ''}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

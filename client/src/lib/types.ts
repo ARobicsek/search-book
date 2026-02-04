@@ -27,6 +27,7 @@ export interface Contact {
   openQuestions: string | null;
   notes: string | null;
   personalDetails: string | null;
+  flagged: boolean;
   createdAt: string;
   updatedAt: string;
   lastOutreachDate?: string | null;

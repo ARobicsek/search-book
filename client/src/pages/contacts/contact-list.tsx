@@ -10,7 +10,8 @@ import {
   type ColumnFiltersState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus, Search, X, Download } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X, Download, Upload } from 'lucide-react'
+import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
@@ -223,13 +224,18 @@ export function ContactListPage() {
   const [globalFilter, setGlobalFilter] = useState('')
   const [ecosystemFilter, setEcosystemFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
 
-  useEffect(() => {
+  function loadContacts() {
     api
       .get<Contact[]>('/contacts')
       .then(setContacts)
       .catch((err) => toast.error(err.message || 'Failed to load contacts'))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadContacts()
   }, [])
 
   // Apply ecosystem and status filters
@@ -364,9 +370,13 @@ export function ContactListPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import
+          </Button>
           <Button variant="outline" onClick={exportToCsv}>
             <Download className="mr-2 h-4 w-4" />
-            Export CSV
+            Export
           </Button>
           <Button asChild>
             <Link to="/contacts/new">
@@ -467,6 +477,12 @@ export function ContactListPage() {
           </TableBody>
         </Table>
       </div>
+
+      <CsvImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImportComplete={loadContacts}
+      />
     </div>
   )
 }

@@ -227,7 +227,7 @@ export function IdeaListPage() {
 
       {/* Create/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{editId ? 'Edit Idea' : 'New Idea'}</DialogTitle>
             <DialogDescription>

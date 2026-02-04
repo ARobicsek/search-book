@@ -890,11 +890,16 @@ function ConversationsTab({
                       </div>
                     )}
                     {conv.actions && conv.actions.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-1">
+                      <div className="flex flex-col gap-1 pt-1">
                         {conv.actions.map((a) => (
-                          <span key={a.id} className={`text-xs ${a.completed ? 'line-through text-muted-foreground' : 'text-primary'}`}>
-                            {a.title}
-                          </span>
+                          <div key={a.id} className={`text-xs flex items-center gap-2 ${a.completed ? 'line-through text-muted-foreground' : ''}`}>
+                            <span className={a.completed ? '' : 'text-primary'}>{a.title}</span>
+                            {a.dueDate && (
+                              <span className="text-muted-foreground">
+                                (due {new Date(a.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                              </span>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}

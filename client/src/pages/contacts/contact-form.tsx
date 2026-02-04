@@ -45,6 +45,7 @@ type FormData = {
   photoFile: string
   photoUrl: string
   referredById: string // "" or numeric string
+  referredByName: string // freetext for new referrer
   howConnected: string
   mutualConnections: string
   whereFound: string
@@ -67,6 +68,7 @@ const emptyForm: FormData = {
   photoFile: '',
   photoUrl: '',
   referredById: '',
+  referredByName: '',
   howConnected: '',
   mutualConnections: '',
   whereFound: '',
@@ -90,6 +92,7 @@ function contactToForm(contact: Contact): FormData {
     photoFile: contact.photoFile ?? '',
     photoUrl: contact.photoUrl ?? '',
     referredById: contact.referredById?.toString() ?? '',
+    referredByName: '',
     howConnected: contact.howConnected ?? '',
     mutualConnections: contact.mutualConnections ?? '',
     whereFound: contact.whereFound ?? '',
@@ -114,6 +117,7 @@ function formToPayload(form: FormData) {
     photoFile: form.photoFile || null,
     photoUrl: form.photoUrl || null,
     referredById: form.referredById ? parseInt(form.referredById) : null,
+    referredByName: !form.referredById ? (form.referredByName.trim() || null) : null,
     howConnected: form.howConnected.trim() || null,
     mutualConnections: form.mutualConnections.trim() || null,
     whereFound: form.whereFound.trim() || null,
@@ -200,6 +204,22 @@ export function ContactFormPage() {
         } catch {
           // If company creation fails, still save the contact with freetext company name
         }
+      }
+
+      // If user typed a new referrer name (not from dropdown), auto-create the contact
+      if (!payload.referredById && (payload as { referredByName?: string | null }).referredByName) {
+        try {
+          const newReferrer = await api.post<Contact>('/contacts', {
+            name: (payload as { referredByName?: string | null }).referredByName,
+            status: 'CONNECTED',
+            ecosystem: 'ROLODEX',
+          })
+          payload.referredById = newReferrer.id
+        } catch {
+          // If referrer creation fails, just proceed without the link
+        }
+        // Remove referredByName from payload since Contact model doesn't have this field
+        delete (payload as { referredByName?: string | null }).referredByName
       }
 
       if (isEdit) {
@@ -383,11 +403,17 @@ export function ContactFormPage() {
               <Label>Referred By</Label>
               <Combobox
                 options={referredByOptions}
-                value={form.referredById}
-                onChange={(val, _isNew) => set('referredById', val)}
-                placeholder="Search contacts..."
+                value={form.referredById || form.referredByName}
+                onChange={(val, isNew) => {
+                  if (isNew) {
+                    setForm((prev) => ({ ...prev, referredById: '', referredByName: val }))
+                  } else {
+                    setForm((prev) => ({ ...prev, referredById: val, referredByName: '' }))
+                  }
+                }}
+                placeholder="Search or type new name..."
                 searchPlaceholder="Search contacts..."
-                allowFreeText={false}
+                allowFreeText={true}
               />
             </div>
           </CardContent>

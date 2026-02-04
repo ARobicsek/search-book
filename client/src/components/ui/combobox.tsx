@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Check, ChevronsUpDown, Plus } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -207,9 +208,40 @@ export function MultiCombobox({
           className={cn('w-full justify-between font-normal h-auto min-h-9', className)}
           disabled={disabled}
         >
-          <span className={cn('truncate', !selectedLabels && 'text-muted-foreground')}>
-            {selectedLabels || placeholder}
-          </span>
+          <div className="flex flex-wrap gap-1 flex-1 items-center">
+            {values.length === 0 ? (
+              <span className="text-muted-foreground">{placeholder}</span>
+            ) : (
+              values.map((val) => {
+                const opt = options.find((o) => o.value === val);
+                const label = opt?.label || val;
+                return (
+                  <Badge key={val} variant="secondary" className="gap-1 pr-1 text-xs">
+                    {label}
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onChange(values.filter((v) => v !== val));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onChange(values.filter((v) => v !== val));
+                        }
+                      }}
+                      className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
+                    >
+                      <X className="h-3 w-3" />
+                    </span>
+                  </Badge>
+                );
+              })
+            )}
+          </div>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>

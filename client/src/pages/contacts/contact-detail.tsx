@@ -790,7 +790,7 @@ function ConversationsTab({
   const emptyForm = {
     date: new Date().toLocaleDateString('en-CA'),
     datePrecision: 'DAY' as DatePrecision,
-    type: 'OTHER' as ConversationType,
+    type: 'VIDEO_CALL' as ConversationType,
     summary: '',
     notes: '',
     nextSteps: '',

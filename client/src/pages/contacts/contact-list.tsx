@@ -10,7 +10,7 @@ import {
   type ColumnFiltersState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus, Search, X } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X, Download } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
@@ -279,6 +279,81 @@ export function ContactListPage() {
     setStatusFilter('all')
   }
 
+  function exportToCsv() {
+    const rows = table.getFilteredRowModel().rows.map((row) => row.original)
+    if (rows.length === 0) {
+      toast.error('No contacts to export')
+      return
+    }
+
+    // CSV headers
+    const headers = [
+      'Name',
+      'Title',
+      'Role Description',
+      'Company',
+      'Ecosystem',
+      'Status',
+      'Email',
+      'Phone',
+      'LinkedIn',
+      'Location',
+      'How Connected',
+      'Mutual Connections',
+      'Where Found',
+      'Open Questions',
+      'Notes',
+      'Personal Details',
+      'Created',
+      'Updated',
+    ]
+
+    // CSV rows
+    const csvRows = rows.map((c) => [
+      c.name,
+      c.title ?? '',
+      c.roleDescription ?? '',
+      c.company?.name ?? c.companyName ?? '',
+      getLabel(c.ecosystem, ECOSYSTEM_OPTIONS),
+      getLabel(c.status, CONTACT_STATUS_OPTIONS),
+      c.email ?? '',
+      c.phone ?? '',
+      c.linkedinUrl ?? '',
+      c.location ?? '',
+      c.howConnected ?? '',
+      c.mutualConnections ?? '',
+      c.whereFound ?? '',
+      c.openQuestions ?? '',
+      c.notes ?? '',
+      c.personalDetails ?? '',
+      new Date(c.createdAt).toLocaleDateString(),
+      new Date(c.updatedAt).toLocaleDateString(),
+    ])
+
+    // Escape CSV values
+    const escapeCell = (val: string) => {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return `"${val.replace(/"/g, '""')}"`
+      }
+      return val
+    }
+
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map((row) => row.map(escapeCell).join(',')),
+    ].join('\n')
+
+    // Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `contacts-${new Date().toLocaleDateString('en-CA')}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast.success(`Exported ${rows.length} contacts`)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -288,12 +363,18 @@ export function ContactListPage() {
             {loading ? '' : `${table.getFilteredRowModel().rows.length} of ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button asChild>
-          <Link to="/contacts/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Contact
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportToCsv}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+          <Button asChild>
+            <Link to="/contacts/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Contact
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters */}

@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Trash2, Check, Circle } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Check, Circle , Loader2 } from 'lucide-react'
 
 const typeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -128,7 +128,7 @@ export function ActionDetailPage() {
   }
 
   if (loading) {
-    return <div className="text-muted-foreground">Loading...</div>
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   }
 
   if (!action) {

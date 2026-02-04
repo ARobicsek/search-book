@@ -29,7 +29,7 @@ import {
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
-import { ArrowLeft, ChevronDown, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Trash2 , Loader2 } from 'lucide-react'
 
 type FormData = {
   name: string
@@ -284,7 +284,7 @@ export function ContactFormPage() {
     .map((c) => ({ value: c.id.toString(), label: c.name }))
 
   if (loading) {
-    return <div className="text-muted-foreground">Loading...</div>
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   }
 
   return (

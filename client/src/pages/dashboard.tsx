@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Check, Plus, AlertTriangle, CalendarDays } from 'lucide-react'
+import { Check, Plus, AlertTriangle, CalendarDays, Loader2 } from 'lucide-react'
 
 const typeColors: Record<ActionType, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -159,7 +159,7 @@ export function DashboardPage() {
     .sort(sortByPriority)
 
   if (loading) {
-    return <div className="text-muted-foreground">Loading...</div>
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   }
 
   return (

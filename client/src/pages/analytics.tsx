@@ -18,7 +18,7 @@ import { api } from '@/lib/api'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Users, Building2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Users, Building2, CheckCircle, AlertTriangle , Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Overview {
@@ -110,7 +110,7 @@ export function AnalyticsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Loading analytics...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }

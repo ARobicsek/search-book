@@ -71,6 +71,7 @@ import {
   User,
   X,
   Tag as TagIcon,
+  Loader2,
 } from 'lucide-react'
 
 // ─── Color maps ─────────────────────────────────────────────
@@ -250,7 +251,7 @@ export function ContactDetailPage() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Loading...</div>
+  if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   if (!contact) return <div className="text-muted-foreground">Contact not found.</div>
 
   const companyDisplay = contact.company

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -67,7 +68,7 @@ export function CalendarPage() {
   }
 
   if (loading) {
-    return <div className="text-muted-foreground">Loading...</div>
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   }
 
   return (

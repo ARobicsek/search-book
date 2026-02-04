@@ -22,7 +22,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft , Loader2 } from 'lucide-react'
 
 type FormData = {
   name: string
@@ -129,7 +129,7 @@ export function CompanyFormPage() {
   }
 
   if (loading) {
-    return <div className="text-muted-foreground">Loading...</div>
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   }
 
   return (

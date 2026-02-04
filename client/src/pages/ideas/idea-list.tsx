@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Lightbulb, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Lightbulb, Search , Loader2 } from 'lucide-react'
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -172,7 +172,7 @@ export function IdeaListPage() {
 
       {/* Ideas grid */}
       {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
       ) : filteredIdeas.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">

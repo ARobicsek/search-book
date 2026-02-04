@@ -459,11 +459,6 @@ export function ContactDetailPage() {
             <CardContent>
               <dl className="grid gap-4">
                 <Field label="Where Found">{contact.whereFound}</Field>
-                <Field label="Open Questions">
-                  {contact.openQuestions && (
-                    <p className="whitespace-pre-wrap">{contact.openQuestions}</p>
-                  )}
-                </Field>
                 <Field label="Notes">
                   {contact.notes && (
                     <p className="whitespace-pre-wrap">{contact.notes}</p>
@@ -1684,7 +1679,7 @@ function PrepSheetTab({
           <div className="space-y-3 rounded-md border p-3 bg-muted/30">
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label className="text-xs">Date (for which conversation?)</Label>
+                <Label className="text-xs">Date</Label>
                 <Input
                   type="date"
                   value={newPrepDate}
@@ -1774,20 +1769,6 @@ function PrepSheetTab({
           </CardContent>
         </Card>
       )}
-
-      {/* Open Questions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Open Questions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {contact.openQuestions ? (
-            <p className="text-sm whitespace-pre-wrap">{contact.openQuestions}</p>
-          ) : (
-            <p className="text-sm text-muted-foreground">No open questions recorded.</p>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Pending Actions */}
       <Card>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import type {
   Contact,
   Action,
@@ -697,6 +698,7 @@ export function ContactDetailPage() {
           <ConversationsTab
             contactId={contact.id}
             conversations={conversations}
+            prepNotes={prepNotes}
             contactOptions={contactOptions}
             companyOptions={companyOptions}
             onRefresh={loadData}
@@ -761,12 +763,14 @@ interface LinkEntry {
 function ConversationsTab({
   contactId,
   conversations,
+  prepNotes,
   contactOptions,
   companyOptions,
   onRefresh,
 }: {
   contactId: number
   conversations: Conversation[]
+  prepNotes: PrepNote[]
   contactOptions: ComboboxOption[]
   companyOptions: ComboboxOption[]
   onRefresh: () => void
@@ -1070,11 +1074,50 @@ function ConversationsTab({
 
       {/* Conversation form dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl" onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent className={cn('max-h-[85vh] overflow-y-auto', !editId && prepNotes.length > 0 ? 'sm:max-w-5xl' : 'sm:max-w-xl')} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          <div className={cn(!editId && prepNotes.length > 0 ? 'grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-6' : '')}>
+            {/* Prep Notes panel (only when creating, and notes exist) */}
+            {!editId && prepNotes.length > 0 && (
+              <div className="space-y-3 md:border-r md:pr-4">
+                <h3 className="text-sm font-semibold">Prep Notes</h3>
+                <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+                  {prepNotes.map((note) => (
+                    <div key={note.id} className="rounded-md bg-muted/30 p-3 space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                      {note.url && (
+                        <a href={note.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                          {note.urlTitle || note.url}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {conversations.length > 0 && (
+                  <div className="pt-3 border-t">
+                    <h4 className="text-xs font-semibold mb-2">Last Conversation</h4>
+                    <div className="rounded-md bg-muted/30 p-2 space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {formatConversationDate(conversations[0].date, conversations[0].datePrecision as DatePrecision)}
+                      </p>
+                      {conversations[0].summary && (
+                        <p className="text-xs font-medium">{conversations[0].summary}</p>
+                      )}
+                      {conversations[0].nextSteps && (
+                        <p className="text-xs text-muted-foreground">Next: {conversations[0].nextSteps}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Conversation form */}
+            <div className="grid gap-4 py-2">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Date</Label>
@@ -1247,6 +1290,7 @@ function ConversationsTab({
                 ))}
               </>
             )}
+          </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

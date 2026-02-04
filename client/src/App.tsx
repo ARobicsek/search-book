@@ -16,6 +16,7 @@ import { CalendarPage } from '@/pages/calendar'
 import { IdeaListPage } from '@/pages/ideas/idea-list'
 import { AnalyticsPage } from '@/pages/analytics'
 import { SettingsPage } from '@/pages/settings'
+import { DuplicatesPage } from '@/pages/duplicates'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
 
 function App() {
@@ -40,6 +41,7 @@ function App() {
           <Route path="/ideas" element={<IdeaListPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/duplicates" element={<DuplicatesPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

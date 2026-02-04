@@ -1,4 +1,4 @@
-import { BookUser, Building2, LayoutDashboard, CalendarDays, ListTodo, Lightbulb, BarChart3, Settings } from 'lucide-react'
+import { BookUser, Building2, LayoutDashboard, CalendarDays, ListTodo, Lightbulb, BarChart3, Settings, Users } from 'lucide-react'
 import { useLocation, Link } from 'react-router-dom'
 import {
   Sidebar,
@@ -20,6 +20,7 @@ const mainNav = [
   { title: 'Calendar', url: '/calendar', icon: CalendarDays },
   { title: 'Ideas', url: '/ideas', icon: Lightbulb },
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
+  { title: 'Duplicates', url: '/duplicates', icon: Users },
   { title: 'Settings', url: '/settings', icon: Settings },
 ]
 

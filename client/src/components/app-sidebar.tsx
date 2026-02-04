@@ -18,10 +18,7 @@ const mainNav = [
   { title: 'Companies', url: '/companies', icon: Building2 },
   { title: 'Actions', url: '/actions', icon: ListTodo },
   { title: 'Calendar', url: '/calendar', icon: CalendarDays },
-]
-
-const futureNav = [
-  { title: 'Ideas', url: '#', icon: Lightbulb, disabled: true },
+  { title: 'Ideas', url: '/ideas', icon: Lightbulb },
 ]
 
 export function AppSidebar() {
@@ -52,21 +49,6 @@ export function AppSidebar() {
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Coming Soon</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {futureNav.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton disabled>
-                    <item.icon />
-                    <span className="text-muted-foreground">{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

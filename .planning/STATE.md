@@ -53,6 +53,23 @@
 | Conversation logging is high priority — structured date, people/companies discussed as searchable+free-text fields | 3 | Core to "capture immediately after conversations" philosophy |
 | Global search across all documentation (contacts, ideas, conversations) for person/company names | 4 | Cross-entity full-text search |
 
+## User Feedback Session 2 (Phase 3 testing)
+| # | Feedback | Resolution |
+|---|----------|------------|
+| 1 | Photo not displaying; circle too small | Added /photos Vite proxy; changed to 20x20 rounded-lg rectangle |
+| 2 | Auto-set status to CONNECTED on conversation log | Conversations API auto-updates NEW→CONNECTED |
+| 3 | Desktop icon to launch app | Created SearchBook.vbs + .bat launcher, desktop shortcut |
+| 4 | Search+add-new for people/companies discussed | MultiCombobox allowFreeText=true; auto-creates contacts/companies on submit |
+| 5 | Multiple actions per conversation | createActions[] array support; UI with add/remove action rows |
+| 6 | 'Meet' action type | Added MEET to ActionType |
+| 7 | Links in prep sheet and conversation log | Links CRUD API, links section in PrepSheet, links field in conversation dialog |
+| 8 | 'Video Call' conversation type | Added VIDEO_CALL to ConversationType |
+| 9 | Company search+create combobox | Company field is now Combobox with allowFreeText; auto-creates company on save |
+| 10 | Default status = CONNECTED | Changed emptyForm default from NEW to CONNECTED |
+| 11 | Progressive disclosure for less-used fields | Collapsible sections for Phone/LinkedIn, How Connected, Research |
+| 12 | Personal details free text field | Added personalDetails to Contact model with collapsible section |
+| 13 | Remove Needs Attention from Dashboard | Removed nudge list section entirely |
+
 ## Blockers
 None currently.
 
@@ -64,3 +81,6 @@ None currently.
 | 2026-02-03 | Phase 1 execution: completed T1-T6. Scaffolding, Prisma schema (all tables), Contact/Company CRUD APIs, Tailwind+shadcn/ui setup, app shell with sidebar nav, routing, API utility, shared types. T7-T13 remain. |
 | 2026-02-03 | Phase 1 execution: completed T7-T13. Contact list (TanStack Table, 7 sortable columns, ecosystem/status badges), contact create/edit form (4 grouped sections, company dropdown+freetext, validation), contact detail page (all fields, edit/delete with confirmation, future-phase placeholders), company list (6 sortable columns, status badges), company create/edit form (grouped sections, validation), company detail page (info, linked contacts list, edit/delete), toast error handling on all API calls. **Phase 1 complete.** |
 | 2026-02-03 | Phase 2 execution: completed all tasks (T1-T12). Action types/enums (ActionType, ActionPriority, Action, Idea interfaces). Action CRUD API with filters (status, contactId, companyId), complete toggle endpoint. 8 sample actions in seed data. Action list page (TanStack Table, filter toggle bar, complete checkbox, badges). Action form (3 sections, query param pre-fill). Action detail page (badges, complete toggle, edit/delete). Dashboard with daily view (overdue/today/upcoming/unscheduled actions, nudge list). Calendar with FullCalendar (month/week views, color-coded by priority). Contact/Company detail pages updated with real actions list. Command palette (Ctrl+K) with quick-add for contacts/actions/notes. Ideas API endpoint. Sidebar and routing updated. Removed old home.tsx. Fixed TypeScript issues with Express route params. **Phase 2 complete.** |
+| 2026-02-03 | Phase 3 started: Conversations & Relationships. Completed T1-T5 of 13 tasks. T1: Added ConversationContact and ConversationCompany junction tables to Prisma schema (db push applied). T2: Added Conversation, Relationship types and enums to client types.ts. T3: Created photo upload backend (multer, /api/upload endpoint, static serving at /photos). T4: Added uploadFile method to API utility. T5: Created reusable Combobox and MultiCombobox components (shadcn popover + command). Also installed shadcn tabs component. **Phase 3 in progress (5/13 tasks complete).** |
+| 2026-02-03 | Phase 3 feedback fixes: All 13 user feedback items addressed. Photo display fix (proxy + sizing), auto-status CONNECTED, desktop launcher, search+add-new for contacts/companies in conversation log, multiple actions per conversation, Meet action type, Video Call conversation type, links in prep sheet + conversation log, company combobox with auto-create, default status CONNECTED, progressive disclosure (collapsible sections), personal details field, removed Needs Attention from dashboard. Links CRUD API created. Collapsible component installed. **Phase 3 feedback complete.** |
+| 2026-02-03 | Phase 3 completed T6-T13. T6: PhotoUpload UI component (drag-drop, click-to-browse, URL paste, preview with remove). T7: Conversations API (CRUD with junction tables for contactsDiscussed/companiesDiscussed, optional follow-up action creation). T8: Relationships API (CRUD, bidirectional contactId filter). T9: Contact detail page refactored to tabs (Overview, Conversations, Relationships, Prep Sheet). T10: Conversation UI (card list + dialog form with date precision, type, summary, notes, nextSteps, multi-select contacts/companies discussed, optional follow-up action). T11: Relationship UI (card list + dialog form with type, direction, contact select, notes). T12: Contact form updated with PhotoUpload component and referredBy Combobox. T13: Prep Sheet tab (last conversation, open questions, pending actions, relationships, key info). Both client and server pass TypeScript checks. **Phase 3 complete.** |

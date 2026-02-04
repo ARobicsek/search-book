@@ -1,19 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
   type ColumnDef,
   type SortingState,
+  type ColumnFiltersState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -209,6 +219,10 @@ export function ContactListPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [ecosystemFilter, setEcosystemFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
   useEffect(() => {
     api
@@ -218,14 +232,52 @@ export function ContactListPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Apply ecosystem and status filters
+  const filteredData = useMemo(() => {
+    let data = contacts
+    if (ecosystemFilter !== 'all') {
+      data = data.filter((c) => c.ecosystem === ecosystemFilter)
+    }
+    if (statusFilter !== 'all') {
+      data = data.filter((c) => c.status === statusFilter)
+    }
+    return data
+  }, [contacts, ecosystemFilter, statusFilter])
+
   const table = useReactTable({
-    data: contacts,
+    data: filteredData,
     columns,
-    state: { sorting },
+    state: { sorting, columnFilters, globalFilter },
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const search = filterValue.toLowerCase()
+      const contact = row.original
+      // Search across multiple fields
+      return (
+        contact.name.toLowerCase().includes(search) ||
+        (contact.title?.toLowerCase().includes(search) ?? false) ||
+        (contact.company?.name.toLowerCase().includes(search) ?? false) ||
+        (contact.companyName?.toLowerCase().includes(search) ?? false) ||
+        (contact.location?.toLowerCase().includes(search) ?? false) ||
+        (contact.notes?.toLowerCase().includes(search) ?? false) ||
+        (contact.openQuestions?.toLowerCase().includes(search) ?? false) ||
+        (contact.roleDescription?.toLowerCase().includes(search) ?? false)
+      )
+    },
   })
+
+  const hasFilters = globalFilter || ecosystemFilter !== 'all' || statusFilter !== 'all'
+
+  function clearFilters() {
+    setGlobalFilter('')
+    setEcosystemFilter('all')
+    setStatusFilter('all')
+  }
 
   return (
     <div className="space-y-4">
@@ -233,7 +285,7 @@ export function ContactListPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Contacts</h1>
           <p className="text-sm text-muted-foreground">
-            {loading ? '' : `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
+            {loading ? '' : `${table.getFilteredRowModel().rows.length} of ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
           </p>
         </div>
         <Button asChild>
@@ -242,6 +294,47 @@ export function ContactListPage() {
             New Contact
           </Link>
         </Button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search name, title, company, notes..."
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <Select value={ecosystemFilter} onValueChange={setEcosystemFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Ecosystem" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Ecosystems</SelectItem>
+            {ECOSYSTEM_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            {CONTACT_STATUS_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <X className="mr-1 h-4 w-4" />
+            Clear
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border">

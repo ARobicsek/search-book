@@ -1,19 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
   type ColumnDef,
   type SortingState,
+  type ColumnFiltersState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Company, CompanyStatus } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -158,6 +168,9 @@ export function CompanyListPage() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
   useEffect(() => {
     api
@@ -167,14 +180,41 @@ export function CompanyListPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Apply status filter
+  const filteredData = useMemo(() => {
+    if (statusFilter === 'all') return companies
+    return companies.filter((c) => c.status === statusFilter)
+  }, [companies, statusFilter])
+
   const table = useReactTable({
-    data: companies,
+    data: filteredData,
     columns,
-    state: { sorting },
+    state: { sorting, columnFilters, globalFilter },
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const search = filterValue.toLowerCase()
+      const company = row.original
+      // Search across multiple fields
+      return (
+        company.name.toLowerCase().includes(search) ||
+        (company.industry?.toLowerCase().includes(search) ?? false) ||
+        (company.hqLocation?.toLowerCase().includes(search) ?? false) ||
+        (company.notes?.toLowerCase().includes(search) ?? false)
+      )
+    },
   })
+
+  const hasFilters = globalFilter || statusFilter !== 'all'
+
+  function clearFilters() {
+    setGlobalFilter('')
+    setStatusFilter('all')
+  }
 
   return (
     <div className="space-y-4">
@@ -182,7 +222,7 @@ export function CompanyListPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Companies</h1>
           <p className="text-sm text-muted-foreground">
-            {loading ? '' : `${companies.length} compan${companies.length !== 1 ? 'ies' : 'y'}`}
+            {loading ? '' : `${table.getFilteredRowModel().rows.length} of ${companies.length} compan${companies.length !== 1 ? 'ies' : 'y'}`}
           </p>
         </div>
         <Button asChild>
@@ -191,6 +231,36 @@ export function CompanyListPage() {
             New Company
           </Link>
         </Button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search name, industry, location, notes..."
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            {COMPANY_STATUS_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <X className="mr-1 h-4 w-4" />
+            Clear
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border">

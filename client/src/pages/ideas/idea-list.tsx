@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import type { Idea } from '@/lib/types'
+import type { Idea, Contact, Company } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,8 +19,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
+import { MultiCombobox } from '@/components/ui/combobox'
 import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Lightbulb, Search } from 'lucide-react'
 
@@ -42,10 +42,15 @@ export function IdeaListPage() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
+  const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
+
   const [form, setForm] = useState({
     title: '',
     description: '',
     tags: '',
+    contactIds: [] as number[],
+    companyIds: [] as number[],
   })
 
   function loadIdeas() {
@@ -58,6 +63,12 @@ export function IdeaListPage() {
 
   useEffect(() => {
     loadIdeas()
+    api.get<Contact[]>('/contacts').then((data) =>
+      setAllContacts(data.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {})
+    api.get<Company[]>('/companies').then((data) =>
+      setAllCompanies(data.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {})
   }, [])
 
   const filteredIdeas = ideas.filter((idea) => {
@@ -72,7 +83,7 @@ export function IdeaListPage() {
 
   function openNew() {
     setEditId(null)
-    setForm({ title: '', description: '', tags: '' })
+    setForm({ title: '', description: '', tags: '', contactIds: [], companyIds: [] })
     setDialogOpen(true)
   }
 
@@ -82,6 +93,8 @@ export function IdeaListPage() {
       title: idea.title,
       description: idea.description || '',
       tags: idea.tags || '',
+      contactIds: idea.contacts?.map((ic) => ic.contact.id) || [],
+      companyIds: idea.companies?.map((ic) => ic.company.id) || [],
     })
     setDialogOpen(true)
   }
@@ -97,6 +110,8 @@ export function IdeaListPage() {
         title: form.title.trim(),
         description: form.description.trim() || null,
         tags: form.tags.trim() || null,
+        contactIds: form.contactIds,
+        companyIds: form.companyIds,
       }
       if (editId) {
         await api.put(`/ideas/${editId}`, payload)
@@ -216,6 +231,20 @@ export function IdeaListPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">No description</p>
                 )}
+                {((idea.contacts && idea.contacts.length > 0) || (idea.companies && idea.companies.length > 0)) && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {idea.contacts?.map((ic) => (
+                      <span key={`c-${ic.contact.id}`} className="inline-block bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded px-1.5 py-0.5 text-xs">
+                        {ic.contact.name}
+                      </span>
+                    ))}
+                    {idea.companies?.map((ic) => (
+                      <span key={`co-${ic.company.id}`} className="inline-block bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 rounded px-1.5 py-0.5 text-xs">
+                        {ic.company.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </CardContent>
               <div className="px-6 pb-4">
                 <p className="text-xs text-muted-foreground">{formatDate(idea.createdAt)}</p>
@@ -262,6 +291,26 @@ export function IdeaListPage() {
                 value={form.tags}
                 onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))}
                 placeholder="Comma-separated tags (e.g. networking, research)"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Related Contacts</Label>
+              <MultiCombobox
+                options={allContacts.map((c) => ({ value: c.id.toString(), label: c.name }))}
+                values={form.contactIds.map(String)}
+                onChange={(vals) => setForm((p) => ({ ...p, contactIds: vals.map(Number) }))}
+                placeholder="Select contacts..."
+                searchPlaceholder="Search contacts..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Related Companies</Label>
+              <MultiCombobox
+                options={allCompanies.map((c) => ({ value: c.id.toString(), label: c.name }))}
+                values={form.companyIds.map(String)}
+                onChange={(vals) => setForm((p) => ({ ...p, companyIds: vals.map(Number) }))}
+                placeholder="Select companies..."
+                searchPlaceholder="Search companies..."
               />
             </div>
           </div>

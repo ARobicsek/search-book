@@ -128,6 +128,8 @@ export interface Idea {
   description: string | null;
   tags: string | null;
   createdAt: string;
+  contacts?: { contact: { id: number; name: string } }[];
+  companies?: { company: { id: number; name: string } }[];
 }
 
 // ─── Tags ───────────────────────────────────────────────────

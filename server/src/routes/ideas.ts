@@ -3,11 +3,21 @@ import prisma from '../db';
 
 const router = Router();
 
+const ideaIncludes = {
+  contacts: {
+    include: { contact: { select: { id: true, name: true } } },
+  },
+  companies: {
+    include: { company: { select: { id: true, name: true } } },
+  },
+};
+
 // GET /api/ideas — list all ideas
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const ideas = await prisma.idea.findMany({
       orderBy: { createdAt: 'desc' },
+      include: ideaIncludes,
     });
     res.json(ideas);
   } catch (error) {
@@ -21,6 +31,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const idea = await prisma.idea.findUnique({
       where: { id: parseInt(req.params.id as string) },
+      include: ideaIncludes,
     });
     if (!idea) {
       res.status(404).json({ error: 'Idea not found' });
@@ -36,13 +47,23 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/ideas — create a quick note/idea
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { title, ...rest } = req.body;
+    const { title, contactIds, companyIds, ...rest } = req.body;
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       res.status(400).json({ error: 'Title is required' });
       return;
     }
     const idea = await prisma.idea.create({
-      data: { title: title.trim(), ...rest },
+      data: {
+        title: title.trim(),
+        ...rest,
+        contacts: contactIds?.length
+          ? { create: (contactIds as number[]).map((cId) => ({ contactId: cId })) }
+          : undefined,
+        companies: companyIds?.length
+          ? { create: (companyIds as number[]).map((cId) => ({ companyId: cId })) }
+          : undefined,
+      },
+      include: ideaIncludes,
     });
     res.status(201).json(idea);
   } catch (error) {
@@ -60,16 +81,39 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Idea not found' });
       return;
     }
-    if (req.body.title !== undefined) {
-      if (typeof req.body.title !== 'string' || req.body.title.trim().length === 0) {
+
+    const { contactIds, companyIds, ...data } = req.body;
+
+    if (data.title !== undefined) {
+      if (typeof data.title !== 'string' || data.title.trim().length === 0) {
         res.status(400).json({ error: 'Title cannot be empty' });
         return;
       }
-      req.body.title = req.body.title.trim();
+      data.title = data.title.trim();
     }
-    const idea = await prisma.idea.update({
+
+    await prisma.$transaction(async (tx) => {
+      // Replace junction records
+      await tx.ideaContact.deleteMany({ where: { ideaId: id } });
+      await tx.ideaCompany.deleteMany({ where: { ideaId: id } });
+
+      await tx.idea.update({
+        where: { id },
+        data: {
+          ...data,
+          contacts: contactIds?.length
+            ? { create: (contactIds as number[]).map((cId: number) => ({ contactId: cId })) }
+            : undefined,
+          companies: companyIds?.length
+            ? { create: (companyIds as number[]).map((cId: number) => ({ companyId: cId })) }
+            : undefined,
+        },
+      });
+    });
+
+    const idea = await prisma.idea.findUnique({
       where: { id },
-      data: req.body,
+      include: ideaIncludes,
     });
     res.json(idea);
   } catch (error) {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company, Action } from '@/lib/types'
+import type { Company, Action, LinkRecord } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,8 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check , Loader2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check, Loader2 } from 'lucide-react'
 
 const actionTypeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -96,9 +97,18 @@ export function CompanyDetailPage() {
   const { id } = useParams()
   const [company, setCompany] = useState<Company | null>(null)
   const [actions, setActions] = useState<Action[]>([])
+  const [links, setLinks] = useState<LinkRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkTitle, setNewLinkTitle] = useState('')
+
+  function loadLinks() {
+    if (id) {
+      api.get<LinkRecord[]>(`/links?companyId=${id}`).then(setLinks).catch(() => {})
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -112,6 +122,7 @@ export function CompanyDetailPage() {
       .finally(() => setLoading(false))
 
     api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => {})
+    loadLinks()
   }, [id, navigate])
 
   async function toggleActionComplete(action: Action) {
@@ -139,6 +150,33 @@ export function CompanyDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to delete')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function addLink() {
+    if (!newLinkUrl.trim()) return
+    try {
+      await api.post('/links', {
+        url: newLinkUrl.trim(),
+        title: newLinkTitle.trim() || newLinkUrl.trim(),
+        companyId: parseInt(id!),
+      })
+      setNewLinkUrl('')
+      setNewLinkTitle('')
+      loadLinks()
+      toast.success('Link added')
+    } catch {
+      toast.error('Failed to add link')
+    }
+  }
+
+  async function deleteLink(linkId: number) {
+    try {
+      await api.delete(`/links/${linkId}`)
+      loadLinks()
+      toast.success('Link removed')
+    } catch {
+      toast.error('Failed to remove link')
     }
   }
 
@@ -248,6 +286,55 @@ export function CompanyDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Links */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Links</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {links.length > 0 && (
+            <ul className="space-y-2">
+              {links.map((link) => (
+                <li key={link.id} className="flex items-center justify-between gap-2">
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    {link.title}
+                  </a>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1 grid gap-2 sm:grid-cols-2">
+              <Input
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+                placeholder="URL (Google Drive, webpage, etc.)"
+                onKeyDown={(e) => e.key === 'Enter' && addLink()}
+              />
+              <Input
+                value={newLinkTitle}
+                onChange={(e) => setNewLinkTitle(e.target.value)}
+                placeholder="Label (optional)"
+                onKeyDown={(e) => e.key === 'Enter' && addLink()}
+              />
+            </div>
+            <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+              <Plus className="mr-1 h-3 w-3" />
+              Add
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Linked Contacts */}
       <Card>

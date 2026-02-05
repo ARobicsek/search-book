@@ -320,7 +320,7 @@ export function ContactListPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(true)
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'updatedAt', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter] = useState('')
   const [ecosystemFilter, setEcosystemFilter] = useState<string>('all')

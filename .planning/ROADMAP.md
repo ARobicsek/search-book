@@ -11,6 +11,7 @@
 | 5 | Recurring Tasks & Dashboard | ✅ Complete | Recurring actions, contact flagging, weekly activity dashboard, PWA |
 | 6 | Backup & Polish | ✅ Complete | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
 | 7 | iPhone PWA Access | ✅ Complete | Vercel deployment, Turso cloud DB, mobile access |
+| 8 | Document Search | 📋 Planned | Full-text search across linked Google Drive documents |
 
 ---
 
@@ -152,3 +153,19 @@
 - [x] Create Turso database and get credentials
 - [x] Deploy to Vercel with environment variables
 - [x] Test PWA installation on iPhone
+
+---
+
+## Phase 8: Document Search (Planned)
+
+### Goals
+- Full-text search across linked Google Drive documents
+- Leverage Google Drive API to read document contents
+- Surface relevant information from research notes, PDFs, and other documents
+
+### Acceptance Criteria
+- [ ] Google Drive API integration for reading document contents
+- [ ] Index linked documents for full-text search
+- [ ] Search results show document snippets with context
+- [ ] Can search across all linked documents from contacts, companies, and actions
+- [ ] Results link back to the original document in Google Drive

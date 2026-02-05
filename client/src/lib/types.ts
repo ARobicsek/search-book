@@ -227,6 +227,7 @@ export interface LinkRecord {
   description: string | null;
   contactId: number | null;
   companyId: number | null;
+  actionId: number | null;
   createdAt: string;
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Action, Contact, Company } from '@/lib/types'
+import type { Action, Contact, Company, LinkRecord } from '@/lib/types'
 import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import {
   Card,
   CardContent,
@@ -22,7 +23,12 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft , Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react'
+
+interface LinkEntry {
+  url: string
+  title: string
+}
 
 type FormData = {
   title: string
@@ -35,6 +41,7 @@ type FormData = {
   recurring: boolean
   recurringIntervalDays: string
   recurringEndDate: string
+  links: LinkEntry[]
 }
 
 const emptyForm: FormData = {
@@ -48,6 +55,7 @@ const emptyForm: FormData = {
   recurring: false,
   recurringIntervalDays: '',
   recurringEndDate: '',
+  links: [],
 }
 
 function actionToForm(action: Action): FormData {
@@ -62,6 +70,7 @@ function actionToForm(action: Action): FormData {
     recurring: action.recurring,
     recurringIntervalDays: action.recurringIntervalDays?.toString() ?? '',
     recurringEndDate: action.recurringEndDate ?? '',
+    links: [], // Will be loaded separately
   }
 }
 
@@ -103,15 +112,38 @@ export function ActionFormPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [newContactName, setNewContactName] = useState('')
+  const [newCompanyName, setNewCompanyName] = useState('')
+
+  // Options for comboboxes
+  const contactOptions: ComboboxOption[] = contacts.map((c) => ({
+    value: c.id.toString(),
+    label: c.name,
+  }))
+  const companyOptions: ComboboxOption[] = companies.map((c) => ({
+    value: c.id.toString(),
+    label: c.name,
+  }))
+
+  // Track existing link IDs for deletion tracking
+  const [existingLinkIds, setExistingLinkIds] = useState<number[]>([])
 
   useEffect(() => {
     api.get<Contact[]>('/contacts').then(setContacts).catch(() => toast.error('Failed to load contacts'))
     api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
 
     if (isEdit && id) {
-      api
-        .get<Action>(`/actions/${id}`)
-        .then((action) => setForm(actionToForm(action)))
+      Promise.all([
+        api.get<Action>(`/actions/${id}`),
+        api.get<LinkRecord[]>(`/links?actionId=${id}`),
+      ])
+        .then(([action, links]) => {
+          setForm({
+            ...actionToForm(action),
+            links: links.map((l) => ({ url: l.url, title: l.title })),
+          })
+          setExistingLinkIds(links.map((l) => l.id))
+        })
         .catch((err) => {
           toast.error(err.message)
           navigate('/actions')
@@ -131,6 +163,26 @@ export function ActionFormPage() {
     return Object.keys(errs).length === 0
   }
 
+  // Link helpers
+  function addLink() {
+    setForm((prev) => ({ ...prev, links: [...prev.links, { url: '', title: '' }] }))
+  }
+
+  function updateLink(index: number, field: keyof LinkEntry, value: string) {
+    setForm((prev) => {
+      const links = [...prev.links]
+      links[index] = { ...links[index], [field]: value }
+      return { ...prev, links }
+    })
+  }
+
+  function removeLink(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      links: prev.links.filter((_, i) => i !== index),
+    }))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validate()) return
@@ -138,15 +190,61 @@ export function ActionFormPage() {
     setSaving(true)
     try {
       const payload = formToPayload(form)
+
+      // Auto-create contact if user typed a new name
+      if (!payload.contactId && newContactName) {
+        try {
+          const newContact = await api.post<Contact>('/contacts', {
+            name: newContactName,
+            status: 'CONNECTED',
+            ecosystem: 'ROLODEX',
+          })
+          payload.contactId = newContact.id
+        } catch {
+          // If creation fails, proceed without link
+        }
+      }
+
+      // Auto-create company if user typed a new name
+      if (!payload.companyId && newCompanyName) {
+        try {
+          const newCompany = await api.post<Company>('/companies', {
+            name: newCompanyName,
+            status: 'CONNECTED',
+          })
+          payload.companyId = newCompany.id
+        } catch {
+          // If creation fails, proceed without link
+        }
+      }
+
+      let actionId: number
+
       if (isEdit) {
         await api.put(`/actions/${id}`, payload)
-        toast.success('Action updated')
-        navigate(`/actions/${id}`)
+        actionId = parseInt(id!)
+        // Delete old links
+        for (const linkId of existingLinkIds) {
+          await api.delete(`/links/${linkId}`).catch(() => {})
+        }
       } else {
         const created = await api.post<Action>('/actions', payload)
-        toast.success('Action created')
-        navigate(`/actions/${created.id}`)
+        actionId = created.id
       }
+
+      // Create new links
+      for (const link of form.links) {
+        if (link.url.trim()) {
+          await api.post('/links', {
+            url: link.url.trim(),
+            title: link.title.trim() || link.url.trim(),
+            actionId,
+          }).catch(() => {})
+        }
+      }
+
+      toast.success(isEdit ? 'Action updated' : 'Action created')
+      navigate(`/actions/${actionId}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save action')
     } finally {
@@ -304,53 +402,102 @@ export function ActionFormPage() {
           </CardContent>
         </Card>
 
-        {/* Links */}
+        {/* Related To */}
         <Card>
           <CardHeader>
-            <CardTitle>Links</CardTitle>
+            <CardTitle>Related To</CardTitle>
             <CardDescription>Connect to a contact or company</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="contactId">Contact</Label>
-              <Select
-                value={form.contactId || '_none'}
-                onValueChange={(v) => set('contactId', v === '_none' ? '' : v)}
-              >
-                <SelectTrigger id="contactId" className="w-full">
-                  <SelectValue placeholder="Select a contact" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">None</SelectItem>
-                  {contacts.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={contactOptions}
+                value={form.contactId || newContactName}
+                onChange={(val, isNew) => {
+                  if (isNew) {
+                    setForm((prev) => ({ ...prev, contactId: '' }))
+                    setNewContactName(val)
+                  } else {
+                    setForm((prev) => ({ ...prev, contactId: val }))
+                    setNewContactName('')
+                  }
+                }}
+                placeholder="Search or type new name..."
+                searchPlaceholder="Search contacts..."
+                allowFreeText={true}
+              />
+              {newContactName && !form.contactId && (
+                <p className="text-xs text-muted-foreground">
+                  A new contact will be created automatically.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="companyId">Company</Label>
-              <Select
-                value={form.companyId || '_none'}
-                onValueChange={(v) => set('companyId', v === '_none' ? '' : v)}
-              >
-                <SelectTrigger id="companyId" className="w-full">
-                  <SelectValue placeholder="Select a company" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">None</SelectItem>
-                  {companies.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={companyOptions}
+                value={form.companyId || newCompanyName}
+                onChange={(val, isNew) => {
+                  if (isNew) {
+                    setForm((prev) => ({ ...prev, companyId: '' }))
+                    setNewCompanyName(val)
+                  } else {
+                    setForm((prev) => ({ ...prev, companyId: val }))
+                    setNewCompanyName('')
+                  }
+                }}
+                placeholder="Search or type new name..."
+                searchPlaceholder="Search companies..."
+                allowFreeText={true}
+              />
+              {newCompanyName && !form.companyId && (
+                <p className="text-xs text-muted-foreground">
+                  A new company will be created automatically.
+                </p>
+              )}
             </div>
           </CardContent>
+        </Card>
+
+        {/* Document Links */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Document Links</CardTitle>
+                <CardDescription>Attach relevant documents or URLs</CardDescription>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addLink}>
+                <Plus className="mr-1 h-3 w-3" />
+                Add Link
+              </Button>
+            </div>
+          </CardHeader>
+          {form.links.length > 0 && (
+            <CardContent className="space-y-3">
+              {form.links.map((link, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                    <Input
+                      value={link.url}
+                      onChange={(e) => updateLink(i, 'url', e.target.value)}
+                      placeholder="URL (e.g. https://drive.google.com/...)"
+                    />
+                    <Input
+                      value={link.title}
+                      onChange={(e) => updateLink(i, 'title', e.target.value)}
+                      placeholder="Label (optional)"
+                    />
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeLink(i)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          )}
         </Card>
 
         {/* Submit */}

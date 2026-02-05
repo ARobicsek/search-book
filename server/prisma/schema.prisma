@@ -18,6 +18,7 @@ model Contact {
   companyId         Int?
   company           Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   companyName       String?
+  additionalCompanyIds String?  // JSON array: [2, 5, 7] - IDs of additional current companies
   ecosystem         String   @default("RECRUITER") // RECRUITER, ROLODEX, TARGET, INFLUENCER, ACADEMIA, INTRO_SOURCE
   email             String?
   additionalEmails  String?  // JSON array: ["email2@x.com", "email3@x.com"]
@@ -179,6 +180,7 @@ model Action {
   recurringEndDate      String?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
+  links                 Link[]
 }
 
 // ─── Ideas ───────────────────────────────────────────────────
@@ -225,6 +227,8 @@ model Link {
   contact     Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
   companyId   Int?
   company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  actionId    Int?
+  action      Action?  @relation(fields: [actionId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
 }
 

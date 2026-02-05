@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Action } from '@/lib/types'
+import type { Action, LinkRecord } from '@/lib/types'
 import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Trash2, Check, Circle , Loader2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Check, Circle, Loader2, ExternalLink } from 'lucide-react'
 
 const typeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -81,6 +81,7 @@ export function ActionDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const [action, setAction] = useState<Action | null>(null)
+  const [links, setLinks] = useState<LinkRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -88,9 +89,14 @@ export function ActionDetailPage() {
 
   useEffect(() => {
     if (!id) return
-    api
-      .get<Action>(`/actions/${id}`)
-      .then(setAction)
+    Promise.all([
+      api.get<Action>(`/actions/${id}`),
+      api.get<LinkRecord[]>(`/links?actionId=${id}`),
+    ])
+      .then(([actionData, linksData]) => {
+        setAction(actionData)
+        setLinks(linksData)
+      })
       .catch((err) => {
         toast.error(err.message)
         navigate('/actions')
@@ -271,10 +277,10 @@ export function ActionDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Links */}
+      {/* Related To */}
       <Card>
         <CardHeader>
-          <CardTitle>Links</CardTitle>
+          <CardTitle>Related To</CardTitle>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-2">
@@ -308,6 +314,32 @@ export function ActionDetailPage() {
           </dl>
         </CardContent>
       </Card>
+
+      {/* Document Links */}
+      {links.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Document Links</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {links.map((link) => (
+                <li key={link.id}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    {link.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Timestamps */}
       <div className="flex gap-6 text-xs text-muted-foreground">

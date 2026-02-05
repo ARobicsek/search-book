@@ -13,7 +13,7 @@ router.get('/', async (req: Request, res: Response) => {
       include: {
         company: { select: { id: true, name: true } },
         conversations: {
-          select: { date: true },
+          select: { date: true, datePrecision: true },
           orderBy: { date: 'desc' },
           take: 1,
         },
@@ -21,12 +21,13 @@ router.get('/', async (req: Request, res: Response) => {
       orderBy: { updatedAt: 'desc' },
     });
 
-    // Map to add lastOutreachDate and remove raw conversations array
+    // Map to add lastOutreachDate/Precision and remove raw conversations array
     let result = contacts.map((c) => {
       const { conversations, ...rest } = c;
       return {
         ...rest,
         lastOutreachDate: conversations[0]?.date ?? null,
+        lastOutreachDatePrecision: conversations[0]?.datePrecision ?? null,
       };
     });
 

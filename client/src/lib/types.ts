@@ -33,6 +33,7 @@ export interface Contact {
   createdAt: string;
   updatedAt: string;
   lastOutreachDate?: string | null;
+  lastOutreachDatePrecision?: DatePrecision | null;
   employmentHistory?: EmploymentHistory[];
 }
 

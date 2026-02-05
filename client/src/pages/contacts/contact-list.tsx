@@ -13,7 +13,7 @@ import {
 import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
-import type { Contact, Ecosystem, ContactStatus } from '@/lib/types'
+import type { Contact, Ecosystem, ContactStatus, DatePrecision } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -79,6 +79,25 @@ function formatDate(dateStr: string) {
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+function formatDateWithPrecision(dateStr: string, precision: DatePrecision | null | undefined) {
+  const d = new Date(dateStr + 'T00:00:00')
+  switch (precision) {
+    case 'DAY':
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    case 'MONTH':
+      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    case 'QUARTER': {
+      const q = Math.ceil((d.getMonth() + 1) / 3)
+      return `Q${q} ${d.getFullYear()}`
+    }
+    case 'YEAR':
+      return d.getFullYear().toString()
+    default:
+      // Fallback to DAY format if precision not specified
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
 }
 
 function getCompanyDisplay(contact: Contact): string {
@@ -283,10 +302,13 @@ function buildColumns(onToggleFlag: (contact: Contact) => void): ColumnDef<Conta
         <ArrowUpDown className="ml-1 h-4 w-4" />
       </Button>
     ),
-    cell: ({ getValue }) => {
-      const value = getValue() as string | null
+    cell: ({ row }) => {
+      const date = row.original.lastOutreachDate
+      const precision = row.original.lastOutreachDatePrecision
       return (
-        <span className="text-muted-foreground">{value ? formatDate(value) : '—'}</span>
+        <span className="text-muted-foreground">
+          {date ? formatDateWithPrecision(date, precision) : '—'}
+        </span>
       )
     },
   },

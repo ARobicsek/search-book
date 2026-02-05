@@ -16,48 +16,76 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## Phase 6: COMPLETE
+## Phase 7: iPhone PWA Access — IN PROGRESS
 
-### What was done this session:
-- **Feedback fixes** — Default conversation type VIDEO_CALL, MultiCombobox per-item badge removal, Ideas linked to contacts/companies (junction tables + MultiCombobox), prep notes shown alongside conversation dialog (two-column layout), multiple emails per contact (additionalEmails JSON field + dynamic inputs), multiple companies via EmploymentHistory
-- **Backup & Restore** — One-click backup (DB + photos + WAL files to server/backups/), restore from backup with confirmation dialog, Settings page with sidebar link
-- **Loading states** — Loader2 spinners on all 10 pages (replaced "Loading..." text)
-- **Keyboard shortcuts** — Help dialog on `?` key, `g+key` navigation shortcuts (h/c/o/a/l/i/n/s)
-- **Duplicate detection** — Levenshtein name similarity + email/LinkedIn matching, merge tool transfers all relations then deletes
+### What's ready:
+- **Vercel configuration** — `vercel.json` with single serverless function
+- **Express refactored** — `app.ts` (exportable) + `index.ts` (local server)
+- **iOS PWA meta tags** — Added to `client/index.html`
+- **Turso adapter** — Prisma configured for Turso (production) / SQLite (local)
+- **Vercel Blob** — `upload.ts` uses `@vercel/blob` when `BLOB_READ_WRITE_TOKEN` is set
+- **Company current/past** — "Past" checkbox in form, header shows only current, search includes all
 
-## Phase 7: iPhone PWA Access
+### Remaining deployment steps:
 
-### Goal:
-Make SearchBook accessible as a PWA on iPhone while running on the home Windows PC.
+#### 1. Create Turso Database
+```bash
+npm install -g turso
+turso auth login
+turso db create searchbook
+turso db show searchbook --url
+turso db tokens create searchbook
+```
 
-### Key considerations:
-- App already has PWA support (vite-plugin-pwa, manifest, service worker)
-- Currently runs on localhost:5173 (client) and localhost:3001 (server)
-- iPhone needs to reach the PC over LAN — requires binding to `0.0.0.0` instead of `localhost`
-- HTTPS is required for PWA install on iOS (service workers won't register over plain HTTP on non-localhost)
-- Options: self-signed cert (requires trust on iPhone), ngrok/tunneling, or mkcert for local CA
-- Need to handle CORS for LAN IP access
-- Consider: responsive design audit for mobile viewport
+#### 2. Export & Import Data
+```bash
+cd server
+sqlite3 dev.db ".dump" > data_export.sql
+turso db shell searchbook < data_export.sql
+```
 
-### Tasks to plan:
-1. **LAN network access** — Bind Vite dev server + Express to `0.0.0.0`, update CORS
-2. **HTTPS setup** — mkcert or self-signed cert for local dev, configure Vite + Express for HTTPS
-3. **PWA manifest updates** — Ensure icons, start_url, scope work for LAN IP access
-4. **Mobile responsive audit** — Check all pages render well on iPhone viewport (sidebar collapse, tables scroll, dialogs fit)
-5. **iOS-specific PWA tweaks** — apple-touch-icon, status bar meta tags, standalone display mode testing
+#### 3. Deploy to Vercel
+```bash
+npm install -g vercel
+vercel
+```
+
+Set environment variables in Vercel dashboard:
+- `TURSO_DATABASE_URL` — libsql:// URL
+- `TURSO_AUTH_TOKEN` — auth token
+
+Enable Blob Storage:
+- Storage → Create Store → Blob → Connect to project
+
+#### 4. Test on iPhone
+- Open deployment URL in Safari
+- Share → Add to Home Screen
+- Verify standalone mode
+- Test contacts, actions, conversations, photo uploads
+
+#### 5. Re-upload Photos
+Photos in `server/data/photos/` won't transfer — re-upload through app after deployment.
 
 ---
 
-## Running the App:
+## Running Locally
 ```bash
 npm start
 ```
 - **Client**: http://localhost:5173
 - **Server**: http://localhost:3001
 
-### Note:
-Run `cd server && npx prisma generate` if you see Prisma client errors.
+If Prisma errors: `cd server && npx prisma generate`
 
 ---
 
-**Plan and implement Phase 7: iPhone PWA access.**
+## Recent Changes (this session)
+- Added Vercel Blob support for photo uploads in production
+- Company current/past indicator with "Past" checkbox
+- Past companies shown with "formerly" styling in contact detail
+- Search includes past company names
+- Fixed trash icon overflow in company list
+
+---
+
+**Goal: Deploy to Vercel and test the PWA on web/mobile.**

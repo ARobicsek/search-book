@@ -10,6 +10,7 @@
 | 4 | Search, Import & Tags | ✅ Complete | Global search, date-range search, CSV import/export, tags, ideas, links |
 | 5 | Recurring Tasks & Dashboard | ✅ Complete | Recurring actions, contact flagging, weekly activity dashboard, PWA |
 | 6 | Backup & Polish | ✅ Complete | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
+| 7 | iPhone PWA Access | 🟡 In Progress | Vercel deployment, Turso cloud DB, mobile access |
 
 ---
 
@@ -132,3 +133,22 @@
 - [x] Loading states and error handling throughout
 - [x] Keyboard shortcuts documented in-app
 - [x] Duplicate detection or cleanup tool
+
+---
+
+## Phase 7: iPhone PWA Access
+
+### Goals
+- Deploy to Vercel for access from anywhere
+- Migrate database to Turso (SQLite-compatible cloud DB)
+- Enable PWA installation on iPhone
+- Mobile-friendly access
+
+### Acceptance Criteria
+- [x] Vercel configuration created (single serverless function)
+- [x] iOS PWA meta tags added
+- [x] Turso adapter configured in Prisma
+- [x] Photo storage code updated for Vercel Blob
+- [ ] Create Turso database and get credentials
+- [ ] Deploy to Vercel with environment variables
+- [ ] Test PWA installation on iPhone

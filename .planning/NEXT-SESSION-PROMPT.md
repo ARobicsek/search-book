@@ -10,36 +10,41 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 **Before doing anything, read these files:**
 - `.planning/STATE.md` — Session history and decisions
-- `.planning/ROADMAP.md` — Phase 5 & 6 acceptance criteria
+- `.planning/ROADMAP.md` — All phases and acceptance criteria
 
 **GSD methodology.** Atomic commits per task.
 
 ---
 
-## Phase 5: COMPLETE
+## Phase 6: COMPLETE
 
 ### What was done this session:
-- **Feedback fixes** — PWA manifest error (devOptions), company default status CONNECTED, idea dialog outside-click protection, prep notes date label simplified, Open Questions removed from contact card, missing checkbox component installed
-- **Recurring action automation** — Completing a recurring action auto-creates next occurrence (dueDate + intervalDays), respects recurringEndDate, toast on all 5 completion call sites
-- **Contact flagging + batch action** — Flag column on contacts table, "Flagged" filter, batch action toolbar ("Create Action for Flagged" dialog with title/type/priority/dueDate), flags auto-clear after creation
-- **Action history log** — "Completed Date" column visible on Completed filter, server-side sort by completedDate
+- **Feedback fixes** — Default conversation type VIDEO_CALL, MultiCombobox per-item badge removal, Ideas linked to contacts/companies (junction tables + MultiCombobox), prep notes shown alongside conversation dialog (two-column layout), multiple emails per contact (additionalEmails JSON field + dynamic inputs), multiple companies via EmploymentHistory
+- **Backup & Restore** — One-click backup (DB + photos + WAL files to server/backups/), restore from backup with confirmation dialog, Settings page with sidebar link
+- **Loading states** — Loader2 spinners on all 10 pages (replaced "Loading..." text)
+- **Keyboard shortcuts** — Help dialog on `?` key, `g+key` navigation shortcuts (h/c/o/a/l/i/n/s)
+- **Duplicate detection** — Levenshtein name similarity + email/LinkedIn matching, merge tool transfers all relations then deletes
 
-## Phase 6: NOT STARTED
+## Phase 7: iPhone PWA Access
 
-### Acceptance Criteria (from ROADMAP.md):
-- [ ] One-click backup of DB + photos to specified folder
-- [ ] Can restore from backup
-- [ ] Loading states and error handling throughout
-- [ ] Keyboard shortcuts documented in-app
-- [ ] Duplicate detection or cleanup tool
+### Goal:
+Make SearchBook accessible as a PWA on iPhone while running on the home Windows PC.
 
----
+### Key considerations:
+- App already has PWA support (vite-plugin-pwa, manifest, service worker)
+- Currently runs on localhost:5173 (client) and localhost:3001 (server)
+- iPhone needs to reach the PC over LAN — requires binding to `0.0.0.0` instead of `localhost`
+- HTTPS is required for PWA install on iOS (service workers won't register over plain HTTP on non-localhost)
+- Options: self-signed cert (requires trust on iPhone), ngrok/tunneling, or mkcert for local CA
+- Need to handle CORS for LAN IP access
+- Consider: responsive design audit for mobile viewport
 
-## Feedback to address before Phase 6:
-1. **Default conversation type to Video Call** — In Log Conversation dialog, the type dropdown should default to `VIDEO_CALL` instead of whatever the current default is
-2. **MultiCombobox: individual item removal** — Currently only "Clear All" works. Need per-item X button to remove individual selections (contacts/companies discussed, etc.)
-3. **Ideas: link people and companies** — Add MultiCombobox fields for contacts and companies in the Ideas dialog (similar to conversation log). Requires schema changes (IdeaContact, IdeaCompany junction tables or contactIds/companyIds fields)
-4. **Side-by-side Prep Notes + Log Conversation** — When logging a conversation on a contact's page, the user needs to see their Prep Notes at the same time. Options: split view, expandable sidebar, or show prep notes inline in the conversation dialog
+### Tasks to plan:
+1. **LAN network access** — Bind Vite dev server + Express to `0.0.0.0`, update CORS
+2. **HTTPS setup** — mkcert or self-signed cert for local dev, configure Vite + Express for HTTPS
+3. **PWA manifest updates** — Ensure icons, start_url, scope work for LAN IP access
+4. **Mobile responsive audit** — Check all pages render well on iPhone viewport (sidebar collapse, tables scroll, dialogs fit)
+5. **iOS-specific PWA tweaks** — apple-touch-icon, status bar meta tags, standalone display mode testing
 
 ---
 
@@ -55,4 +60,4 @@ Run `cd server && npx prisma generate` if you see Prisma client errors.
 
 ---
 
-**Start with the 4 feedback items above, then proceed to Phase 6.**
+**Plan and implement Phase 7: iPhone PWA access.**

@@ -87,6 +87,26 @@ function getCompanyDisplay(contact: Contact): string {
   return ''
 }
 
+// Get all company IDs (including past) from additionalCompanyIds
+function getAllCompanyIds(contact: Contact): number[] {
+  const ids: number[] = []
+  if (contact.additionalCompanyIds) {
+    try {
+      const parsed = JSON.parse(contact.additionalCompanyIds)
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (typeof item === 'object' && item !== null && 'id' in item) {
+            ids.push(item.id)
+          } else if (typeof item === 'number') {
+            ids.push(item)
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return ids
+}
+
 function buildColumns(onToggleFlag: (contact: Contact) => void): ColumnDef<Contact>[] {
   return [
   {
@@ -276,6 +296,7 @@ function buildColumns(onToggleFlag: (contact: Contact) => void): ColumnDef<Conta
 export function ContactListPage() {
   const navigate = useNavigate()
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -295,6 +316,13 @@ export function ContactListPage() {
     dueDate: '',
   })
   const [batchSaving, setBatchSaving] = useState(false)
+
+  // Load companies once for searching additional company names
+  useEffect(() => {
+    api.get<{ id: number; name: string }[]>('/companies')
+      .then(setAllCompanies)
+      .catch(() => {})
+  }, [])
 
   async function toggleFlag(contact: Contact) {
     try {
@@ -392,12 +420,18 @@ export function ContactListPage() {
     globalFilterFn: (row, _columnId, filterValue) => {
       const search = filterValue.toLowerCase()
       const contact = row.original
+      // Get additional company names (including past companies)
+      const additionalCompanyIds = getAllCompanyIds(contact)
+      const additionalCompanyNames = additionalCompanyIds
+        .map((id) => allCompanies.find((c) => c.id === id)?.name ?? '')
+        .filter(Boolean)
       // Search across multiple fields
       return (
         contact.name.toLowerCase().includes(search) ||
         (contact.title?.toLowerCase().includes(search) ?? false) ||
         (contact.company?.name.toLowerCase().includes(search) ?? false) ||
         (contact.companyName?.toLowerCase().includes(search) ?? false) ||
+        additionalCompanyNames.some((name) => name.toLowerCase().includes(search)) ||
         (contact.location?.toLowerCase().includes(search) ?? false) ||
         (contact.notes?.toLowerCase().includes(search) ?? false) ||
         (contact.openQuestions?.toLowerCase().includes(search) ?? false) ||

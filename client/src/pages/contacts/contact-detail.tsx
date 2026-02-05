@@ -56,7 +56,7 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
-import { MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
+import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
@@ -303,22 +303,82 @@ export function ContactDetailPage() {
                   ) : companyDisplay ? (
                     <span className="text-sm text-muted-foreground">{companyDisplay}</span>
                   ) : null}
-                  {/* Show additional current companies from employment history */}
-                  {contact.employmentHistory
-                    ?.filter((eh) => !eh.endDate && eh.companyId !== contact.companyId)
-                    .map((eh) => (
-                      <span key={eh.id} className="text-sm text-muted-foreground">
-                        {companyDisplay ? '/ ' : 'at '}
-                        {eh.company ? (
-                          <Link to={`/companies/${eh.company.id}`} className="text-primary hover:underline">
-                            {eh.company.name}
-                          </Link>
-                        ) : (
-                          eh.companyName
-                        )}
-                      </span>
-                    ))}
+                  {/* Show additional current companies only */}
+                  {contact.additionalCompanyIds && (() => {
+                    try {
+                      const parsed = JSON.parse(contact.additionalCompanyIds);
+                      // Handle both formats: new [{id, isCurrent}] and legacy [1, 2, 3]
+                      const currentCompanyIds: number[] = [];
+                      if (Array.isArray(parsed)) {
+                        for (const item of parsed) {
+                          if (typeof item === 'object' && item !== null && 'id' in item) {
+                            // New format: only show current companies
+                            if (item.isCurrent !== false) {
+                              currentCompanyIds.push(item.id);
+                            }
+                          } else {
+                            // Legacy format: assume all are current
+                            currentCompanyIds.push(item);
+                          }
+                        }
+                      }
+                      return currentCompanyIds.map((companyId) => {
+                        const company = allCompanies.find((c) => c.id === companyId);
+                        return (
+                          <span key={companyId} className="text-sm text-muted-foreground">
+                            {companyDisplay ? ' | ' : 'at '}
+                            {company ? (
+                              <Link to={`/companies/${companyId}`} className="text-primary hover:underline">
+                                {company.name}
+                              </Link>
+                            ) : (
+                              `Company #${companyId}`
+                            )}
+                          </span>
+                        );
+                      });
+                    } catch {
+                      return null;
+                    }
+                  })()}
                 </div>
+                {/* Show past companies */}
+                {contact.additionalCompanyIds && (() => {
+                  try {
+                    const parsed = JSON.parse(contact.additionalCompanyIds);
+                    const pastCompanyIds: number[] = [];
+                    if (Array.isArray(parsed)) {
+                      for (const item of parsed) {
+                        if (typeof item === 'object' && item !== null && 'id' in item && item.isCurrent === false) {
+                          pastCompanyIds.push(item.id);
+                        }
+                      }
+                    }
+                    if (pastCompanyIds.length === 0) return null;
+                    return (
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground italic">
+                        <span>formerly</span>
+                        {pastCompanyIds.map((companyId, idx) => {
+                          const company = allCompanies.find((c) => c.id === companyId);
+                          return (
+                            <span key={companyId}>
+                              {idx > 0 && ', '}
+                              {company ? (
+                                <Link to={`/companies/${companyId}`} className="text-primary/70 hover:underline">
+                                  {company.name}
+                                </Link>
+                              ) : (
+                                `Company #${companyId}`
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  } catch {
+                    return null;
+                  }
+                })()}
                 {contact.roleDescription && (
                   <p className="mt-1 text-sm text-muted-foreground">{contact.roleDescription}</p>
                 )}
@@ -1369,21 +1429,42 @@ function RelationshipsTab({
   }
 
   const [form, setForm] = useState(emptyForm)
+  const [newContactName, setNewContactName] = useState('')
 
   function openNew() {
     setForm(emptyForm)
+    setNewContactName('')
     setDialogOpen(true)
   }
 
   async function handleSubmit() {
-    if (!form.otherContactId) {
+    let otherContactId = form.otherContactId
+
+    // If user typed a new contact name, create it first
+    if (!otherContactId && newContactName) {
+      setSaving(true)
+      try {
+        const newContact = await api.post<{ id: number; name: string }>('/contacts', {
+          name: newContactName,
+          status: 'CONNECTED',
+          ecosystem: 'ROLODEX',
+        })
+        otherContactId = newContact.id.toString()
+      } catch {
+        toast.error('Failed to create new contact')
+        setSaving(false)
+        return
+      }
+    }
+
+    if (!otherContactId) {
       toast.error('Please select a contact')
       return
     }
     setSaving(true)
     try {
-      const fromId = form.direction === 'from' ? contactId : parseInt(form.otherContactId)
-      const toId = form.direction === 'from' ? parseInt(form.otherContactId) : contactId
+      const fromId = form.direction === 'from' ? contactId : parseInt(otherContactId)
+      const toId = form.direction === 'from' ? parseInt(otherContactId) : contactId
 
       await api.post('/relationships', {
         fromContactId: fromId,
@@ -1393,6 +1474,7 @@ function RelationshipsTab({
       })
       toast.success('Relationship added')
       setDialogOpen(false)
+      setNewContactName('')
       onRefresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save relationship')
@@ -1518,14 +1600,27 @@ function RelationshipsTab({
 
             <div className="space-y-2">
               <Label>Contact</Label>
-              <Select value={form.otherContactId} onValueChange={(v) => setForm((p) => ({ ...p, otherContactId: v }))}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select a contact" /></SelectTrigger>
-                <SelectContent>
-                  {contactOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={contactOptions}
+                value={form.otherContactId || newContactName}
+                onChange={(val, isNew) => {
+                  if (isNew) {
+                    setForm((p) => ({ ...p, otherContactId: '' }))
+                    setNewContactName(val)
+                  } else {
+                    setForm((p) => ({ ...p, otherContactId: val }))
+                    setNewContactName('')
+                  }
+                }}
+                placeholder="Search or type new name..."
+                searchPlaceholder="Search contacts..."
+                allowFreeText={true}
+              />
+              {newContactName && !form.otherContactId && (
+                <p className="text-xs text-muted-foreground">
+                  A new contact will be created automatically.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1593,6 +1688,7 @@ function PrepSheetTab({
   const [newLinkTitle, setNewLinkTitle] = useState('')
 
   // Prep note form state
+  const [showAddPrepForm, setShowAddPrepForm] = useState(false)
   const [newPrepDate, setNewPrepDate] = useState(new Date().toLocaleDateString('en-CA'))
   const [newPrepContent, setNewPrepContent] = useState('')
   const [newPrepUrl, setNewPrepUrl] = useState('')
@@ -1639,6 +1735,7 @@ function PrepSheetTab({
       setNewPrepUrl('')
       setNewPrepUrlTitle('')
       setNewPrepDate(new Date().toLocaleDateString('en-CA'))
+      setShowAddPrepForm(false)
       onRefresh()
       toast.success('Prep note added')
     } catch {
@@ -1713,7 +1810,7 @@ function PrepSheetTab({
           {prepNotes.length > 0 && (
             <div className="space-y-3">
               {prepNotes.map((note) => (
-                <div key={note.id} className="rounded-md border p-3 space-y-2">
+                <div key={note.id} className="rounded-md border p-3 space-y-2 bg-yellow-50">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-2">
@@ -1741,50 +1838,66 @@ function PrepSheetTab({
               ))}
             </div>
           )}
-          {/* Add new prep note form */}
-          <div className="space-y-3 rounded-md border p-3 bg-muted/30">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Date</Label>
-                <Input
-                  type="date"
-                  value={newPrepDate}
-                  onChange={(e) => setNewPrepDate(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Notes / Thoughts</Label>
-              <Textarea
-                value={newPrepContent}
-                onChange={(e) => setNewPrepContent(e.target.value)}
-                placeholder="Ideas for conversation, talking points, questions to ask..."
-                rows={3}
-              />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Link URL (optional)</Label>
-                <Input
-                  value={newPrepUrl}
-                  onChange={(e) => setNewPrepUrl(e.target.value)}
-                  placeholder="https://docs.google.com/..."
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Link Label (optional)</Label>
-                <Input
-                  value={newPrepUrlTitle}
-                  onChange={(e) => setNewPrepUrlTitle(e.target.value)}
-                  placeholder="My notes doc"
-                />
-              </div>
-            </div>
-            <Button size="sm" onClick={addPrepNote} disabled={!newPrepContent.trim()}>
+          {/* Add new prep note */}
+          {!showAddPrepForm ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddPrepForm(true)}
+            >
               <Plus className="mr-1 h-3 w-3" />
               Add Prep Note
             </Button>
-          </div>
+          ) : (
+            <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Date</Label>
+                  <Input
+                    type="date"
+                    value={newPrepDate}
+                    onChange={(e) => setNewPrepDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Notes / Thoughts</Label>
+                <Textarea
+                  value={newPrepContent}
+                  onChange={(e) => setNewPrepContent(e.target.value)}
+                  placeholder="Ideas for conversation, talking points, questions to ask..."
+                  rows={3}
+                />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Link URL (optional)</Label>
+                  <Input
+                    value={newPrepUrl}
+                    onChange={(e) => setNewPrepUrl(e.target.value)}
+                    placeholder="https://docs.google.com/..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Link Label (optional)</Label>
+                  <Input
+                    value={newPrepUrlTitle}
+                    onChange={(e) => setNewPrepUrlTitle(e.target.value)}
+                    placeholder="My notes doc"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addPrepNote} disabled={!newPrepContent.trim()}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add Prep Note
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowAddPrepForm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

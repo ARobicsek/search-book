@@ -112,10 +112,50 @@ function processEmails(data: Record<string, unknown>): Record<string, unknown> {
   return data;
 }
 
+// Helper: convert companyEntries array to companyId + additionalCompanyIds fields
+// Supports new format: [{id: 1, isCurrent: true}] and legacy format: [1, 2, 3]
+function processCompanies(data: Record<string, unknown>): Record<string, unknown> {
+  // New format: companyEntries with isCurrent flag
+  if ('companyEntries' in data && Array.isArray(data.companyEntries)) {
+    const entries = data.companyEntries as { id: number; isCurrent: boolean }[];
+    const validEntries = entries.filter((e) => typeof e.id === 'number' && e.id > 0);
+    const { companyEntries: _, ...rest } = data;
+
+    // First entry is the primary companyId
+    const primaryEntry = validEntries[0];
+    const additionalEntries = validEntries.slice(1);
+
+    return {
+      ...rest,
+      companyId: primaryEntry?.id || null,
+      additionalCompanyIds: additionalEntries.length > 0
+        ? JSON.stringify(additionalEntries.map((e) => ({ id: e.id, isCurrent: e.isCurrent })))
+        : null,
+    };
+  }
+
+  // Legacy format: companyIds as plain array of numbers
+  if ('companyIds' in data && Array.isArray(data.companyIds)) {
+    const companyIds = (data.companyIds as number[]).filter((id) => typeof id === 'number' && id > 0);
+    const { companyIds: _, ...rest } = data;
+    return {
+      ...rest,
+      companyId: companyIds[0] || null,
+      additionalCompanyIds: companyIds.length > 1 ? JSON.stringify(companyIds.slice(1)) : null,
+    };
+  }
+  return data;
+}
+
+// Combined helper
+function processFormData(data: Record<string, unknown>): Record<string, unknown> {
+  return processCompanies(processEmails(data));
+}
+
 // POST /api/contacts — create
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, ...rest } = processEmails(req.body);
+    const { name, ...rest } = processFormData(req.body);
     if (!name || typeof name !== 'string' || (name as string).trim().length === 0) {
       res.status(400).json({ error: 'Name is required' });
       return;
@@ -140,7 +180,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Contact not found' });
       return;
     }
-    const data = processEmails(req.body) as any;
+    const data = processFormData(req.body) as any;
     if (data.name !== undefined) {
       if (typeof data.name !== 'string' || data.name.trim().length === 0) {
         res.status(400).json({ error: 'Name cannot be empty' });

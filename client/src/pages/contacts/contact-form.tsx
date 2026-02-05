@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Contact, Company, EmploymentHistory } from '@/lib/types'
+import type { Contact, Company } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,12 +31,16 @@ import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
 import { ArrowLeft, ChevronDown, Plus, Trash2 , Loader2 } from 'lucide-react'
 
+type CompanyEntry = {
+  value: string // company ID (numeric string) or new name
+  isCurrent: boolean
+}
+
 type FormData = {
   name: string
   title: string
   roleDescription: string
-  companyId: string // "" or numeric string
-  companyName: string
+  companyEntries: CompanyEntry[] // array of company entries with current/past indicator
   ecosystem: string
   status: string
   emails: string[]
@@ -59,8 +63,7 @@ const emptyForm: FormData = {
   name: '',
   title: '',
   roleDescription: '',
-  companyId: '',
-  companyName: '',
+  companyEntries: [],
   ecosystem: 'ROLODEX',
   status: 'CONNECTED',
   emails: [''],
@@ -85,12 +88,33 @@ function contactToForm(contact: Contact): FormData {
     ? contact.mutualConnections.split(',').map((s) => s.trim()).filter(Boolean)
     : []
 
+  // Parse company entries - supports both old format [1,2,3] and new format [{id:1, isCurrent:true}]
+  const companyEntries: CompanyEntry[] = []
+  if (contact.companyId) {
+    companyEntries.push({ value: contact.companyId.toString(), isCurrent: true })
+  }
+  if (contact.additionalCompanyIds) {
+    try {
+      const additional = JSON.parse(contact.additionalCompanyIds)
+      if (Array.isArray(additional)) {
+        for (const item of additional) {
+          if (typeof item === 'object' && item !== null && 'id' in item) {
+            // New format: {id: number, isCurrent: boolean}
+            companyEntries.push({ value: String(item.id), isCurrent: item.isCurrent ?? true })
+          } else {
+            // Old format: just a number
+            companyEntries.push({ value: String(item), isCurrent: true })
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   return {
     name: contact.name,
     title: contact.title ?? '',
     roleDescription: contact.roleDescription ?? '',
-    companyId: contact.companyId?.toString() ?? '',
-    companyName: contact.companyName ?? '',
+    companyEntries,
     ecosystem: contact.ecosystem,
     status: contact.status,
     emails: (() => {
@@ -120,7 +144,7 @@ function contactToForm(contact: Contact): FormData {
   }
 }
 
-function formToPayload(form: FormData) {
+function formToPayload(form: FormData, companyEntries: { id: number; isCurrent: boolean }[]) {
   // Join mutualConnections array into comma-separated string
   const mutualConnectionsStr = form.mutualConnections.length > 0
     ? form.mutualConnections.join(', ')
@@ -130,8 +154,7 @@ function formToPayload(form: FormData) {
     name: form.name.trim(),
     title: form.title.trim() || null,
     roleDescription: form.roleDescription.trim() || null,
-    companyId: form.companyId ? parseInt(form.companyId) : null,
-    companyName: !form.companyId ? (form.companyName.trim() || null) : null,
+    companyEntries, // Array of {id, isCurrent} - server will process
     ecosystem: form.ecosystem,
     status: form.status,
     emails: form.emails.map((e) => e.trim()).filter(Boolean),
@@ -159,7 +182,6 @@ export function ContactFormPage() {
   const [form, setForm] = useState<FormData>(emptyForm)
   const [companies, setCompanies] = useState<Company[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
-  const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistory[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -198,9 +220,6 @@ export function ContactFormPage() {
           navigate('/contacts')
         })
         .finally(() => setLoading(false))
-
-      // Fetch employment history
-      api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => {})
     }
   }, [id, isEdit, navigate])
 
@@ -221,18 +240,25 @@ export function ContactFormPage() {
 
     setSaving(true)
     try {
-      const payload = formToPayload(form)
-
-      // If user typed a new company name (not from dropdown), auto-create the company
-      if (!payload.companyId && payload.companyName) {
-        try {
-          const newCompany = await api.post<Company>('/companies', { name: payload.companyName, status: 'CONNECTED' })
-          payload.companyId = newCompany.id
-          payload.companyName = null
-        } catch {
-          // If company creation fails, still save the contact with freetext company name
+      // Resolve company entries to IDs (creating new companies for new names)
+      const companyEntries: { id: number; isCurrent: boolean }[] = []
+      for (const entry of form.companyEntries) {
+        const existingCompany = companies.find((c) => c.id.toString() === entry.value)
+        if (existingCompany) {
+          companyEntries.push({ id: existingCompany.id, isCurrent: entry.isCurrent })
+        } else if (entry.value.trim()) {
+          // Create new company
+          try {
+            const newCompany = await api.post<Company>('/companies', { name: entry.value.trim(), status: 'CONNECTED' })
+            companyEntries.push({ id: newCompany.id, isCurrent: entry.isCurrent })
+            setCompanies((prev) => [...prev, newCompany])
+          } catch {
+            // Skip if creation fails
+          }
         }
       }
+
+      const payload = formToPayload(form, companyEntries)
 
       // If user typed a new referrer name (not from dropdown), auto-create the contact
       if (!payload.referredById && (payload as { referredByName?: string | null }).referredByName) {
@@ -376,29 +402,90 @@ export function ContactFormPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Company</Label>
-              <Combobox
-                options={companyOptions}
-                value={form.companyId || form.companyName}
-                onChange={(val, isNew) => {
-                  if (isNew) {
-                    // User typed a new company name
-                    setForm((prev) => ({ ...prev, companyId: '', companyName: val }))
-                  } else {
-                    // User selected an existing company
-                    setForm((prev) => ({ ...prev, companyId: val, companyName: '' }))
-                  }
-                }}
-                placeholder="Search or type new company..."
-                searchPlaceholder="Search companies..."
-                allowFreeText={true}
-              />
-              {form.companyName && !form.companyId && (
-                <p className="text-xs text-muted-foreground">
-                  A new company card will be created automatically.
-                </p>
-              )}
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Companies</Label>
+              <div className="space-y-2">
+                {form.companyEntries.length === 0 ? (
+                  <Combobox
+                    options={companyOptions}
+                    value=""
+                    onChange={(val) => {
+                      if (val) {
+                        setForm((prev) => ({ ...prev, companyEntries: [{ value: val, isCurrent: true }] }))
+                      }
+                    }}
+                    placeholder="Search or type new company..."
+                    searchPlaceholder="Search companies..."
+                    allowFreeText={true}
+                  />
+                ) : (
+                  form.companyEntries.map((entry, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <Combobox
+                          options={companyOptions}
+                          value={entry.value}
+                          onChange={(val) => {
+                            const newEntries = [...form.companyEntries]
+                            if (val) {
+                              newEntries[i] = { ...newEntries[i], value: val }
+                            } else {
+                              newEntries.splice(i, 1)
+                            }
+                            setForm((prev) => ({ ...prev, companyEntries: newEntries }))
+                          }}
+                          placeholder="Search or type new company..."
+                          searchPlaceholder="Search companies..."
+                          allowFreeText={true}
+                        />
+                      </div>
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!entry.isCurrent}
+                          onChange={(e) => {
+                            const newEntries = [...form.companyEntries]
+                            newEntries[i] = { ...newEntries[i], isCurrent: !e.target.checked }
+                            setForm((prev) => ({ ...prev, companyEntries: newEntries }))
+                          }}
+                          className="h-3.5 w-3.5 rounded border-gray-300"
+                        />
+                        Past
+                      </label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 h-8 w-8"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            companyEntries: prev.companyEntries.filter((_, idx) => idx !== i),
+                          }))
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+                {form.companyEntries.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm((prev) => ({ ...prev, companyEntries: [...prev.companyEntries, { value: '', isCurrent: true }] }))}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    Add Another Company
+                  </Button>
+                )}
+                {form.companyEntries.some((e) => e.value && !companies.some((c) => c.id.toString() === e.value)) && (
+                  <p className="text-xs text-muted-foreground">
+                    New companies will be created automatically.
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2 sm:col-span-2">
@@ -667,89 +754,6 @@ export function ContactFormPage() {
             </CollapsibleContent>
           </Card>
         </Collapsible>
-
-        {/* Previous Companies — only show when editing */}
-        {isEdit && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Previous Companies</CardTitle>
-              <CardDescription>Track company history as they change jobs</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Existing history entries */}
-              {employmentHistory.length > 0 && (
-                <ul className="space-y-2">
-                  {employmentHistory.map((eh) => (
-                    <li key={eh.id} className="flex items-center justify-between gap-2 text-sm border rounded-md p-2">
-                      <div>
-                        {eh.title && <span className="font-medium">{eh.title}</span>}
-                        {eh.title && (eh.company || eh.companyName) && <span className="text-muted-foreground"> at </span>}
-                        <span>{eh.company?.name || eh.companyName}</span>
-                        {(eh.startDate || eh.endDate) && (
-                          <span className="text-xs text-muted-foreground ml-2">
-                            ({eh.startDate || '?'} — {eh.endDate || 'present'})
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0"
-                        onClick={async () => {
-                          try {
-                            await api.delete(`/employment-history/${eh.id}`)
-                            setEmploymentHistory((prev) => prev.filter((e) => e.id !== eh.id))
-                            toast.success('History entry removed')
-                          } catch {
-                            toast.error('Failed to remove history entry')
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* Move current company to history */}
-              {(form.companyId || form.companyName) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    const endDate = prompt('End date (YYYY-MM or YYYY):', new Date().toISOString().slice(0, 7))
-                    if (endDate === null) return
-
-                    try {
-                      const newHistory = await api.post<EmploymentHistory>('/employment-history', {
-                        contactId: parseInt(id!),
-                        companyId: form.companyId ? parseInt(form.companyId) : null,
-                        companyName: form.companyName || null,
-                        title: form.title || null,
-                        endDate: endDate || null,
-                      })
-                      setEmploymentHistory((prev) => [newHistory, ...prev])
-                      setForm((prev) => ({ ...prev, companyId: '', companyName: '', title: '' }))
-                      toast.success('Moved to history. Now set the new company.')
-                    } catch {
-                      toast.error('Failed to move company to history')
-                    }
-                  }}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  Move current company to history
-                </Button>
-              )}
-
-              {employmentHistory.length === 0 && !form.companyId && !form.companyName && (
-                <p className="text-sm text-muted-foreground">No previous companies recorded.</p>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Actions */}
         <div className="flex items-center gap-3">

@@ -360,7 +360,7 @@ export function ContactFormPage() {
 
             <div className="sm:col-span-2">
               <PhotoUpload
-                value={form.photoFile || form.photoUrl}
+                value={form.photoUrl || form.photoFile}
                 onChange={(val) => {
                   if (val.startsWith('http')) {
                     setForm((prev) => ({ ...prev, photoUrl: val, photoFile: '' }))

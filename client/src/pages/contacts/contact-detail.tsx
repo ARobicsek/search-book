@@ -277,9 +277,9 @@ export function ContactDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              {(contact.photoFile || contact.photoUrl) && (
+              {(contact.photoUrl || contact.photoFile) && (
                 <img
-                  src={contact.photoFile || contact.photoUrl || ''}
+                  src={contact.photoUrl || contact.photoFile || ''}
                   alt={contact.name}
                   className="h-20 w-20 rounded-lg object-cover border"
                 />

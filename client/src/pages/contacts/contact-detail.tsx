@@ -1164,7 +1164,7 @@ function ConversationsTab({
                 <h3 className="text-sm font-semibold">Prep Notes</h3>
                 <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
                   {prepNotes.map((note) => (
-                    <div key={note.id} className="rounded-md bg-muted/30 p-3 space-y-1">
+                    <div key={note.id} className="rounded-md bg-yellow-50 p-3 space-y-1">
                       <p className="text-xs text-muted-foreground">
                         {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </p>

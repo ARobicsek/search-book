@@ -16,55 +16,32 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## Phase 7: iPhone PWA Access — IN PROGRESS
+## Phase 7: iPhone PWA Access — COMPLETE
 
-### What's ready:
-- **Vercel configuration** — `vercel.json` with single serverless function
-- **Express refactored** — `app.ts` (exportable) + `index.ts` (local server)
-- **iOS PWA meta tags** — Added to `client/index.html`
-- **Turso adapter** — Prisma configured for Turso (production) / SQLite (local)
-- **Vercel Blob** — `upload.ts` uses `@vercel/blob` when `BLOB_READ_WRITE_TOKEN` is set
-- **Company current/past** — "Past" checkbox in form, header shows only current, search includes all
+**App is live:** https://searchbook-three.vercel.app
 
-### Remaining deployment steps:
+### Deployment details:
+- **Database:** Turso cloud (libsql://searchbook-arobicsek.aws-us-east-2.turso.io)
+- **Photo storage:** Vercel Blob (configured)
+- **Environment variables:** Set in Vercel dashboard
 
-#### 1. Create Turso Database
-```bash
-npm install -g turso
-turso auth login
-turso db create searchbook
-turso db show searchbook --url
-turso db tokens create searchbook
-```
+---
 
-#### 2. Export & Import Data
-```bash
-cd server
-sqlite3 dev.db ".dump" > data_export.sql
-turso db shell searchbook < data_export.sql
-```
+## Priority Fixes for This Session
 
-#### 3. Deploy to Vercel
-```bash
-npm install -g vercel
-vercel
-```
+### 1. Date precision display in conversations & contacts table
+- If date precision is MONTH, display "January 2026" not "January 15, 2026"
+- If date precision is YEAR, display "2026" only
+- Update conversation cards AND the "Last Outreach" column in contacts table
 
-Set environment variables in Vercel dashboard:
-- `TURSO_DATABASE_URL` — libsql:// URL
-- `TURSO_AUTH_TOKEN` — auth token
+### 2. Prep notes styling consistency
+- Prep notes shown in conversation logging dialog should have the same light yellow background (`bg-yellow-50`) as they do in the Prep Sheet tab
 
-Enable Blob Storage:
-- Storage → Create Store → Blob → Connect to project
-
-#### 4. Test on iPhone
-- Open deployment URL in Safari
-- Share → Add to Home Screen
-- Verify standalone mode
-- Test contacts, actions, conversations, photo uploads
-
-#### 5. Re-upload Photos
-Photos in `server/data/photos/` won't transfer — re-upload through app after deployment.
+### 3. Photos not showing on website
+- Photos uploaded locally are stored in `server/data/photos/`
+- These won't transfer to Vercel — need to re-upload through app
+- Vercel Blob is configured but need to verify it's working
+- Check if photo URLs are being served correctly in production
 
 ---
 
@@ -75,17 +52,32 @@ npm start
 - **Client**: http://localhost:5173
 - **Server**: http://localhost:3001
 
+**Important:** `server/.env` must have Turso credentials **commented out** for local development:
+```
+# TURSO_DATABASE_URL="libsql://..."
+# TURSO_AUTH_TOKEN="..."
+```
+If these are uncommented, the app will try to connect to Turso cloud DB and hang indefinitely.
+
 If Prisma errors: `cd server && npx prisma generate`
 
 ---
 
-## Recent Changes (this session)
-- Added Vercel Blob support for photo uploads in production
-- Company current/past indicator with "Past" checkbox
-- Past companies shown with "formerly" styling in contact detail
-- Search includes past company names
-- Fixed trash icon overflow in company list
+## Production Deployment
+```bash
+vercel --prod
+```
+
+To set environment variables (use printf to avoid newlines):
+```bash
+printf 'value' | vercel env add VAR_NAME production
+```
 
 ---
 
-**Goal: Deploy to Vercel and test the PWA on web/mobile.**
+## Technical Notes from Deployment
+
+1. **Turso CLI on Windows requires WSL** — Use web dashboard instead
+2. **@libsql/client version** — Downgraded to 0.5.6 to avoid "migration jobs" 400 errors
+3. **Vercel env vars** — Use `printf` not heredoc to avoid trailing newlines that break URLs/tokens
+4. **build:vercel script** — Must install client and server dependencies before build

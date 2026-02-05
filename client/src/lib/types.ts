@@ -10,6 +10,7 @@ export interface Contact {
   companyId: number | null;
   company: { id: number; name: string } | null;
   companyName: string | null;
+  additionalCompanyIds: string | null; // JSON array of company IDs
   ecosystem: Ecosystem;
   email: string | null;
   additionalEmails: string | null;
@@ -173,7 +174,7 @@ export interface Conversation {
   createdAt: string;
   contactsDiscussed: { contact: { id: number; name: string } }[];
   companiesDiscussed: { company: { id: number; name: string } }[];
-  actions?: { id: number; title: string; completed: boolean }[];
+  actions?: { id: number; title: string; completed: boolean; dueDate: string | null }[];
 }
 
 export const CONVERSATION_TYPE_OPTIONS: { value: ConversationType; label: string }[] = [

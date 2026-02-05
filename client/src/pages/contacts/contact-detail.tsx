@@ -162,10 +162,10 @@ function formatConversationDate(dateStr: string, precision: DatePrecision) {
   }
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   if (!children) return null
   return (
-    <div className="space-y-1">
+    <div className={`space-y-1 ${className || ''}`}>
       <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
       <dd className="text-sm">{children}</dd>
     </div>

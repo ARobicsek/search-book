@@ -12,7 +12,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts'
 import { api } from '@/lib/api'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
@@ -70,8 +69,8 @@ function getStatusLabel(value: string): string {
   return CONTACT_STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value
 }
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
+function formatDate(dateStr: unknown): string {
+  const d = new Date(String(dateStr) + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
@@ -307,8 +306,8 @@ export function AnalyticsPage() {
                     outerRadius={100}
                     dataKey="count"
                     nameKey="ecosystem"
-                    label={({ ecosystem, percent }) =>
-                      percent > 0.05 ? `${getEcosystemLabel(ecosystem)} (${(percent * 100).toFixed(0)}%)` : ''
+                    label={({ name, percent }: { name?: string; percent?: number }) =>
+                      (percent ?? 0) > 0.05 ? `${getEcosystemLabel(name ?? '')} (${((percent ?? 0) * 100).toFixed(0)}%)` : ''
                     }
                   >
                     {byEcosystem.map((entry) => (
@@ -348,8 +347,8 @@ export function AnalyticsPage() {
                     outerRadius={100}
                     dataKey="count"
                     nameKey="status"
-                    label={({ status, percent }) =>
-                      percent > 0.05 ? `${getStatusLabel(status)} (${(percent * 100).toFixed(0)}%)` : ''
+                    label={({ name, percent }: { name?: string; percent?: number }) =>
+                      (percent ?? 0) > 0.05 ? `${getStatusLabel(name ?? '')} (${((percent ?? 0) * 100).toFixed(0)}%)` : ''
                     }
                   >
                     {byStatus.map((entry) => (

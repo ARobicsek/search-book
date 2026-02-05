@@ -166,13 +166,6 @@ export function MultiCombobox({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
 
-  const selectedLabels = values
-    .map((v) => {
-      const opt = options.find((o) => o.value === v);
-      return opt?.label || v;
-    })
-    .join(', ');
-
   const filteredOptions = options
     .filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => a.label.localeCompare(b.label));

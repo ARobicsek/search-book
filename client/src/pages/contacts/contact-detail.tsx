@@ -277,13 +277,18 @@ export function ContactDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              {(contact.photoUrl || contact.photoFile) && (
-                <img
-                  src={contact.photoUrl || contact.photoFile || ''}
-                  alt={contact.name}
-                  className="h-20 w-20 rounded-lg object-cover border"
-                />
-              )}
+              {(() => {
+                // In production, only http URLs work. Local /photos/ paths only work in dev.
+                const photoSrc = contact.photoUrl ||
+                  (import.meta.env.DEV ? contact.photoFile : null)
+                return photoSrc ? (
+                  <img
+                    src={photoSrc}
+                    alt={contact.name}
+                    className="h-20 w-20 rounded-lg object-cover border"
+                  />
+                ) : null
+              })()}
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">{contact.name}</h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2">

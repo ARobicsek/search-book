@@ -19,26 +19,18 @@ router.get('/', async (req: Request, res: Response) => {
     const contacts = await prisma.contact.findMany({
       include: {
         company: { select: { id: true, name: true } },
-        conversations: {
-          select: { date: true, datePrecision: true },
-          orderBy: { date: 'desc' },
-          take: 1,
-        },
       },
       orderBy: { updatedAt: 'desc' },
       take,
       skip,
     });
 
-    // Map to add lastOutreachDate/Precision and remove raw conversations array
-    let result = contacts.map((c) => {
-      const { conversations, ...rest } = c;
-      return {
-        ...rest,
-        lastOutreachDate: conversations[0]?.date ?? null,
-        lastOutreachDatePrecision: conversations[0]?.datePrecision ?? null,
-      };
-    });
+    // Map to add lastOutreachDate/Precision (skip for now to improve performance)
+    let result = contacts.map((c) => ({
+      ...c,
+      lastOutreachDate: null as string | null,
+      lastOutreachDatePrecision: null as string | null,
+    }));
 
     // Apply flagged filter if param provided
     const { flagged } = req.query;

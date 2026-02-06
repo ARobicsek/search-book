@@ -27,42 +27,35 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## Next Session Task: iPhone UI Review
+## Next Session: Phase 8 — Google Drive Document Search
 
-**Goal:** Extensively browse the production site in iPhone dimensions and identify ways to improve the mobile UI.
+**Goal:** Enable full-text search across Google Drive documents linked to contacts/companies/actions.
 
-Please:
-1. Review each page/feature in mobile viewport (375px width)
-2. Identify UI issues: touch targets too small, text overflow, spacing problems, unusable controls
-3. Create a prioritized list of mobile UX improvements
-4. Implement the fixes
+Refer to `.planning/ROADMAP.md` for Phase 8 acceptance criteria.
 
-Key pages to review:
-- Dashboard
-- Contacts list and detail
-- Companies list and detail
-- Actions list and detail/form
-- Calendar
-- Ideas
-- Search/filters
-- Command palette
-- All dialogs/modals
+Potential approach:
+1. OAuth2 integration with Google Drive API
+2. Index content of linked documents (Google Docs, PDFs)
+3. Full-text search across document content
+4. Surface search results in global search / command palette
 
 ---
 
 ## What Was Completed Last Session
 
-### Bug Fixes
-1. **Overdue timezone fix** — Dashboard now passes client's local date to server, so overdue actions are calculated in user's timezone (not server UTC)
-2. **Photos in production** — Explained that local `/photos/` paths don't work in production; users need to re-upload photos via production site to use Vercel Blob
+### PWA Icon + Calendar Fix
+1. **Installed @fullcalendar/list** — Fixes calendar build error; mobile calendar now uses list view
+2. **PWA icons** — Used existing Windows 95 pixel-art "S" scroll icon (`SearchBook icon.png`) for:
+   - pwa-192x192.png
+   - pwa-512x512.png
+   - apple-touch-icon.png
+3. **Browser favicon** — Changed from SVG to PNG for consistent branding
 
-### Previous Session Fixes (still deployed)
-- Date precision display (MONTH → "January 2026", YEAR → "2026")
-- Prep notes yellow background in conversation dialog
-- SPA routing fix (no more 404 on hard refresh)
-- Document links for Actions
-- Links card for Companies
-- Default sort by updatedAt
+### Previous Session (Mobile UI)
+- Dashboard ActionRow with 44px touch targets
+- Column visibility on mobile (hide non-essential columns)
+- Responsive headers, filter bars, forms
+- Calendar mobile list view
 
 ---
 

@@ -27,17 +27,12 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## Next Session: Phase 8 — Google Drive Document Search
+## Next Session Tasks
 
-**Goal:** Enable full-text search across Google Drive documents linked to contacts/companies/actions.
-
-Refer to `.planning/ROADMAP.md` for Phase 8 acceptance criteria.
-
-Potential approach:
-1. OAuth2 integration with Google Drive API
-2. Index content of linked documents (Google Docs, PDFs)
-3. Full-text search across document content
-4. Surface search results in global search / command palette
+1. **In the search function, remove the link to the dashboard** — The command palette Navigate section shows "Dashboard" which is redundant
+2. **Make sure in global search the lozenges are the correct colors** — Ecosystem and status badges should use the same colors as elsewhere in the app
+3. **For company status, change the color of 'Active Target'** — Currently may share a color with another status; give it a unique color
+4. **Add a company status called 'In Discussions'** — New status with a unique color not used by other statuses
 
 ---
 
@@ -57,11 +52,6 @@ Potential approach:
 - **Mobile:** Tap the search icon in the header
 - Search returns contacts, companies, actions, and ideas
 - Expand any result to see related entities (who they know, what actions exist, etc.)
-
-### Previous Session (PWA Icons)
-- Installed @fullcalendar/list for mobile calendar
-- PWA icons using Windows 95 pixel-art "S" scroll icon
-- Browser favicon changed to PNG
 
 ---
 

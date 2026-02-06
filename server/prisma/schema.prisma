@@ -63,7 +63,7 @@ model Company {
   website    String?
   hqLocation String?
   notes      String?
-  status     String   @default("RESEARCHING") // RESEARCHING, ACTIVE_TARGET, CONNECTED, ON_HOLD, CLOSED
+  status     String   @default("RESEARCHING") // RESEARCHING, ACTIVE_TARGET, IN_DISCUSSIONS, CONNECTED, ON_HOLD, CLOSED
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

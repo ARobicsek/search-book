@@ -18,6 +18,7 @@ import tagsRouter from './routes/tags';
 import analyticsRouter from './routes/analytics';
 import backupRouter from './routes/backup';
 import duplicatesRouter from './routes/duplicates';
+import searchRouter from './routes/search';
 
 const app = express();
 
@@ -101,5 +102,6 @@ app.use('/api/tags', tagsRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/duplicates', duplicatesRouter);
+app.use('/api/search', searchRouter);
 
 export default app;

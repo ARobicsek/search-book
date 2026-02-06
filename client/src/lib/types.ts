@@ -256,3 +256,73 @@ export interface EmploymentHistory {
   endDate: string | null;
   createdAt: string;
 }
+
+// ─── Search ────────────────────────────────────────────────
+
+export interface SearchResult {
+  query: string;
+  contacts: ContactSearchResult[];
+  companies: CompanySearchResult[];
+  actions: ActionSearchResult[];
+  ideas: IdeaSearchResult[];
+}
+
+export interface RelatedCompany {
+  id: number;
+  name: string;
+  relationship: string;
+}
+
+export interface RelatedContact {
+  id: number;
+  name: string;
+  relationship: string;
+}
+
+export interface ContactSearchResult {
+  id: number;
+  name: string;
+  title: string | null;
+  ecosystem: string;
+  status: string;
+  company?: { id: number; name: string } | null;
+  related?: {
+    companies: RelatedCompany[];
+    contacts: RelatedContact[];
+    actions: { id: number; title: string; completed: boolean }[];
+    ideas: { id: number; title: string }[];
+    conversations: { id: number; summary: string | null; date: string }[];
+  };
+}
+
+export interface CompanySearchResult {
+  id: number;
+  name: string;
+  industry: string | null;
+  status: string;
+  _count?: { contacts: number };
+  related?: {
+    contacts: { id: number; name: string; title: string | null }[];
+    actions: { id: number; title: string; completed: boolean }[];
+    ideas: { id: number; title: string }[];
+    conversations: { id: number; summary: string | null; date: string; contactName: string }[];
+  };
+}
+
+export interface ActionSearchResult {
+  id: number;
+  title: string;
+  type: string;
+  completed: boolean;
+  dueDate: string | null;
+  contact?: { id: number; name: string } | null;
+  company?: { id: number; name: string } | null;
+}
+
+export interface IdeaSearchResult {
+  id: number;
+  title: string;
+  description: string | null;
+  contacts?: { id: number; name: string }[];
+  companies?: { id: number; name: string }[]
+}

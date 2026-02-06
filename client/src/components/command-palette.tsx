@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, createContext, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   CommandDialog,
@@ -10,9 +10,9 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { api } from '@/lib/api'
-import type { Contact, Company, Action, Idea } from '@/lib/types'
+import type { Contact, Company, Action, Idea, SearchResult } from '@/lib/types'
 import { toast } from 'sonner'
-import { BookUser, Building2, ListTodo, Plus, Lightbulb, Search } from 'lucide-react'
+import { BookUser, Building2, ListTodo, Plus, Lightbulb, Search, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,12 +28,67 @@ import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, ECOSYSTEM_OPTIONS } from 
 
 type Mode = 'search' | 'add-contact' | 'add-action' | 'add-note'
 
+// Context to allow opening palette from anywhere
+const CommandPaletteContext = createContext<{ open: () => void }>({ open: () => {} })
+
+export function useCommandPalette() {
+  return useContext(CommandPaletteContext)
+}
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+
+  return debouncedValue
+}
+
+export function CommandPaletteProvider({ children }: { children: React.ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const openPalette = useCallback(() => {
+    setIsOpen(true)
+  }, [])
+
+  return (
+    <CommandPaletteContext.Provider value={{ open: openPalette }}>
+      {children}
+      <CommandPaletteInner open={isOpen} setOpen={setIsOpen} />
+    </CommandPaletteContext.Provider>
+  )
+}
+
+// Legacy component for backward compatibility
 export function CommandPalette() {
-  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setOpen((o) => !o)
+      }
+    }
+    document.addEventListener('keydown', down)
+    return () => document.removeEventListener('keydown', down)
+  }, [])
+
+  return <CommandPaletteInner open={open} setOpen={setOpen} />
+}
+
+function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
+  const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('search')
   const [contacts, setContacts] = useState<Contact[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
+  const [query, setQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+
+  const debouncedQuery = useDebounce(query, 300)
 
   // Quick-add form states
   const [contactName, setContactName] = useState('')
@@ -47,16 +102,17 @@ export function CommandPalette() {
 
   const [saving, setSaving] = useState(false)
 
+  // Keyboard shortcut
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        setOpen((o) => !o)
+        setOpen(!open)
       }
     }
     document.addEventListener('keydown', down)
     return () => document.removeEventListener('keydown', down)
-  }, [])
+  }, [open, setOpen])
 
   const fetchData = useCallback(async () => {
     try {
@@ -73,9 +129,24 @@ export function CommandPalette() {
     if (open) {
       fetchData()
       setMode('search')
+      setQuery('')
+      setSearchResults(null)
       resetForms()
     }
   }, [open, fetchData])
+
+  // Live search
+  useEffect(() => {
+    if (debouncedQuery.length >= 2) {
+      setIsSearching(true)
+      api.get<SearchResult>(`/search?q=${encodeURIComponent(debouncedQuery)}&limit=5&includeRelated=false`)
+        .then(setSearchResults)
+        .catch(() => setSearchResults(null))
+        .finally(() => setIsSearching(false))
+    } else {
+      setSearchResults(null)
+    }
+  }, [debouncedQuery])
 
   function resetForms() {
     setContactName('')
@@ -91,6 +162,8 @@ export function CommandPalette() {
   function close() {
     setOpen(false)
     setMode('search')
+    setQuery('')
+    setSearchResults(null)
     resetForms()
   }
 
@@ -289,70 +362,182 @@ export function CommandPalette() {
     )
   }
 
-  // Default: search mode
+  // Default: search mode with live results
+  const hasSearchResults = searchResults && (
+    searchResults.contacts.length > 0 ||
+    searchResults.companies.length > 0 ||
+    searchResults.actions.length > 0 ||
+    searchResults.ideas.length > 0
+  )
+
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search contacts, companies, or create new..." />
+      <CommandInput
+        placeholder="Search contacts, companies, or create new..."
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        {isSearching && (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
 
-        <CommandGroup heading="Quick Add">
-          <CommandItem onSelect={() => setMode('add-contact')}>
-            <Plus className="mr-2 h-4 w-4" />
-            <span>New Contact</span>
-          </CommandItem>
-          <CommandItem onSelect={() => setMode('add-action')}>
-            <Plus className="mr-2 h-4 w-4" />
-            <span>New Action</span>
-          </CommandItem>
-          <CommandItem onSelect={() => setMode('add-note')}>
-            <Lightbulb className="mr-2 h-4 w-4" />
-            <span>New Note / Idea</span>
-          </CommandItem>
-        </CommandGroup>
-
-        <CommandSeparator />
-
-        <CommandGroup heading="Navigate">
-          <CommandItem onSelect={() => { close(); navigate('/') }}>
-            <Search className="mr-2 h-4 w-4" />
-            <span>Dashboard</span>
-          </CommandItem>
-          <CommandItem onSelect={() => { close(); navigate('/actions') }}>
-            <ListTodo className="mr-2 h-4 w-4" />
-            <span>All Actions</span>
-          </CommandItem>
-          <CommandItem onSelect={() => { close(); navigate('/calendar') }}>
-            <Search className="mr-2 h-4 w-4" />
-            <span>Calendar</span>
-          </CommandItem>
-        </CommandGroup>
-
-        {contacts.length > 0 && (
+        {!isSearching && !hasSearchResults && query.length < 2 && (
           <>
+            <CommandEmpty>No results found.</CommandEmpty>
+
+            <CommandGroup heading="Quick Add">
+              <CommandItem onSelect={() => setMode('add-contact')}>
+                <Plus className="mr-2 h-4 w-4" />
+                <span>New Contact</span>
+              </CommandItem>
+              <CommandItem onSelect={() => setMode('add-action')}>
+                <Plus className="mr-2 h-4 w-4" />
+                <span>New Action</span>
+              </CommandItem>
+              <CommandItem onSelect={() => setMode('add-note')}>
+                <Lightbulb className="mr-2 h-4 w-4" />
+                <span>New Note / Idea</span>
+              </CommandItem>
+            </CommandGroup>
+
             <CommandSeparator />
-            <CommandGroup heading="Contacts">
-              {contacts.map((c) => (
-                <CommandItem key={`contact-${c.id}`} onSelect={() => { close(); navigate(`/contacts/${c.id}`) }}>
-                  <BookUser className="mr-2 h-4 w-4" />
-                  <span>{c.name}</span>
-                  {c.title && <span className="ml-2 text-xs text-muted-foreground">{c.title}</span>}
-                </CommandItem>
-              ))}
+
+            <CommandGroup heading="Navigate">
+              <CommandItem onSelect={() => { close(); navigate('/') }}>
+                <Search className="mr-2 h-4 w-4" />
+                <span>Dashboard</span>
+              </CommandItem>
+              <CommandItem onSelect={() => { close(); navigate('/search') }}>
+                <Search className="mr-2 h-4 w-4" />
+                <span>Global Search</span>
+              </CommandItem>
+              <CommandItem onSelect={() => { close(); navigate('/actions') }}>
+                <ListTodo className="mr-2 h-4 w-4" />
+                <span>All Actions</span>
+              </CommandItem>
+              <CommandItem onSelect={() => { close(); navigate('/calendar') }}>
+                <Search className="mr-2 h-4 w-4" />
+                <span>Calendar</span>
+              </CommandItem>
+            </CommandGroup>
+
+            {contacts.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="Contacts">
+                  {contacts.slice(0, 10).map((c) => (
+                    <CommandItem key={`contact-${c.id}`} onSelect={() => { close(); navigate(`/contacts/${c.id}`) }}>
+                      <BookUser className="mr-2 h-4 w-4" />
+                      <span>{c.name}</span>
+                      {c.title && <span className="ml-2 text-xs text-muted-foreground">{c.title}</span>}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+
+            {companies.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="Companies">
+                  {companies.slice(0, 10).map((c) => (
+                    <CommandItem key={`company-${c.id}`} onSelect={() => { close(); navigate(`/companies/${c.id}`) }}>
+                      <Building2 className="mr-2 h-4 w-4" />
+                      <span>{c.name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+          </>
+        )}
+
+        {/* Live search results */}
+        {!isSearching && hasSearchResults && searchResults && (
+          <>
+            {searchResults.contacts.length > 0 && (
+              <CommandGroup heading="Contacts">
+                {searchResults.contacts.map((c) => (
+                  <CommandItem key={`search-contact-${c.id}`} onSelect={() => { close(); navigate(`/contacts/${c.id}`) }}>
+                    <BookUser className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>{c.name}</span>
+                      {c.title && (
+                        <span className="text-xs text-muted-foreground">
+                          {c.title}{c.company ? ` at ${c.company.name}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {searchResults.companies.length > 0 && (
+              <CommandGroup heading="Companies">
+                {searchResults.companies.map((c) => (
+                  <CommandItem key={`search-company-${c.id}`} onSelect={() => { close(); navigate(`/companies/${c.id}`) }}>
+                    <Building2 className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>{c.name}</span>
+                      {c.industry && (
+                        <span className="text-xs text-muted-foreground">{c.industry}</span>
+                      )}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {searchResults.actions.length > 0 && (
+              <CommandGroup heading="Actions">
+                {searchResults.actions.map((a) => (
+                  <CommandItem key={`search-action-${a.id}`} onSelect={() => { close(); navigate(`/actions/${a.id}`) }}>
+                    <ListTodo className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>{a.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {a.type}{a.contact ? ` | ${a.contact.name}` : ''}{a.company ? ` | ${a.company.name}` : ''}
+                      </span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {searchResults.ideas.length > 0 && (
+              <CommandGroup heading="Ideas">
+                {searchResults.ideas.map((idea) => (
+                  <CommandItem key={`search-idea-${idea.id}`} onSelect={() => { close(); navigate('/ideas') }}>
+                    <Lightbulb className="mr-2 h-4 w-4" />
+                    <span>{idea.title}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            <CommandSeparator />
+            <CommandGroup>
+              <CommandItem onSelect={() => { close(); navigate(`/search?q=${encodeURIComponent(query)}`) }}>
+                <Search className="mr-2 h-4 w-4" />
+                <span>View all results for "{query}"</span>
+              </CommandItem>
             </CommandGroup>
           </>
         )}
 
-        {companies.length > 0 && (
+        {/* No search results */}
+        {!isSearching && query.length >= 2 && !hasSearchResults && (
           <>
-            <CommandSeparator />
-            <CommandGroup heading="Companies">
-              {companies.map((c) => (
-                <CommandItem key={`company-${c.id}`} onSelect={() => { close(); navigate(`/companies/${c.id}`) }}>
-                  <Building2 className="mr-2 h-4 w-4" />
-                  <span>{c.name}</span>
-                </CommandItem>
-              ))}
+            <CommandEmpty>No results found for "{query}"</CommandEmpty>
+            <CommandGroup>
+              <CommandItem onSelect={() => { close(); navigate(`/search?q=${encodeURIComponent(query)}`) }}>
+                <Search className="mr-2 h-4 w-4" />
+                <span>Search for "{query}" on full search page</span>
+              </CommandItem>
             </CommandGroup>
           </>
         )}

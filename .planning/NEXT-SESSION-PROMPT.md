@@ -29,21 +29,40 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-1. **Extend auto-save to Ideas** — Apply the same auto-save pattern (useAutoSave hook, SaveStatus indicator) to the Ideas form in edit mode.
-2. **Extend auto-save to Conversation logging** — Apply auto-save to the conversation dialog when editing existing conversations.
-3. **Review auto-save UX** — Test the current implementation and refine debounce timing or UI feedback if needed.
+1. **Test auto-save on production** — Verify the new auto-save features work correctly on iPhone PWA
+2. **Phase 8: Document Search** — Begin Google Drive document search integration (see ROADMAP.md)
 
 ---
 
 ## What Was Completed Last Session
 
-### Duplicate Merge Enhancement + Auto-save
+### Auto-save Extensions + Merge Enhancements
+1. **Auto-save for Ideas form:**
+   - Added useAutoSave hook and SaveStatusIndicator to Ideas dialog
+   - Edit mode auto-saves after 1.5s debounce
+   - Revert button appears when form has unsaved changes
+   - Only existing contacts/companies auto-save (new entries save on explicit submit)
+2. **Auto-save for Conversation dialog:**
+   - Added useAutoSave hook and SaveStatusIndicator to Conversations dialog
+   - Edit mode auto-saves after 2s debounce (longer due to form complexity)
+   - Actions and links are NOT auto-saved - they save on explicit submit
+3. **Enhanced duplicate merge with all fields + keep-both option:**
+   - Added missing fields: mutualConnections, whereFound, openQuestions, photoUrl, photoFile, flagged
+   - Added "Keep Both" option for email field that combines all emails from both contacts
+   - Shows all emails (primary + additional) when comparing contacts
+   - Backend combines and deduplicates emails when "Keep Both" is selected
+
+---
+
+## What Was Completed Previous Session
+
+### Duplicate Merge Enhancement + Auto-save (initial)
 1. **Enhanced duplicate merge with field selection:**
    - Modified `/api/duplicates/merge` endpoint to accept `fieldSelections` parameter
    - New merge dialog UI with side-by-side field comparison and radio buttons
    - Users can pick values from either contact for each field (name, email, title, etc.)
    - Related data (conversations, actions, relationships) still auto-combines
-2. **Auto-save on all edit forms:**
+2. **Auto-save on main edit forms:**
    - Created `useAutoSave` hook with 1.5s debounce (`client/src/hooks/use-auto-save.ts`)
    - Created `SaveStatus` indicator component (`client/src/components/save-status.tsx`)
    - Updated Company form with auto-save in edit mode
@@ -54,7 +73,7 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## What Was Completed Previous Session
+## What Was Completed Earlier
 
 ### Contact Statuses + CSV Import Enhancements
 1. **Add actions when editing conversations** — Removed create-only restriction; can now add follow-up actions when editing a conversation

@@ -123,7 +123,7 @@ export function AnalyticsPage() {
             Track your networking activity
           </p>
         </div>
-        <Tabs value={period} onValueChange={(v) => setPeriod(v as 'week' | 'month')}>
+        <Tabs value={period} onValueChange={(v: string) => setPeriod(v as 'week' | 'month')}>
           <TabsList>
             <TabsTrigger value="week">Week</TabsTrigger>
             <TabsTrigger value="month">Month</TabsTrigger>

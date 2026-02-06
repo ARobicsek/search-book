@@ -33,7 +33,9 @@ import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react'
 // Fields that can be imported
 const IMPORTABLE_FIELDS = [
   { value: 'skip', label: '— Skip —' },
-  { value: 'name', label: 'Name *', required: true },
+  { value: 'name', label: 'Name (Full)' },
+  { value: 'firstName', label: 'First Name' },
+  { value: 'lastName', label: 'Last Name' },
   { value: 'title', label: 'Title' },
   { value: 'roleDescription', label: 'Role Description' },
   { value: 'companyName', label: 'Company' },
@@ -41,8 +43,10 @@ const IMPORTABLE_FIELDS = [
   { value: 'status', label: 'Status' },
   { value: 'email', label: 'Email' },
   { value: 'phone', label: 'Phone' },
+  { value: 'mobile', label: 'Mobile' },
   { value: 'linkedinUrl', label: 'LinkedIn URL' },
   { value: 'location', label: 'Location' },
+  { value: 'linkUrl', label: 'Link URL' },
   { value: 'howConnected', label: 'How Connected' },
   { value: 'mutualConnections', label: 'Mutual Connections' },
   { value: 'whereFound', label: 'Where Found' },
@@ -50,6 +54,54 @@ const IMPORTABLE_FIELDS = [
   { value: 'notes', label: 'Notes' },
   { value: 'personalDetails', label: 'Personal Details' },
 ]
+
+// Column header aliases for auto-mapping
+const HEADER_ALIASES: Record<string, string> = {
+  // Name variations
+  'name': 'name',
+  'full name': 'name',
+  'contact name': 'name',
+  'first name': 'firstName',
+  'firstname': 'firstName',
+  'first': 'firstName',
+  'last name': 'lastName',
+  'lastname': 'lastName',
+  'last': 'lastName',
+  // Company
+  'company': 'companyName',
+  'company name': 'companyName',
+  'organization': 'companyName',
+  // Contact info
+  'email': 'email',
+  'email address': 'email',
+  'phone': 'phone',
+  'phone number': 'phone',
+  'mobile': 'mobile',
+  'mobile phone': 'mobile',
+  'cell': 'mobile',
+  'cell phone': 'mobile',
+  // LinkedIn
+  'linkedin': 'linkedinUrl',
+  'linkedin url': 'linkedinUrl',
+  'linkedin profile': 'linkedinUrl',
+  'linkedinurl': 'linkedinUrl',
+  // Location
+  'location': 'location',
+  'city': 'location',
+  'address': 'location',
+  // Other
+  'title': 'title',
+  'job title': 'title',
+  'role': 'title',
+  'position': 'title',
+  'status': 'status',
+  'link': 'linkUrl',
+  'link url': 'linkUrl',
+  'website': 'linkUrl',
+  'url': 'linkUrl',
+  'notes': 'notes',
+  'ecosystem': 'ecosystem',
+}
 
 // Valid ecosystem values
 const ECOSYSTEM_MAP: Record<string, string> = {
@@ -65,13 +117,17 @@ const ECOSYSTEM_MAP: Record<string, string> = {
 // Valid status values
 const STATUS_MAP: Record<string, string> = {
   new: 'NEW',
+  researching: 'RESEARCHING',
+  research: 'RESEARCHING',
   connected: 'CONNECTED',
   'awaiting response': 'AWAITING_RESPONSE',
   awaiting_response: 'AWAITING_RESPONSE',
   'follow up needed': 'FOLLOW_UP_NEEDED',
   follow_up_needed: 'FOLLOW_UP_NEEDED',
-  'warm lead': 'WARM_LEAD',
-  warm_lead: 'WARM_LEAD',
+  'lead to pursue': 'LEAD_TO_PURSUE',
+  lead_to_pursue: 'LEAD_TO_PURSUE',
+  'warm lead': 'LEAD_TO_PURSUE', // backwards compatibility
+  warm_lead: 'LEAD_TO_PURSUE', // backwards compatibility
   'on hold': 'ON_HOLD',
   on_hold: 'ON_HOLD',
   closed: 'CLOSED',
@@ -171,15 +227,22 @@ export function CsvImportDialog({
       setHeaders(headerRow)
       setCsvData(dataRows)
 
-      // Auto-map columns based on header names
+      // Auto-map columns based on header names using aliases
       const autoMap: Record<number, string> = {}
       headerRow.forEach((header, idx) => {
         const h = header.toLowerCase().trim()
+        // First check aliases
+        if (HEADER_ALIASES[h]) {
+          autoMap[idx] = HEADER_ALIASES[h]
+          return
+        }
+        // Then try matching against field values/labels
         const match = IMPORTABLE_FIELDS.find((f) => {
           const fieldName = f.value.toLowerCase()
+          const labelName = f.label.toLowerCase().replace(' (full)', '')
           return (
             h === fieldName ||
-            h === f.label.toLowerCase().replace(' *', '') ||
+            h === labelName ||
             h.includes(fieldName) ||
             fieldName.includes(h)
           )
@@ -208,62 +271,165 @@ export function CsvImportDialog({
 
   function getPreviewData(): Partial<Contact>[] {
     return csvData.slice(0, 5).map((row) => {
-      const contact: Record<string, string> = {}
+      const rawData: Record<string, string> = {}
       Object.entries(columnMap).forEach(([colIdx, field]) => {
         const value = row[parseInt(colIdx)] ?? ''
         if (value) {
-          // Normalize ecosystem and status values
-          if (field === 'ecosystem') {
-            contact[field] = ECOSYSTEM_MAP[value.toLowerCase()] || 'ROLODEX'
-          } else if (field === 'status') {
-            contact[field] = STATUS_MAP[value.toLowerCase()] || 'CONNECTED'
-          } else {
-            contact[field] = value
-          }
+          rawData[field] = value
         }
       })
+
+      const contact: Record<string, string> = {}
+
+      // Handle name: combine firstName + lastName if no full name
+      if (rawData.name) {
+        contact.name = rawData.name
+      } else if (rawData.firstName || rawData.lastName) {
+        const parts = [rawData.firstName, rawData.lastName].filter(Boolean)
+        contact.name = parts.join(' ')
+      }
+
+      // Handle ecosystem and status
+      if (rawData.ecosystem) {
+        contact.ecosystem = ECOSYSTEM_MAP[rawData.ecosystem.toLowerCase()] || 'ROLODEX'
+      }
+      if (rawData.status) {
+        contact.status = STATUS_MAP[rawData.status.toLowerCase()] || 'CONNECTED'
+      }
+
+      // Copy other fields
+      if (rawData.title) contact.title = rawData.title
+      if (rawData.companyName) contact.companyName = rawData.companyName
+      if (rawData.linkedinUrl) contact.linkedinUrl = rawData.linkedinUrl
+      if (rawData.email) contact.email = rawData.email
+
       return contact as Partial<Contact>
     })
   }
 
-  const hasNameMapping = Object.values(columnMap).includes('name')
+  const hasNameMapping = Object.values(columnMap).includes('name') ||
+    (Object.values(columnMap).includes('firstName') || Object.values(columnMap).includes('lastName'))
 
   async function handleImport() {
     if (!hasNameMapping) {
-      toast.error('You must map a column to "Name"')
+      toast.error('You must map a column to "Name" or "First Name"/"Last Name"')
       return
     }
 
     setImporting(true)
     const results = { success: 0, errors: [] as string[] }
 
+    // Cache for company lookups/creations to avoid duplicates
+    const companyCache: Record<string, number> = {}
+
     for (let i = 0; i < csvData.length; i++) {
       const row = csvData[i]
-      const contact: Record<string, string | null> = {
+      const rawData: Record<string, string> = {}
+
+      // First pass: collect all raw values
+      Object.entries(columnMap).forEach(([colIdx, field]) => {
+        const value = row[parseInt(colIdx)]?.trim() ?? ''
+        if (value) {
+          rawData[field] = value
+        }
+      })
+
+      // Build the contact object
+      const contact: Record<string, string | number | null> = {
         ecosystem: 'ROLODEX',
         status: 'CONNECTED',
       }
 
-      Object.entries(columnMap).forEach(([colIdx, field]) => {
-        const value = row[parseInt(colIdx)]?.trim() ?? ''
-        if (value) {
-          if (field === 'ecosystem') {
-            contact[field] = ECOSYSTEM_MAP[value.toLowerCase()] || 'ROLODEX'
-          } else if (field === 'status') {
-            contact[field] = STATUS_MAP[value.toLowerCase()] || 'CONNECTED'
-          } else {
-            contact[field] = value
-          }
-        }
-      })
+      // Handle name: combine firstName + lastName if no full name
+      if (rawData.name) {
+        contact.name = rawData.name
+      } else if (rawData.firstName || rawData.lastName) {
+        const parts = [rawData.firstName, rawData.lastName].filter(Boolean)
+        contact.name = parts.join(' ')
+      }
 
       if (!contact.name) {
         results.errors.push(`Row ${i + 2}: Missing name`)
         continue
       }
 
+      // Handle phone: combine phone and mobile
+      if (rawData.phone && rawData.mobile) {
+        contact.phone = `${rawData.phone} / ${rawData.mobile}`
+      } else if (rawData.phone) {
+        contact.phone = rawData.phone
+      } else if (rawData.mobile) {
+        contact.phone = rawData.mobile
+      }
+
+      // Handle ecosystem and status
+      if (rawData.ecosystem) {
+        contact.ecosystem = ECOSYSTEM_MAP[rawData.ecosystem.toLowerCase()] || 'ROLODEX'
+      }
+      if (rawData.status) {
+        contact.status = STATUS_MAP[rawData.status.toLowerCase()] || 'CONNECTED'
+      }
+
+      // Copy simple fields
+      if (rawData.title) contact.title = rawData.title
+      if (rawData.roleDescription) contact.roleDescription = rawData.roleDescription
+      if (rawData.email) contact.email = rawData.email
+      if (rawData.linkedinUrl) contact.linkedinUrl = rawData.linkedinUrl
+      if (rawData.location) contact.location = rawData.location
+      if (rawData.howConnected) contact.howConnected = rawData.howConnected
+      if (rawData.mutualConnections) contact.mutualConnections = rawData.mutualConnections
+      if (rawData.whereFound) contact.whereFound = rawData.whereFound
+      if (rawData.openQuestions) contact.openQuestions = rawData.openQuestions
+      if (rawData.notes) contact.notes = rawData.notes
+      if (rawData.personalDetails) contact.personalDetails = rawData.personalDetails
+
+      // Handle company: look up or create
+      if (rawData.companyName) {
+        const companyNameLower = rawData.companyName.toLowerCase()
+        if (companyCache[companyNameLower]) {
+          contact.companyId = companyCache[companyNameLower]
+        } else {
+          try {
+            // Try to find existing company
+            const companies = await api.get<{ id: number; name: string }[]>('/companies')
+            const existing = companies.find(
+              (c) => c.name.toLowerCase() === companyNameLower
+            )
+            if (existing) {
+              companyCache[companyNameLower] = existing.id
+              contact.companyId = existing.id
+            } else {
+              // Create new company
+              const newCompany = await api.post<{ id: number }>('/companies', {
+                name: rawData.companyName,
+                status: 'RESEARCHING',
+              })
+              companyCache[companyNameLower] = newCompany.id
+              contact.companyId = newCompany.id
+            }
+          } catch {
+            // Fall back to just storing the name
+            contact.companyName = rawData.companyName
+          }
+        }
+      }
+
       try {
-        await api.post('/contacts', contact)
+        const createdContact = await api.post<{ id: number }>('/contacts', contact)
+
+        // Create link if provided
+        if (rawData.linkUrl) {
+          try {
+            await api.post('/links', {
+              url: rawData.linkUrl,
+              title: rawData.linkUrl,
+              contactId: createdContact.id,
+            })
+          } catch {
+            // Link creation failed, but contact was created
+          }
+        }
+
         results.success++
       } catch (err) {
         results.errors.push(`Row ${i + 2}: ${err instanceof Error ? err.message : 'Failed to import'}`)
@@ -371,7 +537,7 @@ export function CsvImportDialog({
             {!hasNameMapping && (
               <div className="flex items-center gap-2 text-amber-600 text-sm">
                 <AlertCircle className="h-4 w-4" />
-                You must map a column to "Name" to continue.
+                You must map a column to "Name" or "First Name"/"Last Name" to continue.
               </div>
             )}
           </div>

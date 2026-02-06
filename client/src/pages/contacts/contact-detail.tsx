@@ -105,10 +105,11 @@ const ecosystemColors: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
   NEW: 'bg-slate-100 text-slate-700',
+  RESEARCHING: 'bg-blue-100 text-blue-700',
   CONNECTED: 'bg-green-100 text-green-700',
   AWAITING_RESPONSE: 'bg-yellow-100 text-yellow-700',
   FOLLOW_UP_NEEDED: 'bg-orange-100 text-orange-700',
-  WARM_LEAD: 'bg-emerald-100 text-emerald-700',
+  LEAD_TO_PURSUE: 'bg-pink-100 text-pink-700',
   ON_HOLD: 'bg-gray-100 text-gray-500',
   CLOSED: 'bg-red-100 text-red-700',
 }
@@ -191,6 +192,41 @@ export function ContactDetailPage() {
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkTitle, setNewLinkTitle] = useState('')
+
+  function loadLinks() {
+    if (id) {
+      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
+    }
+  }
+
+  async function addLink() {
+    if (!newLinkUrl.trim()) return
+    try {
+      await api.post('/links', {
+        url: newLinkUrl.trim(),
+        title: newLinkTitle.trim() || newLinkUrl.trim(),
+        contactId: parseInt(id!),
+      })
+      loadLinks()
+      setNewLinkUrl('')
+      setNewLinkTitle('')
+      toast.success('Link added')
+    } catch {
+      toast.error('Failed to add link')
+    }
+  }
+
+  async function deleteLink(linkId: number) {
+    try {
+      await api.delete(`/links/${linkId}`)
+      loadLinks()
+      toast.success('Link removed')
+    } catch {
+      toast.error('Failed to remove link')
+    }
+  }
 
   const loadData = useCallback(() => {
     if (!id) return
@@ -599,6 +635,55 @@ export function ContactDetailPage() {
             </Card>
           )}
 
+          {/* Links */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Links</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {links.length > 0 && (
+                <ul className="space-y-2">
+                  {links.map((link) => (
+                    <li key={link.id} className="flex items-center justify-between gap-2">
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        {link.title}
+                      </a>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={newLinkUrl}
+                    onChange={(e) => setNewLinkUrl(e.target.value)}
+                    placeholder="URL (Google Drive, webpage, etc.)"
+                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                  />
+                  <Input
+                    value={newLinkTitle}
+                    onChange={(e) => setNewLinkTitle(e.target.value)}
+                    placeholder="Label (optional)"
+                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                  />
+                </div>
+                <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Actions */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -979,17 +1064,15 @@ function ConversationsTab({
         companiesDiscussed: resolvedCompanies.map(Number),
       }
 
-      // Multiple actions support
-      if (!editId) {
-        const validActions = form.actions.filter((a) => a.title.trim())
-        if (validActions.length > 0) {
-          payload.createActions = validActions.map((a) => ({
-            title: a.title.trim(),
-            type: a.type,
-            dueDate: a.dueDate || null,
-            priority: a.priority,
-          }))
-        }
+      // Multiple actions support (works for both create and edit)
+      const validActions = form.actions.filter((a) => a.title.trim())
+      if (validActions.length > 0) {
+        payload.createActions = validActions.map((a) => ({
+          title: a.title.trim(),
+          type: a.type,
+          dueDate: a.dueDate || null,
+          priority: a.priority,
+        }))
       }
 
       // Links
@@ -1319,61 +1402,57 @@ function ConversationsTab({
               ))}
             </div>
 
-            {/* Follow-up actions (only on create) */}
-            {!editId && (
-              <>
-                <Separator />
+            {/* Follow-up actions (create and edit) */}
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-muted-foreground">{editId ? 'Add Actions' : 'Follow-Up Actions'}</p>
+              <Button type="button" variant="ghost" size="sm" onClick={addAction}>
+                <Plus className="mr-1 h-3 w-3" />
+                Add Action
+              </Button>
+            </div>
+            {form.actions.map((action, i) => (
+              <div key={i} className="space-y-2 rounded-md border p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-muted-foreground">Follow-Up Actions</p>
-                  <Button type="button" variant="ghost" size="sm" onClick={addAction}>
-                    <Plus className="mr-1 h-3 w-3" />
-                    Add Action
-                  </Button>
+                  <Label className="text-xs text-muted-foreground">Action {i + 1}</Label>
+                  {form.actions.length > 1 && (
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
-                {form.actions.map((action, i) => (
-                  <div key={i} className="space-y-2 rounded-md border p-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs text-muted-foreground">Action {i + 1}</Label>
-                      {form.actions.length > 1 && (
-                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
+                <Input
+                  value={action.title}
+                  onChange={(e) => updateAction(i, 'title', e.target.value)}
+                  placeholder="e.g. Send follow-up email"
+                />
+                {action.title && (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <Select value={action.type} onValueChange={(v) => updateAction(i, 'type', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ACTION_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Input
-                      value={action.title}
-                      onChange={(e) => updateAction(i, 'title', e.target.value)}
-                      placeholder="e.g. Send follow-up email"
+                      type="date"
+                      value={action.dueDate}
+                      onChange={(e) => updateAction(i, 'dueDate', e.target.value)}
                     />
-                    {action.title && (
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <Select value={action.type} onValueChange={(v) => updateAction(i, 'type', v)}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {ACTION_TYPE_OPTIONS.map((o) => (
-                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="date"
-                          value={action.dueDate}
-                          onChange={(e) => updateAction(i, 'dueDate', e.target.value)}
-                        />
-                        <Select value={action.priority} onValueChange={(v) => updateAction(i, 'priority', v)}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {ACTION_PRIORITY_OPTIONS.map((o) => (
-                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                    <Select value={action.priority} onValueChange={(v) => updateAction(i, 'priority', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ACTION_PRIORITY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                ))}
-              </>
-            )}
+                )}
+              </div>
+            ))}
           </div>
           </div>
           <DialogFooter>

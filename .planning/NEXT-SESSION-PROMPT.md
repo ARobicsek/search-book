@@ -35,6 +35,24 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## What Was Completed Last Session
 
+### Contact Statuses + CSV Import Enhancements
+1. **Add actions when editing conversations** — Removed create-only restriction; can now add follow-up actions when editing a conversation
+2. **Updated contact statuses** — Renamed "Warm Lead" → "Lead to Pursue", added "Researching" status
+3. **Distinct status lozenge colors:**
+   - Contacts: NEW (slate), RESEARCHING (blue), CONNECTED (green), AWAITING_RESPONSE (yellow), FOLLOW_UP_NEEDED (orange), LEAD_TO_PURSUE (pink), ON_HOLD (gray), CLOSED (red)
+   - Companies: RESEARCHING (sky), ACTIVE_TARGET (indigo), IN_DISCUSSIONS (violet), CONNECTED (emerald), ON_HOLD (gray), CLOSED (red)
+4. **Links in Contact profiles** — Links card added to Overview tab with add/delete functionality
+5. **Enhanced CSV import:**
+   - Supports separate First Name / Last Name columns (auto-combines)
+   - Auto-creates companies when importing contacts with company names
+   - Creates links from "Link" column in CSV
+   - Improved header aliases: recognizes "LinkedIn Profile", "Mobile", "City", "First Name", "Last Name", etc.
+   - Combines phone + mobile fields
+
+---
+
+## What Was Completed Previous Session
+
 ### UI Polish + Vercel Git Integration
 1. **Removed Dashboard from command palette** — Navigate section now shows only Global Search, All Actions, Calendar
 2. **Fixed global search lozenge colors** — Ecosystem and status badges now use correct colors
@@ -42,25 +60,6 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 4. **Added 'In Discussions' company status** — New status with violet color
 5. **Connected Vercel to GitHub** — Auto-deploys on push to main
 6. **Added prepush script** — Run before pushing to catch errors
-
----
-
-## What Was Completed Previous Session
-
-### UI Fixes + Global Search Feature
-1. **Fixed scroll arrows on contact card tab bar** — Removed `overflow-x-auto` from TabsList
-2. **Mutual connections auto-create** — Contacts entered in "Mutual Connections" field now auto-create with status=CONNECTED if name doesn't exist
-3. **Global Search feature:**
-   - New `/api/search` endpoint — searches across contacts, companies, actions, ideas with related entities
-   - New `/search` page — with expandable result cards showing relationships (companies, contacts, actions, ideas, conversations)
-   - Enhanced command palette — live search results (debounced 300ms) as you type
-   - Mobile search button — 44px touch target in header, opens command palette on tap
-
-### How to use Global Search:
-- **Desktop:** Press Ctrl+K or navigate to `/search`
-- **Mobile:** Tap the search icon in the header
-- Search returns contacts, companies, actions, and ideas
-- Expand any result to see related entities (who they know, what actions exist, etc.)
 
 ---
 

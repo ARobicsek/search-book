@@ -63,10 +63,11 @@ const ecosystemColors: Record<Ecosystem, string> = {
 
 const statusColors: Record<ContactStatus, string> = {
   NEW: 'bg-slate-100 text-slate-700',
+  RESEARCHING: 'bg-blue-100 text-blue-700',
   CONNECTED: 'bg-green-100 text-green-700',
   AWAITING_RESPONSE: 'bg-yellow-100 text-yellow-700',
   FOLLOW_UP_NEEDED: 'bg-orange-100 text-orange-700',
-  WARM_LEAD: 'bg-emerald-100 text-emerald-700',
+  LEAD_TO_PURSUE: 'bg-pink-100 text-pink-700',
   ON_HOLD: 'bg-gray-100 text-gray-500',
   CLOSED: 'bg-red-100 text-red-700',
 }

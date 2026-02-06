@@ -1,5 +1,5 @@
 export type Ecosystem = 'RECRUITER' | 'ROLODEX' | 'TARGET' | 'INFLUENCER' | 'ACADEMIA' | 'INTRO_SOURCE';
-export type ContactStatus = 'NEW' | 'CONNECTED' | 'AWAITING_RESPONSE' | 'FOLLOW_UP_NEEDED' | 'WARM_LEAD' | 'ON_HOLD' | 'CLOSED';
+export type ContactStatus = 'NEW' | 'RESEARCHING' | 'CONNECTED' | 'AWAITING_RESPONSE' | 'FOLLOW_UP_NEEDED' | 'LEAD_TO_PURSUE' | 'ON_HOLD' | 'CLOSED';
 export type CompanyStatus = 'RESEARCHING' | 'ACTIVE_TARGET' | 'IN_DISCUSSIONS' | 'CONNECTED' | 'ON_HOLD' | 'CLOSED';
 
 export interface Contact {
@@ -75,10 +75,11 @@ export const ECOSYSTEM_OPTIONS: { value: Ecosystem; label: string }[] = [
 
 export const CONTACT_STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
   { value: 'NEW', label: 'New' },
+  { value: 'RESEARCHING', label: 'Researching' },
   { value: 'CONNECTED', label: 'Connected' },
   { value: 'AWAITING_RESPONSE', label: 'Awaiting Response' },
   { value: 'FOLLOW_UP_NEEDED', label: 'Follow-Up Needed' },
-  { value: 'WARM_LEAD', label: 'Warm Lead' },
+  { value: 'LEAD_TO_PURSUE', label: 'Lead to Pursue' },
   { value: 'ON_HOLD', label: 'On Hold' },
   { value: 'CLOSED', label: 'Closed' },
 ];

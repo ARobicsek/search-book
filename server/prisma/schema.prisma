@@ -27,7 +27,7 @@ model Contact {
   location          String?
   photoUrl          String?
   photoFile         String?
-  status            String   @default("NEW") // NEW, CONNECTED, AWAITING_RESPONSE, FOLLOW_UP_NEEDED, WARM_LEAD, ON_HOLD, CLOSED
+  status            String   @default("NEW") // NEW, RESEARCHING, CONNECTED, AWAITING_RESPONSE, FOLLOW_UP_NEEDED, LEAD_TO_PURSUE, ON_HOLD, CLOSED
   howConnected      String?
   referredById      Int?
   referredBy        Contact?  @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)

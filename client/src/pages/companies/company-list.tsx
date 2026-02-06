@@ -37,7 +37,7 @@ import {
 import { toast } from 'sonner'
 
 const statusColors: Record<CompanyStatus, string> = {
-  RESEARCHING: 'bg-blue-100 text-blue-700',
+  RESEARCHING: 'bg-sky-100 text-sky-700',
   ACTIVE_TARGET: 'bg-indigo-100 text-indigo-700',
   IN_DISCUSSIONS: 'bg-violet-100 text-violet-700',
   CONNECTED: 'bg-emerald-100 text-emerald-700',

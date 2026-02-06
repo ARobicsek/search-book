@@ -205,6 +205,25 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     });
 
+    // Create follow-up actions if provided
+    const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];
+    if (createAction?.title?.trim()) {
+      actionsToCreate.push(createAction);
+    }
+
+    for (const action of actionsToCreate) {
+      await prisma.action.create({
+        data: {
+          title: action.title.trim(),
+          type: action.type || 'FOLLOW_UP',
+          dueDate: action.dueDate || null,
+          priority: action.priority || 'MEDIUM',
+          contactId: existing.contactId,
+          conversationId: id,
+        },
+      });
+    }
+
     const result = await prisma.conversation.findUnique({
       where: { id },
       include: conversationIncludes,

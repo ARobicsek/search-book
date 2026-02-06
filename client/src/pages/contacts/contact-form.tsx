@@ -276,6 +276,27 @@ export function ContactFormPage() {
       // Always remove referredByName from payload since Contact model doesn't have this field
       delete (payload as { referredByName?: string | null }).referredByName
 
+      // Auto-create contacts for mutual connections that don't exist
+      for (const name of form.mutualConnections) {
+        const trimmedName = name.trim()
+        if (!trimmedName) continue
+        const exists = allContacts.some(
+          (c) => c.name.toLowerCase() === trimmedName.toLowerCase()
+        )
+        if (!exists) {
+          try {
+            const newContact = await api.post<Contact>('/contacts', {
+              name: trimmedName,
+              status: 'CONNECTED',
+              ecosystem: 'ROLODEX',
+            })
+            setAllContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }])
+          } catch {
+            // If creation fails, just proceed - the name is still stored in mutualConnections string
+          }
+        }
+      }
+
       if (isEdit) {
         await api.put(`/contacts/${id}`, payload)
         toast.success('Contact updated')

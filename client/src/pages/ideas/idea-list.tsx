@@ -76,9 +76,10 @@ export function IdeaListPage() {
 
   useEffect(() => {
     loadIdeas()
-    api.get<Contact[]>('/contacts').then((data) =>
+    api.get<{ data: Contact[] } | Contact[]>('/contacts?limit=200').then((res) => {
+      const data = Array.isArray(res) ? res : res.data
       setAllContacts(data.map((c) => ({ id: c.id, name: c.name })))
-    ).catch(() => {})
+    }).catch(() => {})
     api.get<Company[]>('/companies').then((data) =>
       setAllCompanies(data.map((c) => ({ id: c.id, name: c.name })))
     ).catch(() => {})

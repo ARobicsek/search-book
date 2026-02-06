@@ -3,11 +3,18 @@ import prisma from '../db';
 
 const router = Router();
 
-// GET /api/contacts — list all contacts with optional date range filter
+// GET /api/contacts — list all contacts with optional date range filter and pagination
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { lastOutreachFrom, lastOutreachTo, includeNoOutreach } = req.query;
+    const { lastOutreachFrom, lastOutreachTo, includeNoOutreach, limit, offset } = req.query;
     const includeNone = includeNoOutreach !== 'false'; // default true
+
+    // Pagination: default 50, max 200
+    const take = Math.min(parseInt(limit as string) || 50, 200);
+    const skip = parseInt(offset as string) || 0;
+
+    // First get total count for pagination info
+    const total = await prisma.contact.count();
 
     const contacts = await prisma.contact.findMany({
       include: {
@@ -19,6 +26,8 @@ router.get('/', async (req: Request, res: Response) => {
         },
       },
       orderBy: { updatedAt: 'desc' },
+      take,
+      skip,
     });
 
     // Map to add lastOutreachDate/Precision and remove raw conversations array
@@ -47,7 +56,11 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
-    res.json(result);
+    // Return with pagination info
+    res.json({
+      data: result,
+      pagination: { total, limit: take, offset: skip, hasMore: skip + result.length < total },
+    });
   } catch (error) {
     console.error('Error fetching contacts:', error);
     res.status(500).json({ error: 'Failed to fetch contacts' });

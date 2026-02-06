@@ -399,18 +399,41 @@ export function ContactListPage() {
 
   const columns = useMemo(() => buildColumns(toggleFlag), [contacts])
 
-  function loadContacts() {
+  async function loadContacts() {
     const params = new URLSearchParams()
     if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
     if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
     if (!includeNoOutreach) params.set('includeNoOutreach', 'false')
+    params.set('limit', '200') // Load up to 200 contacts per batch
 
-    const url = params.toString() ? `/contacts?${params}` : '/contacts'
-    api
-      .get<Contact[]>(url)
-      .then(setContacts)
-      .catch((err) => toast.error(err.message || 'Failed to load contacts'))
-      .finally(() => setLoading(false))
+    try {
+      const allContacts: Contact[] = []
+      let offset = 0
+      let hasMore = true
+
+      while (hasMore) {
+        params.set('offset', offset.toString())
+        const url = `/contacts?${params}`
+        const response = await api.get<{ data: Contact[]; pagination: { total: number; hasMore: boolean } } | Contact[]>(url)
+
+        // Handle both paginated and legacy array responses
+        if (Array.isArray(response)) {
+          allContacts.push(...response)
+          hasMore = false
+        } else {
+          allContacts.push(...response.data)
+          hasMore = response.pagination.hasMore
+          offset += response.data.length
+        }
+      }
+
+      setContacts(allContacts)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load contacts'
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {

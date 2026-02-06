@@ -253,8 +253,11 @@ export function ContactDetailPage() {
   useEffect(() => {
     loadData()
     // Load contacts and companies for comboboxes in dialogs
-    api.get<{ id: number; name: string }[]>('/contacts').then(
-      (data) => setAllContacts(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
+    api.get<{ data: { id: number; name: string }[] } | { id: number; name: string }[]>('/contacts?limit=200').then(
+      (res) => {
+        const data = Array.isArray(res) ? res : res.data
+        setAllContacts(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
+      }
     ).catch(() => {})
     api.get<{ id: number; name: string }[]>('/companies').then(
       (data) => setAllCompanies(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))

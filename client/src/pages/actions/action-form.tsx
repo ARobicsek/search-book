@@ -132,7 +132,9 @@ export function ActionFormPage() {
   const [existingLinkIds, setExistingLinkIds] = useState<number[]>([])
 
   useEffect(() => {
-    api.get<Contact[]>('/contacts').then(setContacts).catch(() => toast.error('Failed to load contacts'))
+    api.get<{ data: Contact[] } | Contact[]>('/contacts?limit=200').then((res) => {
+      setContacts(Array.isArray(res) ? res : res.data)
+    }).catch(() => toast.error('Failed to load contacts'))
     api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
 
     if (isEdit && id) {

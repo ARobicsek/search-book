@@ -116,11 +116,12 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
 
   const fetchData = useCallback(async () => {
     try {
-      const [c, co] = await Promise.all([
-        api.get<Contact[]>('/contacts'),
+      const [contactsRes, co] = await Promise.all([
+        api.get<{ data: Contact[] } | Contact[]>('/contacts?limit=200'),
         api.get<Company[]>('/companies'),
       ])
-      setContacts(c)
+      // Handle both paginated and legacy array responses
+      setContacts(Array.isArray(contactsRes) ? contactsRes : contactsRes.data)
       setCompanies(co)
     } catch { /* silent */ }
   }, [])

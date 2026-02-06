@@ -349,6 +349,13 @@ export function ContactListPage() {
   const [totalContacts, setTotalContacts] = useState(0)
   const pageSize = 50
 
+  // Debounced search for server-side filtering
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(globalFilter), 300)
+    return () => clearTimeout(timer)
+  }, [globalFilter])
+
   // Load companies once for searching additional company names
   useEffect(() => {
     api.get<{ id: number; name: string }[]>('/companies')
@@ -407,9 +414,15 @@ export function ContactListPage() {
   async function loadContacts(page = currentPage) {
     setLoading(true)
     const params = new URLSearchParams()
+    // Filters
+    if (ecosystemFilter !== 'all') params.set('ecosystem', ecosystemFilter)
+    if (statusFilter !== 'all') params.set('status', statusFilter)
+    if (showFlaggedOnly) params.set('flagged', 'true')
+    if (debouncedSearch) params.set('search', debouncedSearch)
     if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
     if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
     if (!includeNoOutreach) params.set('includeNoOutreach', 'false')
+    // Pagination
     params.set('limit', pageSize.toString())
     params.set('offset', (page * pageSize).toString())
 
@@ -437,26 +450,16 @@ export function ContactListPage() {
   useEffect(() => {
     setCurrentPage(0)
     loadContacts(0)
-  }, [lastOutreachFrom, lastOutreachTo, includeNoOutreach])
+  }, [ecosystemFilter, statusFilter, showFlaggedOnly, debouncedSearch, lastOutreachFrom, lastOutreachTo, includeNoOutreach])
 
   // Load contacts when page changes
   useEffect(() => {
     loadContacts(currentPage)
   }, [currentPage])
 
-  // Apply ecosystem, status, and flagged filters
+  // Data is already filtered server-side, just pass through
   const filteredData = useMemo(() => {
-    let data = contacts
-    if (ecosystemFilter !== 'all') {
-      data = data.filter((c) => c.ecosystem === ecosystemFilter)
-    }
-    if (statusFilter !== 'all') {
-      data = data.filter((c) => c.status === statusFilter)
-    }
-    if (showFlaggedOnly) {
-      data = data.filter((c) => c.flagged)
-    }
-    return data
+    return contacts
   }, [contacts, ecosystemFilter, statusFilter, showFlaggedOnly])
 
   const flaggedCount = contacts.filter((c) => c.flagged).length

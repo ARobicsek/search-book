@@ -3,20 +3,44 @@ import prisma from '../db';
 
 const router = Router();
 
-// GET /api/contacts — list all contacts with optional date range filter and pagination
+// GET /api/contacts — list all contacts with optional filters and pagination
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { lastOutreachFrom, lastOutreachTo, includeNoOutreach, limit, offset } = req.query;
+    const { lastOutreachFrom, lastOutreachTo, includeNoOutreach, limit, offset, ecosystem, status, search } = req.query;
     const includeNone = includeNoOutreach !== 'false'; // default true
 
     // Pagination: default 50, max 200
     const take = Math.min(parseInt(limit as string) || 50, 200);
     const skip = parseInt(offset as string) || 0;
 
-    // First get total count for pagination info
-    const total = await prisma.contact.count();
+    // Build where clause for server-side filtering
+    const { flagged } = req.query;
+    const where: Record<string, unknown> = {};
+    if (ecosystem && ecosystem !== 'all') {
+      where.ecosystem = ecosystem;
+    }
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+    if (flagged === 'true') {
+      where.flagged = true;
+    }
+    if (search && typeof search === 'string' && search.trim()) {
+      const searchTerm = search.trim();
+      where.OR = [
+        { name: { contains: searchTerm } },
+        { title: { contains: searchTerm } },
+        { company: { name: { contains: searchTerm } } },
+        { companyName: { contains: searchTerm } },
+        { location: { contains: searchTerm } },
+      ];
+    }
+
+    // Get total count with filters applied
+    const total = await prisma.contact.count({ where });
 
     const contacts = await prisma.contact.findMany({
+      where,
       include: {
         company: { select: { id: true, name: true } },
       },
@@ -58,13 +82,7 @@ router.get('/', async (req: Request, res: Response) => {
       };
     });
 
-    // Apply flagged filter if param provided
-    const { flagged } = req.query;
-    if (flagged === 'true') {
-      result = result.filter((c) => c.flagged);
-    }
-
-    // Apply date range filter if params provided
+    // Apply date range filter if params provided (done post-query since it uses lastOutreachDate)
     if (lastOutreachFrom || lastOutreachTo) {
       result = result.filter((c) => {
         if (!c.lastOutreachDate) return includeNone;

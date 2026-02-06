@@ -29,65 +29,37 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-1. **Test auto-save on production** — Verify the new auto-save features work correctly on iPhone PWA
+1. **Fix Last Outreach column** — Column shows "—" for all contacts even those with conversations. The server code looks correct (queries `Conversation` table by `contactId`), but data isn't displaying. Debug why.
 2. **Phase 8: Document Search** — Begin Google Drive document search integration (see ROADMAP.md)
 
 ---
 
 ## What Was Completed Last Session
 
-### Auto-save Extensions + Merge Enhancements
-1. **Auto-save for Ideas form:**
-   - Added useAutoSave hook and SaveStatusIndicator to Ideas dialog
-   - Edit mode auto-saves after 1.5s debounce
-   - Revert button appears when form has unsaved changes
-   - Only existing contacts/companies auto-save (new entries save on explicit submit)
-2. **Auto-save for Conversation dialog:**
-   - Added useAutoSave hook and SaveStatusIndicator to Conversations dialog
-   - Edit mode auto-saves after 2s debounce (longer due to form complexity)
-   - Actions and links are NOT auto-saved - they save on explicit submit
-3. **Enhanced duplicate merge with all fields + keep-both option:**
-   - Added missing fields: mutualConnections, whereFound, openQuestions, photoUrl, photoFile, flagged
-   - Added "Keep Both" option for email field that combines all emails from both contacts
-   - Shows all emails (primary + additional) when comparing contacts
-   - Backend combines and deduplicates emails when "Keep Both" is selected
+### Contacts List Performance + Pagination
+After importing ~100 contacts, the contacts page was timing out. Fixed with:
+
+1. **Pagination** — Contacts list now loads 50 contacts per page with Previous/Next navigation
+2. **Server-side filtering** — Ecosystem, Status, Flagged, and Search filters now applied server-side (so they filter all 171 contacts, not just current page)
+3. **Lightweight `/contacts/names` endpoint** — Returns just id/name for comboboxes (fast)
+4. **Debounced search** — 300ms debounce to reduce API calls while typing
+
+### Technical changes:
+- `server/src/routes/contacts.ts` — Added pagination (`limit`, `offset`), server-side filters (`ecosystem`, `status`, `flagged`, `search`), and `/names` endpoint
+- `client/src/pages/contacts/contact-list.tsx` — Pagination UI, server-side filter params, debounced search
+- Other client files updated to use `/contacts/names` endpoint for comboboxes
+
+### Bug to fix next session:
+The `lastOutreachDate` query was fixed to use `Conversation.contactId` (not `ConversationContact` junction table), but the column still shows "—". Server logs show conversations exist. Need to debug.
 
 ---
 
 ## What Was Completed Previous Session
 
-### Duplicate Merge Enhancement + Auto-save (initial)
-1. **Enhanced duplicate merge with field selection:**
-   - Modified `/api/duplicates/merge` endpoint to accept `fieldSelections` parameter
-   - New merge dialog UI with side-by-side field comparison and radio buttons
-   - Users can pick values from either contact for each field (name, email, title, etc.)
-   - Related data (conversations, actions, relationships) still auto-combines
-2. **Auto-save on main edit forms:**
-   - Created `useAutoSave` hook with 1.5s debounce (`client/src/hooks/use-auto-save.ts`)
-   - Created `SaveStatus` indicator component (`client/src/components/save-status.tsx`)
-   - Updated Company form with auto-save in edit mode
-   - Updated Contact form with auto-save in edit mode
-   - Updated Action form with auto-save in edit mode
-   - Edit mode shows "Saving..." / "Saved ✓" indicator and "Revert" button
-   - Create mode still uses explicit Save button
-
----
-
-## What Was Completed Earlier
-
-### Contact Statuses + CSV Import Enhancements
-1. **Add actions when editing conversations** — Removed create-only restriction; can now add follow-up actions when editing a conversation
-2. **Updated contact statuses** — Renamed "Warm Lead" → "Lead to Pursue", added "Researching" status
-3. **Distinct status lozenge colors:**
-   - Contacts: NEW (slate), RESEARCHING (blue), CONNECTED (green), AWAITING_RESPONSE (yellow), FOLLOW_UP_NEEDED (orange), LEAD_TO_PURSUE (pink), ON_HOLD (gray), CLOSED (red)
-   - Companies: RESEARCHING (sky), ACTIVE_TARGET (indigo), IN_DISCUSSIONS (violet), CONNECTED (emerald), ON_HOLD (gray), CLOSED (red)
-4. **Links in Contact profiles** — Links card added to Overview tab with add/delete functionality
-5. **Enhanced CSV import:**
-   - Supports separate First Name / Last Name columns (auto-combines)
-   - Auto-creates companies when importing contacts with company names
-   - Creates links from "Link" column in CSV
-   - Improved header aliases: recognizes "LinkedIn Profile", "Mobile", "City", "First Name", "Last Name", etc.
-   - Combines phone + mobile fields
+### Auto-save Extensions + Merge Enhancements
+1. **Auto-save for Ideas form** — Edit mode auto-saves after 1.5s debounce
+2. **Auto-save for Conversation dialog** — Edit mode auto-saves after 2s debounce
+3. **Enhanced duplicate merge** — All fields + "Keep Both" option for emails
 
 ---
 
@@ -139,4 +111,6 @@ printf 'value' | vercel env add VAR_NAME production
 4. **build:vercel script** — Must install client and server dependencies before build
 5. **Photos in production** — Only Vercel Blob URLs work; local `/photos/` paths are dev-only
 6. **Overdue timezone** — Server accepts `today` query param from client to fix timezone issues
-7. **Auto-save pattern** — `useAutoSave` hook in `client/src/hooks/use-auto-save.ts` handles debounced saves; use with `SaveStatusIndicator` component
+7. **Auto-save pattern** — `useAutoSave` hook in `client/src/hooks/use-auto-save.ts` handles debounced saves
+8. **Contacts pagination** — Server returns `{ data: [...], pagination: { total, limit, offset, hasMore } }`
+9. **Server-side filters** — `/contacts` accepts `ecosystem`, `status`, `flagged`, `search` query params

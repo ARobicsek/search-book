@@ -8,6 +8,8 @@
     "dev": "npm start",
     "build": "npm run build --prefix client && npm run build --prefix server",
     "build:vercel": "npm install --prefix client && npm install --prefix server && npm run build --prefix client && cd server && DATABASE_URL=file:./dev.db npx prisma generate",
+    "typecheck": "npm run typecheck --prefix client && npm run typecheck --prefix server",
+    "prepush": "npm run typecheck && echo '✓ TypeScript check passed'",
     "db:migrate": "cd server && npx prisma migrate dev",
     "db:seed": "cd server && npx prisma db seed",
     "db:studio": "cd server && npx prisma studio"

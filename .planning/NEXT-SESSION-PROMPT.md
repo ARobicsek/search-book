@@ -29,12 +29,32 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-1. **Duplicate resolution/merge feature** — UI to find and combine duplicate contacts (similar names, same company, etc.). Should allow selecting which fields to keep from each record.
-2. **Auto-save exploration** — Investigate changing forms to save immediately on change (like Google Docs) with Cancel reverting changes, rather than requiring explicit Save button click.
+1. **Extend auto-save to Ideas** — Apply the same auto-save pattern (useAutoSave hook, SaveStatus indicator) to the Ideas form in edit mode.
+2. **Extend auto-save to Conversation logging** — Apply auto-save to the conversation dialog when editing existing conversations.
+3. **Review auto-save UX** — Test the current implementation and refine debounce timing or UI feedback if needed.
 
 ---
 
 ## What Was Completed Last Session
+
+### Duplicate Merge Enhancement + Auto-save
+1. **Enhanced duplicate merge with field selection:**
+   - Modified `/api/duplicates/merge` endpoint to accept `fieldSelections` parameter
+   - New merge dialog UI with side-by-side field comparison and radio buttons
+   - Users can pick values from either contact for each field (name, email, title, etc.)
+   - Related data (conversations, actions, relationships) still auto-combines
+2. **Auto-save on all edit forms:**
+   - Created `useAutoSave` hook with 1.5s debounce (`client/src/hooks/use-auto-save.ts`)
+   - Created `SaveStatus` indicator component (`client/src/components/save-status.tsx`)
+   - Updated Company form with auto-save in edit mode
+   - Updated Contact form with auto-save in edit mode
+   - Updated Action form with auto-save in edit mode
+   - Edit mode shows "Saving..." / "Saved ✓" indicator and "Revert" button
+   - Create mode still uses explicit Save button
+
+---
+
+## What Was Completed Previous Session
 
 ### Contact Statuses + CSV Import Enhancements
 1. **Add actions when editing conversations** — Removed create-only restriction; can now add follow-up actions when editing a conversation
@@ -49,18 +69,6 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
    - Creates links from "Link" column in CSV
    - Improved header aliases: recognizes "LinkedIn Profile", "Mobile", "City", "First Name", "Last Name", etc.
    - Combines phone + mobile fields
-
----
-
-## What Was Completed Previous Session
-
-### UI Polish + Vercel Git Integration
-1. **Removed Dashboard from command palette** — Navigate section now shows only Global Search, All Actions, Calendar
-2. **Fixed global search lozenge colors** — Ecosystem and status badges now use correct colors
-3. **Changed Active Target color** — Now indigo (was green, conflicted with Connected)
-4. **Added 'In Discussions' company status** — New status with violet color
-5. **Connected Vercel to GitHub** — Auto-deploys on push to main
-6. **Added prepush script** — Run before pushing to catch errors
 
 ---
 
@@ -112,3 +120,4 @@ printf 'value' | vercel env add VAR_NAME production
 4. **build:vercel script** — Must install client and server dependencies before build
 5. **Photos in production** — Only Vercel Blob URLs work; local `/photos/` paths are dev-only
 6. **Overdue timezone** — Server accepts `today` query param from client to fix timezone issues
+7. **Auto-save pattern** — `useAutoSave` hook in `client/src/hooks/use-auto-save.ts` handles debounced saves; use with `SaveStatusIndicator` component

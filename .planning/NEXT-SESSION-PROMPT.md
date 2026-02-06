@@ -29,7 +29,8 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-*(Add tasks here)*
+1. **Duplicate resolution/merge feature** — UI to find and combine duplicate contacts (similar names, same company, etc.). Should allow selecting which fields to keep from each record.
+2. **Auto-save exploration** — Investigate changing forms to save immediately on change (like Google Docs) with Cancel reverting changes, rather than requiring explicit Save button click.
 
 ---
 

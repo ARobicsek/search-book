@@ -12,8 +12,9 @@ const actionIncludes = {
 // GET /api/actions — list all actions with optional filters
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { status, contactId, companyId, sortBy } = req.query;
-    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
+    const { status, contactId, companyId, sortBy, today: clientToday } = req.query;
+    // Use client's today if provided (fixes timezone issues in production)
+    const today = (clientToday as string) || new Date().toLocaleDateString('en-CA');
 
     // Build where clause from query params
     const where: Record<string, unknown> = {};

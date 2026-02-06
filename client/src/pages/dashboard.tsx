@@ -62,19 +62,17 @@ function ActionRow({ action, onToggle, showDate }: ActionRowProps) {
     <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
       <button
         onClick={() => onToggle(action)}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-          action.completed
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${action.completed
             ? 'border-green-500 bg-green-500 text-white'
             : 'border-muted-foreground/30 hover:border-green-500'
-        }`}
+          }`}
       >
         {action.completed && <Check className="h-3 w-3" />}
       </button>
       <Link
         to={`/actions/${action.id}`}
-        className={`flex-1 text-sm font-medium hover:underline ${
-          action.completed ? 'text-muted-foreground line-through' : ''
-        }`}
+        className={`flex-1 text-sm font-medium hover:underline ${action.completed ? 'text-muted-foreground line-through' : ''
+          }`}
       >
         {action.title}
       </Link>
@@ -110,10 +108,13 @@ export function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      console.log('Dashboard: Fetching data...');
+      // Pass today's date from client to fix timezone issues in production
       const [pending, overdue] = await Promise.all([
-        api.get<Action[]>('/actions?status=pending'),
-        api.get<Action[]>('/actions?status=overdue'),
+        api.get<Action[]>(`/actions?status=pending&today=${today}`),
+        api.get<Action[]>(`/actions?status=overdue&today=${today}`),
       ])
+      console.log('Dashboard: Data received', { pending, overdue });
       setAllPending(pending)
       setOverdueActions(overdue)
     } catch (err: unknown) {
@@ -122,7 +123,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [today])
 
   useEffect(() => {
     fetchData()

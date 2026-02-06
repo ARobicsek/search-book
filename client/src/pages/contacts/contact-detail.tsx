@@ -72,7 +72,10 @@ import {
   X,
   Tag as TagIcon,
   Loader2,
+  RotateCcw,
 } from 'lucide-react'
+import { useAutoSave } from '@/hooks/use-auto-save'
+import { SaveStatusIndicator } from '@/components/save-status'
 
 // ─── Color maps ─────────────────────────────────────────────
 
@@ -960,24 +963,39 @@ function ConversationsTab({
     setLocalCompanyOptions(companyOptions)
   })
 
-  const emptyForm = {
+  type ConversationForm = {
+    date: string
+    datePrecision: DatePrecision
+    type: ConversationType
+    summary: string
+    notes: string
+    nextSteps: string
+    contactsDiscussed: string[]
+    companiesDiscussed: string[]
+    actions: ActionFormEntry[]
+    links: LinkEntry[]
+  }
+
+  const emptyForm: ConversationForm = {
     date: new Date().toLocaleDateString('en-CA'),
-    datePrecision: 'DAY' as DatePrecision,
-    type: 'VIDEO_CALL' as ConversationType,
+    datePrecision: 'DAY',
+    type: 'VIDEO_CALL',
     summary: '',
     notes: '',
     nextSteps: '',
-    contactsDiscussed: [] as string[],
-    companiesDiscussed: [] as string[],
-    actions: [{ ...emptyAction }] as ActionFormEntry[],
-    links: [] as LinkEntry[],
+    contactsDiscussed: [],
+    companiesDiscussed: [],
+    actions: [{ ...emptyAction }],
+    links: [],
   }
 
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState<ConversationForm>(emptyForm)
+  const [originalForm, setOriginalForm] = useState<ConversationForm | null>(null)
 
   function openNew() {
     setEditId(null)
     setForm(emptyForm)
+    setOriginalForm(null)
     setLocalContactOptions(contactOptions)
     setLocalCompanyOptions(companyOptions)
     setDialogOpen(true)
@@ -987,7 +1005,7 @@ function ConversationsTab({
     setEditId(conv.id)
     setLocalContactOptions(contactOptions)
     setLocalCompanyOptions(companyOptions)
-    setForm({
+    const loadedForm: ConversationForm = {
       date: conv.date,
       datePrecision: conv.datePrecision as DatePrecision,
       type: conv.type as ConversationType,
@@ -998,9 +1016,48 @@ function ConversationsTab({
       companiesDiscussed: conv.companiesDiscussed.map((cd) => cd.company.id.toString()),
       actions: [{ ...emptyAction }],
       links: [],
-    })
+    }
+    setForm(loadedForm)
+    setOriginalForm(loadedForm)
     setDialogOpen(true)
   }
+
+  // Auto-save handler - only saves core fields with existing IDs (not new actions/links/entries)
+  const handleAutoSave = useCallback(async (data: ConversationForm) => {
+    if (!editId) return
+
+    // Only include existing contact/company IDs (numeric strings only)
+    const existingContactIds = data.contactsDiscussed
+      .filter((val) => /^\d+$/.test(val))
+      .map(Number)
+    const existingCompanyIds = data.companiesDiscussed
+      .filter((val) => /^\d+$/.test(val))
+      .map(Number)
+
+    const payload = {
+      contactId,
+      date: data.date,
+      datePrecision: data.datePrecision,
+      type: data.type,
+      summary: data.summary.trim() || null,
+      notes: data.notes.trim() || null,
+      nextSteps: data.nextSteps.trim() || null,
+      contactsDiscussed: existingContactIds,
+      companiesDiscussed: existingCompanyIds,
+      // Note: actions and links are NOT auto-saved - they save on explicit submit
+    }
+    await api.put(`/conversations/${editId}`, payload)
+  }, [editId, contactId])
+
+  const autoSave = useAutoSave({
+    data: form,
+    originalData: originalForm,
+    onSave: handleAutoSave,
+    validate: (data) => data.date.length > 0,
+    debounceMs: 2000, // Longer debounce for complex form
+    enabled: editId !== null,
+    onRevert: setForm,
+  })
 
   async function resolveNewEntries() {
     // Create contacts for any free-text entries (non-numeric IDs)
@@ -1243,7 +1300,10 @@ function ConversationsTab({
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className={cn('max-h-[85vh] overflow-y-auto', !editId && prepNotes.length > 0 ? 'sm:max-w-5xl' : 'sm:max-w-xl')} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
+              {editId && <SaveStatusIndicator status={autoSave.status} />}
+            </div>
           </DialogHeader>
           <div className={cn(!editId && prepNotes.length > 0 ? 'grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-6' : '')}>
             {/* Prep Notes panel (only when creating, and notes exist) */}
@@ -1456,10 +1516,24 @@ function ConversationsTab({
           </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={saving}>
-              {saving ? 'Saving...' : editId ? 'Update' : 'Log Conversation'}
-            </Button>
+            {editId ? (
+              <>
+                {autoSave.isDirty && (
+                  <Button variant="outline" onClick={autoSave.revert}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Revert
+                  </Button>
+                )}
+                <Button onClick={() => setDialogOpen(false)}>Done</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleSubmit} disabled={saving}>
+                  {saving ? 'Saving...' : 'Log Conversation'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

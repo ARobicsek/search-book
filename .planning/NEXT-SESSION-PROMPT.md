@@ -29,14 +29,23 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-1. **In the search function, remove the link to the dashboard** — The command palette Navigate section shows "Dashboard" which is redundant
-2. **Make sure in global search the lozenges are the correct colors** — Ecosystem and status badges should use the same colors as elsewhere in the app
-3. **For company status, change the color of 'Active Target'** — Currently may share a color with another status; give it a unique color
-4. **Add a company status called 'In Discussions'** — New status with a unique color not used by other statuses
+*(Add tasks here)*
 
 ---
 
 ## What Was Completed Last Session
+
+### UI Polish + Vercel Git Integration
+1. **Removed Dashboard from command palette** — Navigate section now shows only Global Search, All Actions, Calendar
+2. **Fixed global search lozenge colors** — Ecosystem and status badges now use correct colors
+3. **Changed Active Target color** — Now indigo (was green, conflicted with Connected)
+4. **Added 'In Discussions' company status** — New status with violet color
+5. **Connected Vercel to GitHub** — Auto-deploys on push to main
+6. **Added prepush script** — Run before pushing to catch errors
+
+---
+
+## What Was Completed Previous Session
 
 ### UI Fixes + Global Search Feature
 1. **Fixed scroll arrows on contact card tab bar** — Removed `overflow-x-auto` from TabsList
@@ -74,9 +83,18 @@ If Prisma errors: `cd server && npx prisma generate`
 ---
 
 ## Production Deployment
+
+**Auto-deploys on push to main** — Vercel is connected to GitHub.
+
+**Before pushing, always run:**
 ```bash
-cd "c:\Users\ariro\OneDrive\Documents\Job research\SearchBook"
-vercel --prod
+npm run prepush
+```
+This catches TypeScript errors and missing files before they break the Vercel build.
+
+Then push:
+```bash
+git push
 ```
 
 To set environment variables (use printf to avoid newlines):

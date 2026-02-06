@@ -406,10 +406,6 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
             <CommandSeparator />
 
             <CommandGroup heading="Navigate">
-              <CommandItem onSelect={() => { close(); navigate('/') }}>
-                <Search className="mr-2 h-4 w-4" />
-                <span>Dashboard</span>
-              </CommandItem>
               <CommandItem onSelect={() => { close(); navigate('/search') }}>
                 <Search className="mr-2 h-4 w-4" />
                 <span>Global Search</span>

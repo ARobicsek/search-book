@@ -43,19 +43,25 @@ Potential approach:
 
 ## What Was Completed Last Session
 
-### PWA Icon + Calendar Fix
-1. **Installed @fullcalendar/list** — Fixes calendar build error; mobile calendar now uses list view
-2. **PWA icons** — Used existing Windows 95 pixel-art "S" scroll icon (`SearchBook icon.png`) for:
-   - pwa-192x192.png
-   - pwa-512x512.png
-   - apple-touch-icon.png
-3. **Browser favicon** — Changed from SVG to PNG for consistent branding
+### UI Fixes + Global Search Feature
+1. **Fixed scroll arrows on contact card tab bar** — Removed `overflow-x-auto` from TabsList
+2. **Mutual connections auto-create** — Contacts entered in "Mutual Connections" field now auto-create with status=CONNECTED if name doesn't exist
+3. **Global Search feature:**
+   - New `/api/search` endpoint — searches across contacts, companies, actions, ideas with related entities
+   - New `/search` page — with expandable result cards showing relationships (companies, contacts, actions, ideas, conversations)
+   - Enhanced command palette — live search results (debounced 300ms) as you type
+   - Mobile search button — 44px touch target in header, opens command palette on tap
 
-### Previous Session (Mobile UI)
-- Dashboard ActionRow with 44px touch targets
-- Column visibility on mobile (hide non-essential columns)
-- Responsive headers, filter bars, forms
-- Calendar mobile list view
+### How to use Global Search:
+- **Desktop:** Press Ctrl+K or navigate to `/search`
+- **Mobile:** Tap the search icon in the header
+- Search returns contacts, companies, actions, and ideas
+- Expand any result to see related entities (who they know, what actions exist, etc.)
+
+### Previous Session (PWA Icons)
+- Installed @fullcalendar/list for mobile calendar
+- PWA icons using Windows 95 pixel-art "S" scroll icon
+- Browser favicon changed to PNG
 
 ---
 

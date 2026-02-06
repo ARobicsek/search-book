@@ -12,7 +12,7 @@ import {
   flexRender,
 } from '@tanstack/react-table'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag, ChevronLeft, ChevronRight } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus, DatePrecision } from '@/lib/types'
@@ -344,6 +344,11 @@ export function ContactListPage() {
   })
   const [batchSaving, setBatchSaving] = useState(false)
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalContacts, setTotalContacts] = useState(0)
+  const pageSize = 50
+
   // Load companies once for searching additional company names
   useEffect(() => {
     api.get<{ id: number; name: string }[]>('/companies')
@@ -399,35 +404,27 @@ export function ContactListPage() {
 
   const columns = useMemo(() => buildColumns(toggleFlag), [contacts])
 
-  async function loadContacts() {
+  async function loadContacts(page = currentPage) {
+    setLoading(true)
     const params = new URLSearchParams()
     if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
     if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
     if (!includeNoOutreach) params.set('includeNoOutreach', 'false')
-    params.set('limit', '50') // Load up to 50 contacts per batch
+    params.set('limit', pageSize.toString())
+    params.set('offset', (page * pageSize).toString())
 
     try {
-      const allContacts: Contact[] = []
-      let offset = 0
-      let hasMore = true
+      const url = `/contacts?${params}`
+      const response = await api.get<{ data: Contact[]; pagination: { total: number; hasMore: boolean } } | Contact[]>(url)
 
-      while (hasMore) {
-        params.set('offset', offset.toString())
-        const url = `/contacts?${params}`
-        const response = await api.get<{ data: Contact[]; pagination: { total: number; hasMore: boolean } } | Contact[]>(url)
-
-        // Handle both paginated and legacy array responses
-        if (Array.isArray(response)) {
-          allContacts.push(...response)
-          hasMore = false
-        } else {
-          allContacts.push(...response.data)
-          hasMore = response.pagination.hasMore
-          offset += response.data.length
-        }
+      // Handle both paginated and legacy array responses
+      if (Array.isArray(response)) {
+        setContacts(response)
+        setTotalContacts(response.length)
+      } else {
+        setContacts(response.data)
+        setTotalContacts(response.pagination.total)
       }
-
-      setContacts(allContacts)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load contacts'
       toast.error(message)
@@ -436,9 +433,16 @@ export function ContactListPage() {
     }
   }
 
+  // Reset to page 0 when filters change
   useEffect(() => {
-    loadContacts()
+    setCurrentPage(0)
+    loadContacts(0)
   }, [lastOutreachFrom, lastOutreachTo, includeNoOutreach])
+
+  // Load contacts when page changes
+  useEffect(() => {
+    loadContacts(currentPage)
+  }, [currentPage])
 
   // Apply ecosystem, status, and flagged filters
   const filteredData = useMemo(() => {
@@ -596,7 +600,7 @@ export function ContactListPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Contacts</h1>
           <p className="text-sm text-muted-foreground">
-            {loading ? '' : `${table.getFilteredRowModel().rows.length} of ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
+            {loading ? '' : `${totalContacts} contact${totalContacts !== 1 ? 's' : ''}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -796,10 +800,42 @@ export function ContactListPage() {
         </Table>
       </div>
 
+      {/* Pagination controls */}
+      {totalContacts > pageSize && (
+        <div className="flex items-center justify-between px-2">
+          <p className="text-sm text-muted-foreground">
+            Showing {currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, totalContacts)} of {totalContacts} contacts
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+              disabled={currentPage === 0 || loading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage + 1} of {Math.ceil(totalContacts / pageSize)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => p + 1)}
+              disabled={(currentPage + 1) * pageSize >= totalContacts || loading}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <CsvImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        onImportComplete={loadContacts}
+        onImportComplete={() => loadContacts(0)}
       />
 
       {/* Batch action dialog */}

@@ -8,9 +8,11 @@ import {
   type ColumnDef,
   type SortingState,
   type ColumnFiltersState,
+  type VisibilityState,
   flexRender,
 } from '@tanstack/react-table'
 import { ArrowUpDown, Plus, Search, X } from 'lucide-react'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { api } from '@/lib/api'
 import type { Company, CompanyStatus } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS } from '@/lib/types'
@@ -165,10 +167,12 @@ const columns: ColumnDef<Company>[] = [
 
 export function CompanyListPage() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([{ id: 'updatedAt', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [globalFilter, setGlobalFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
@@ -186,13 +190,24 @@ export function CompanyListPage() {
     return companies.filter((c) => c.status === statusFilter)
   }, [companies, statusFilter])
 
+  // Hide columns on mobile for better readability
+  useEffect(() => {
+    setColumnVisibility({
+      industry: !isMobile,
+      size: !isMobile,
+      hqLocation: !isMobile,
+      updatedAt: !isMobile,
+    })
+  }, [isMobile])
+
   const table = useReactTable({
     data: filteredData,
     columns,
-    state: { sorting, columnFilters, globalFilter },
+    state: { sorting, columnFilters, globalFilter, columnVisibility },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -218,14 +233,14 @@ export function CompanyListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Companies</h1>
           <p className="text-sm text-muted-foreground">
             {loading ? '' : `${table.getFilteredRowModel().rows.length} of ${companies.length} compan${companies.length !== 1 ? 'ies' : 'y'}`}
           </p>
         </div>
-        <Button asChild>
+        <Button asChild size="sm" className="w-full sm:w-auto">
           <Link to="/companies/new">
             <Plus className="mr-2 h-4 w-4" />
             New Company
@@ -234,33 +249,35 @@ export function CompanyListPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+      <div className="flex flex-col gap-3 sm:flex-wrap sm:flex-row sm:items-center">
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search name, industry, location, notes..."
+            placeholder="Search name, industry, location..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="pl-8"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {COMPANY_STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            <X className="mr-1 h-4 w-4" />
-            Clear
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full min-w-[120px] sm:w-[150px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {COMPANY_STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="mr-1 h-4 w-4" />
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-md border">

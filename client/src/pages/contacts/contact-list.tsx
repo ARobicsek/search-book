@@ -8,8 +8,10 @@ import {
   type ColumnDef,
   type SortingState,
   type ColumnFiltersState,
+  type VisibilityState,
   flexRender,
 } from '@tanstack/react-table'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
@@ -317,11 +319,13 @@ function buildColumns(onToggleFlag: (contact: Contact) => void): ColumnDef<Conta
 
 export function ContactListPage() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [contacts, setContacts] = useState<Contact[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([{ id: 'updatedAt', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [globalFilter, setGlobalFilter] = useState('')
   const [ecosystemFilter, setEcosystemFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -429,13 +433,25 @@ export function ContactListPage() {
 
   const flaggedCount = contacts.filter((c) => c.flagged).length
 
+  // Hide columns on mobile for better readability
+  useEffect(() => {
+    setColumnVisibility({
+      title: !isMobile,
+      ecosystem: !isMobile,
+      location: !isMobile,
+      updatedAt: !isMobile,
+      lastOutreachDate: !isMobile,
+    })
+  }, [isMobile])
+
   const table = useReactTable({
     data: filteredData,
     columns,
-    state: { sorting, columnFilters, globalFilter },
+    state: { sorting, columnFilters, globalFilter, columnVisibility },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -552,23 +568,23 @@ export function ContactListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Contacts</h1>
           <p className="text-sm text-muted-foreground">
             {loading ? '' : `${table.getFilteredRowModel().rows.length} of ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)} className="flex-1 sm:flex-initial">
             <Upload className="mr-2 h-4 w-4" />
             Import
           </Button>
-          <Button variant="outline" onClick={exportToCsv}>
+          <Button variant="outline" size="sm" onClick={exportToCsv} className="flex-1 sm:flex-initial">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button asChild>
+          <Button asChild size="sm" className="flex-1 sm:flex-initial">
             <Link to="/contacts/new">
               <Plus className="mr-2 h-4 w-4" />
               New Contact
@@ -578,47 +594,50 @@ export function ContactListPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+      <div className="flex flex-col gap-3 sm:flex-wrap sm:flex-row sm:items-center">
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search name, title, company, notes..."
+            placeholder="Search name, title, company..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="pl-8"
           />
         </div>
-        <Select value={ecosystemFilter} onValueChange={setEcosystemFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Ecosystem" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Ecosystems</SelectItem>
-            {ECOSYSTEM_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {CONTACT_STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className={hasDateFilter ? 'border-primary' : ''}>
-              <Calendar className="mr-2 h-4 w-4" />
-              {hasDateFilter
-                ? `${lastOutreachFrom || '...'} to ${lastOutreachTo || '...'}`
-                : 'Last Outreach'}
-            </Button>
-          </PopoverTrigger>
+        <div className="flex flex-wrap gap-2">
+          <Select value={ecosystemFilter} onValueChange={setEcosystemFilter}>
+            <SelectTrigger className="w-full min-w-[120px] sm:w-[150px]">
+              <SelectValue placeholder="Ecosystem" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Ecosystems</SelectItem>
+              {ECOSYSTEM_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full min-w-[120px] sm:w-[150px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {CONTACT_STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={`flex-1 sm:flex-initial ${hasDateFilter ? 'border-primary' : ''}`}>
+                <Calendar className="mr-2 h-4 w-4" />
+                <span className="truncate">
+                  {hasDateFilter
+                    ? `${lastOutreachFrom || '...'} - ${lastOutreachTo || '...'}`
+                    : 'Outreach'}
+                </span>
+              </Button>
+            </PopoverTrigger>
           <PopoverContent className="w-80" align="start">
             <div className="space-y-4">
               <div className="space-y-2">
@@ -664,37 +683,42 @@ export function ContactListPage() {
               )}
             </div>
           </PopoverContent>
-        </Popover>
-        <Button
-          variant={showFlaggedOnly ? 'default' : 'outline'}
-          onClick={() => setShowFlaggedOnly(!showFlaggedOnly)}
-          className={showFlaggedOnly ? '' : ''}
-        >
-          <Flag className="mr-2 h-4 w-4" />
-          Flagged{flaggedCount > 0 ? ` (${flaggedCount})` : ''}
-        </Button>
-        {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            <X className="mr-1 h-4 w-4" />
-            Clear
+          </Popover>
+          <Button
+            variant={showFlaggedOnly ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowFlaggedOnly(!showFlaggedOnly)}
+            className="flex-1 sm:flex-initial"
+          >
+            <Flag className="mr-2 h-4 w-4" />
+            Flagged{flaggedCount > 0 ? ` (${flaggedCount})` : ''}
           </Button>
-        )}
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="mr-1 h-4 w-4" />
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Batch action toolbar */}
       {flaggedCount > 0 && (
-        <div className="flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2">
-          <Flag className="h-4 w-4 fill-amber-500 text-amber-500" />
-          <span className="text-sm font-medium">
-            {flaggedCount} contact{flaggedCount !== 1 ? 's' : ''} flagged
-          </span>
-          <div className="flex-1" />
-          <Button size="sm" variant="outline" onClick={clearAllFlags}>
-            Clear Flags
-          </Button>
-          <Button size="sm" onClick={() => setBatchDialogOpen(true)}>
-            Create Action for Flagged
-          </Button>
+        <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-4">
+          <div className="flex items-center gap-2">
+            <Flag className="h-4 w-4 shrink-0 fill-amber-500 text-amber-500" />
+            <span className="text-sm font-medium">
+              {flaggedCount} contact{flaggedCount !== 1 ? 's' : ''} flagged
+            </span>
+          </div>
+          <div className="flex flex-1 gap-2 sm:justify-end">
+            <Button size="sm" variant="outline" onClick={clearAllFlags} className="flex-1 sm:flex-initial">
+              Clear Flags
+            </Button>
+            <Button size="sm" onClick={() => setBatchDialogOpen(true)} className="flex-1 sm:flex-initial">
+              Create Action
+            </Button>
+          </div>
         </div>
       )}
 

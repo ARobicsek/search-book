@@ -146,9 +146,9 @@ export function ActionDetailPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/actions')}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate('/actions')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -178,26 +178,27 @@ export function ActionDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={handleToggleComplete}
             disabled={toggling}
+            className="flex-1 sm:flex-initial"
           >
             {action.completed ? (
               <>
                 <Circle className="mr-2 h-4 w-4" />
-                Mark Incomplete
+                Incomplete
               </>
             ) : (
               <>
                 <Check className="mr-2 h-4 w-4" />
-                Mark Complete
+                Complete
               </>
             )}
           </Button>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" asChild className="flex-1 sm:flex-initial">
             <Link to={`/actions/${action.id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
@@ -205,7 +206,7 @@ export function ActionDetailPage() {
           </Button>
           <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </Button>

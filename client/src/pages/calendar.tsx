@@ -4,11 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
+import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
 import type { EventClickArg } from '@fullcalendar/core'
 import { api } from '@/lib/api'
 import type { Action } from '@/lib/types'
 import { toast } from 'sonner'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 function getEventColor(action: Action): string {
   if (action.completed) return '#86efac' // green-300
@@ -30,6 +32,7 @@ function getTextColor(action: Action): string {
 
 export function CalendarPage() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [actions, setActions] = useState<Action[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -74,11 +77,15 @@ export function CalendarPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
-      <div className="rounded-md border bg-background p-4">
+      <div className="rounded-md border bg-background p-2 sm:p-4">
         <FullCalendar
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          headerToolbar={{
+          plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+          initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
+          headerToolbar={isMobile ? {
+            left: 'prev,next',
+            center: 'title',
+            right: 'listWeek,dayGridMonth',
+          } : {
             left: 'prev,next today',
             center: 'title',
             right: 'dayGridMonth,timeGridWeek',
@@ -86,7 +93,7 @@ export function CalendarPage() {
           events={events}
           eventClick={handleEventClick}
           height="auto"
-          dayMaxEvents={4}
+          dayMaxEvents={isMobile ? 2 : 4}
           nowIndicator
         />
       </div>

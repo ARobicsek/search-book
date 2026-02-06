@@ -502,10 +502,10 @@ export function ActionFormPage() {
 
         {/* Submit */}
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving} className="flex-1 sm:flex-initial">
             {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Action'}
           </Button>
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+          <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
             Cancel
           </Button>
         </div>

@@ -59,41 +59,43 @@ interface ActionRowProps {
 
 function ActionRow({ action, onToggle, showDate }: ActionRowProps) {
   return (
-    <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
+    <div className="flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50 sm:items-center">
       <button
         onClick={() => onToggle(action)}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${action.completed
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg sm:h-5 sm:w-5 sm:rounded transition-colors ${action.completed
             ? 'border-green-500 bg-green-500 text-white'
-            : 'border-muted-foreground/30 hover:border-green-500'
+            : 'border border-muted-foreground/30 hover:border-green-500 sm:border'
           }`}
       >
-        {action.completed && <Check className="h-3 w-3" />}
+        {action.completed && <Check className="h-5 w-5 sm:h-3 sm:w-3" />}
       </button>
-      <Link
-        to={`/actions/${action.id}`}
-        className={`flex-1 text-sm font-medium hover:underline ${action.completed ? 'text-muted-foreground line-through' : ''
-          }`}
-      >
-        {action.title}
-      </Link>
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className={`text-xs ${typeColors[action.type as ActionType]}`}>
-          {getLabel(action.type, ACTION_TYPE_OPTIONS)}
-        </Badge>
-        <Badge variant="outline" className={`text-xs ${priorityColors[action.priority as ActionPriority]}`}>
-          {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
-        </Badge>
-        {action.contact && (
-          <Link
-            to={`/contacts/${action.contact.id}`}
-            className="text-xs text-muted-foreground hover:underline"
-          >
-            {action.contact.name}
-          </Link>
-        )}
-        {showDate && action.dueDate && (
-          <span className="text-xs text-muted-foreground">{formatDateShort(action.dueDate)}</span>
-        )}
+      <div className="flex-1 min-w-0">
+        <Link
+          to={`/actions/${action.id}`}
+          className={`text-sm font-medium hover:underline block truncate ${action.completed ? 'text-muted-foreground line-through' : ''
+            }`}
+        >
+          {action.title}
+        </Link>
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+          <Badge variant="outline" className={`text-xs ${typeColors[action.type as ActionType]}`}>
+            {getLabel(action.type, ACTION_TYPE_OPTIONS)}
+          </Badge>
+          <Badge variant="outline" className={`text-xs ${priorityColors[action.priority as ActionPriority]}`}>
+            {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
+          </Badge>
+          {action.contact && (
+            <Link
+              to={`/contacts/${action.contact.id}`}
+              className="text-xs text-muted-foreground hover:underline"
+            >
+              {action.contact.name}
+            </Link>
+          )}
+          {showDate && action.dueDate && (
+            <span className="text-xs text-muted-foreground">{formatDateShort(action.dueDate)}</span>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -165,7 +167,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
@@ -177,7 +179,7 @@ export function DashboardPage() {
             })}
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="w-full sm:w-auto">
           <Link to="/actions/new">
             <Plus className="mr-2 h-4 w-4" />
             New Action

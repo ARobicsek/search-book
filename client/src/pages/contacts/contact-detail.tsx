@@ -270,9 +270,9 @@ export function ContactDetailPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/contacts')}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate('/contacts')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -399,8 +399,8 @@ export function ContactDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button variant="outline" size="sm" asChild className="flex-1 sm:flex-initial">
             <Link to={`/contacts/${contact.id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
@@ -408,7 +408,7 @@ export function ContactDetailPage() {
           </Button>
           <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </Button>
@@ -442,26 +442,26 @@ export function ContactDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="overview" className="shrink-0">
             <User className="mr-1 h-4 w-4" />
             Overview
           </TabsTrigger>
-          <TabsTrigger value="conversations">
+          <TabsTrigger value="conversations" className="shrink-0">
             <MessageSquare className="mr-1 h-4 w-4" />
             Conversations
             {conversations.length > 0 && (
               <span className="ml-1 text-xs text-muted-foreground">({conversations.length})</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="relationships">
+          <TabsTrigger value="relationships" className="shrink-0">
             <Users className="mr-1 h-4 w-4" />
             Relationships
             {relationships.length > 0 && (
               <span className="ml-1 text-xs text-muted-foreground">({relationships.length})</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="prep">
+          <TabsTrigger value="prep" className="shrink-0">
             <FileText className="mr-1 h-4 w-4" />
             Prep Sheet
           </TabsTrigger>

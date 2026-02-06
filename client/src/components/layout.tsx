@@ -13,13 +13,13 @@ export function Layout() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 !h-4" />
           <span className="text-sm text-muted-foreground">SearchBook</span>
-          <span className="ml-auto text-xs text-muted-foreground">
+          <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
             <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px]">Ctrl</kbd>
             {' + '}
             <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px]">K</kbd>
           </span>
         </header>
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-3 sm:p-6">
           <Outlet />
         </main>
       </SidebarInset>

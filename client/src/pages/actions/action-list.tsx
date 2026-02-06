@@ -4,16 +4,21 @@ import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
   type ColumnDef,
   type SortingState,
+  type FilterFn,
+  type VisibilityState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus, Check } from 'lucide-react'
+import { ArrowUpDown, Plus, Check, Search } from 'lucide-react'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { api } from '@/lib/api'
 import type { Action, ActionType, ActionPriority } from '@/lib/types'
 import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -63,12 +68,31 @@ function isOverdue(action: Action): boolean {
   return action.dueDate < today
 }
 
+// Global filter function for searching across multiple fields
+const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) => {
+  const search = filterValue.toLowerCase()
+  const action = row.original
+
+  // Search across title, description, contact name, company name
+  const searchFields = [
+    action.title,
+    action.description,
+    action.contact?.name,
+    action.company?.name,
+  ]
+
+  return searchFields.some((field) => field?.toLowerCase().includes(search))
+}
+
 export function ActionListPage() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [actions, setActions] = useState<Action[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([])
   const [filter, setFilter] = useState<FilterStatus>('pending')
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
 
   const fetchActions = useCallback(() => {
     const params = new URLSearchParams()
@@ -109,13 +133,13 @@ export function ActionListPage() {
       cell: ({ row }) => (
         <button
           onClick={(e) => toggleComplete(e, row.original)}
-          className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+          className={`flex h-11 w-11 sm:h-5 sm:w-5 items-center justify-center rounded-lg sm:rounded border transition-colors ${
             row.original.completed
               ? 'border-green-500 bg-green-500 text-white'
               : 'border-muted-foreground/30 hover:border-green-500'
           }`}
         >
-          {row.original.completed && <Check className="h-3 w-3" />}
+          {row.original.completed && <Check className="h-5 w-5 sm:h-3 sm:w-3" />}
         </button>
       ),
       size: 40,
@@ -282,13 +306,27 @@ export function ActionListPage() {
       : []),
   ]
 
+  // Hide columns on mobile for better readability
+  useEffect(() => {
+    setColumnVisibility({
+      priority: !isMobile,
+      company: !isMobile,
+      dueDate: !isMobile,
+      completedDate: !isMobile,
+    })
+  }, [isMobile])
+
   const table = useReactTable({
     data: actions,
     columns,
-    state: { sorting },
+    state: { sorting, globalFilter, columnVisibility },
     onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    onColumnVisibilityChange: setColumnVisibility,
+    globalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
   })
 
   const filterButtons: { value: FilterStatus; label: string }[] = [
@@ -300,14 +338,14 @@ export function ActionListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Actions</h1>
           <p className="text-sm text-muted-foreground">
             {loading ? '' : `${actions.length} action${actions.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button asChild>
+        <Button asChild size="sm" className="w-full sm:w-auto">
           <Link to="/actions/new">
             <Plus className="mr-2 h-4 w-4" />
             New Action
@@ -315,17 +353,29 @@ export function ActionListPage() {
         </Button>
       </div>
 
-      <div className="flex gap-1 rounded-lg border p-1">
-        {filterButtons.map((fb) => (
-          <Button
-            key={fb.value}
-            variant={filter === fb.value ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setFilter(fb.value)}
-          >
-            {fb.label}
-          </Button>
-        ))}
+      <div className="flex flex-col gap-3 sm:flex-wrap sm:flex-row sm:items-center">
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search actions..."
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <div className="flex gap-1 rounded-lg border p-1 overflow-x-auto">
+          {filterButtons.map((fb) => (
+            <Button
+              key={fb.value}
+              variant={filter === fb.value ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setFilter(fb.value)}
+              className="shrink-0"
+            >
+              {fb.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       <div className="rounded-md border">

@@ -49,8 +49,8 @@ export function IdeaListPage() {
     title: '',
     description: '',
     tags: '',
-    contactIds: [] as number[],
-    companyIds: [] as number[],
+    contactValues: [] as string[], // Can be IDs (numeric strings) or new names
+    companyValues: [] as string[], // Can be IDs (numeric strings) or new names
   })
 
   function loadIdeas() {
@@ -83,7 +83,7 @@ export function IdeaListPage() {
 
   function openNew() {
     setEditId(null)
-    setForm({ title: '', description: '', tags: '', contactIds: [], companyIds: [] })
+    setForm({ title: '', description: '', tags: '', contactValues: [], companyValues: [] })
     setDialogOpen(true)
   }
 
@@ -93,8 +93,8 @@ export function IdeaListPage() {
       title: idea.title,
       description: idea.description || '',
       tags: idea.tags || '',
-      contactIds: idea.contacts?.map((ic) => ic.contact.id) || [],
-      companyIds: idea.companies?.map((ic) => ic.company.id) || [],
+      contactValues: idea.contacts?.map((ic) => ic.contact.id.toString()) || [],
+      companyValues: idea.companies?.map((ic) => ic.company.id.toString()) || [],
     })
     setDialogOpen(true)
   }
@@ -106,12 +106,55 @@ export function IdeaListPage() {
     }
     setSaving(true)
     try {
+      // Process contact values - create new contacts if needed
+      const contactIds: number[] = []
+      for (const val of form.contactValues) {
+        const existingContact = allContacts.find((c) => c.id.toString() === val)
+        if (existingContact) {
+          contactIds.push(existingContact.id)
+        } else if (val.trim()) {
+          // Create new contact
+          try {
+            const newContact = await api.post<Contact>('/contacts', {
+              name: val.trim(),
+              status: 'CONNECTED',
+              ecosystem: 'ROLODEX',
+            })
+            contactIds.push(newContact.id)
+            setAllContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }])
+          } catch {
+            // Skip if creation fails
+          }
+        }
+      }
+
+      // Process company values - create new companies if needed
+      const companyIds: number[] = []
+      for (const val of form.companyValues) {
+        const existingCompany = allCompanies.find((c) => c.id.toString() === val)
+        if (existingCompany) {
+          companyIds.push(existingCompany.id)
+        } else if (val.trim()) {
+          // Create new company
+          try {
+            const newCompany = await api.post<Company>('/companies', {
+              name: val.trim(),
+              status: 'CONNECTED',
+            })
+            companyIds.push(newCompany.id)
+            setAllCompanies((prev) => [...prev, { id: newCompany.id, name: newCompany.name }])
+          } catch {
+            // Skip if creation fails
+          }
+        }
+      }
+
       const payload = {
         title: form.title.trim(),
         description: form.description.trim() || null,
         tags: form.tags.trim() || null,
-        contactIds: form.contactIds,
-        companyIds: form.companyIds,
+        contactIds,
+        companyIds,
       }
       if (editId) {
         await api.put(`/ideas/${editId}`, payload)
@@ -146,21 +189,21 @@ export function IdeaListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Ideas</h1>
           <p className="text-sm text-muted-foreground">
             {loading ? '' : `${filteredIdeas.length} of ${ideas.length} idea${ideas.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button onClick={openNew}>
+        <Button onClick={openNew} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           New Idea
         </Button>
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
+      <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search ideas..."
@@ -198,18 +241,18 @@ export function IdeaListPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-9 w-9 sm:h-7 sm:w-7"
                       onClick={() => openEdit(idea)}
                     >
-                      <Pencil className="h-3 w-3" />
+                      <Pencil className="h-4 w-4 sm:h-3 sm:w-3" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-9 w-9 sm:h-7 sm:w-7"
                       onClick={() => setDeleteId(idea.id)}
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-4 w-4 sm:h-3 sm:w-3" />
                     </Button>
                   </div>
                 </div>
@@ -297,20 +340,22 @@ export function IdeaListPage() {
               <Label>Related Contacts</Label>
               <MultiCombobox
                 options={allContacts.map((c) => ({ value: c.id.toString(), label: c.name }))}
-                values={form.contactIds.map(String)}
-                onChange={(vals) => setForm((p) => ({ ...p, contactIds: vals.map(Number) }))}
-                placeholder="Select contacts..."
+                values={form.contactValues}
+                onChange={(vals) => setForm((p) => ({ ...p, contactValues: vals }))}
+                placeholder="Search or type new name..."
                 searchPlaceholder="Search contacts..."
+                allowFreeText={true}
               />
             </div>
             <div className="space-y-2">
               <Label>Related Companies</Label>
               <MultiCombobox
                 options={allCompanies.map((c) => ({ value: c.id.toString(), label: c.name }))}
-                values={form.companyIds.map(String)}
-                onChange={(vals) => setForm((p) => ({ ...p, companyIds: vals.map(Number) }))}
-                placeholder="Select companies..."
+                values={form.companyValues}
+                onChange={(vals) => setForm((p) => ({ ...p, companyValues: vals }))}
+                placeholder="Search or type new name..."
                 searchPlaceholder="Search companies..."
+                allowFreeText={true}
               />
             </div>
           </div>

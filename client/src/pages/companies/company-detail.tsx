@@ -191,9 +191,9 @@ export function CompanyDetailPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/companies')}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate('/companies')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -208,8 +208,8 @@ export function CompanyDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button variant="outline" size="sm" asChild className="flex-1 sm:flex-initial">
             <Link to={`/companies/${company.id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
@@ -217,7 +217,7 @@ export function CompanyDetailPage() {
           </Button>
           <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </Button>

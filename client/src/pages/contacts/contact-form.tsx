@@ -202,11 +202,8 @@ export function ContactFormPage() {
 
   useEffect(() => {
     api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
-    api.get<{ data: Contact[] } | Contact[]>('/contacts?limit=200').then(
-      (res) => {
-        const data = Array.isArray(res) ? res : res.data
-        setAllContacts(data.map((c) => ({ id: c.id, name: c.name })))
-      }
+    api.get<{ id: number; name: string }[]>('/contacts/names').then(
+      (data) => setAllContacts(data)
     ).catch(() => {})
 
     if (isEdit && id) {

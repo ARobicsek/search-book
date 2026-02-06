@@ -404,7 +404,7 @@ export function ContactListPage() {
     if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
     if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
     if (!includeNoOutreach) params.set('includeNoOutreach', 'false')
-    params.set('limit', '200') // Load up to 200 contacts per batch
+    params.set('limit', '50') // Load up to 50 contacts per batch
 
     try {
       const allContacts: Contact[] = []

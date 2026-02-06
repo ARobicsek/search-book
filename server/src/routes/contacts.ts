@@ -59,6 +59,20 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/contacts/names — lightweight list of just id/name for comboboxes
+router.get('/names', async (_req: Request, res: Response) => {
+  try {
+    const contacts = await prisma.contact.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json(contacts);
+  } catch (error) {
+    console.error('Error fetching contact names:', error);
+    res.status(500).json({ error: 'Failed to fetch contact names' });
+  }
+});
+
 // GET /api/contacts/without-actions — contacts with no pending actions
 router.get('/without-actions', async (_req: Request, res: Response) => {
   try {

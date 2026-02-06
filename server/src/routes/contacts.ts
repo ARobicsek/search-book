@@ -30,23 +30,19 @@ router.get('/', async (req: Request, res: Response) => {
     const lastOutreachMap = new Map<number, { date: string; precision: string }>();
 
     if (contactIds.length > 0) {
-      // Get most recent conversation for each contact on this page
-      const conversationData = await prisma.conversationContact.findMany({
+      // Get all conversations for contacts on this page
+      const conversations = await prisma.conversation.findMany({
         where: { contactId: { in: contactIds } },
-        include: {
-          conversation: {
-            select: { date: true, datePrecision: true },
-          },
-        },
+        select: { contactId: true, date: true, datePrecision: true },
       });
 
       // Group by contactId and find max date
-      for (const cc of conversationData) {
-        const existing = lastOutreachMap.get(cc.contactId);
-        if (!existing || cc.conversation.date > existing.date) {
-          lastOutreachMap.set(cc.contactId, {
-            date: cc.conversation.date,
-            precision: cc.conversation.datePrecision,
+      for (const conv of conversations) {
+        const existing = lastOutreachMap.get(conv.contactId);
+        if (!existing || conv.date > existing.date) {
+          lastOutreachMap.set(conv.contactId, {
+            date: conv.date,
+            precision: conv.datePrecision,
           });
         }
       }

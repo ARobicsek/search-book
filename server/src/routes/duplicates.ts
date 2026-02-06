@@ -86,10 +86,33 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
-// POST /api/duplicates/merge — merge two contacts
+// Field selection type for merge
+type FieldSelection = 1 | 2;
+interface FieldSelections {
+  name?: FieldSelection;
+  email?: FieldSelection;
+  phone?: FieldSelection;
+  title?: FieldSelection;
+  linkedinUrl?: FieldSelection;
+  ecosystem?: FieldSelection;
+  status?: FieldSelection;
+  location?: FieldSelection;
+  howConnected?: FieldSelection;
+  personalDetails?: FieldSelection;
+  roleDescription?: FieldSelection;
+  notes?: FieldSelection;
+  photoFile?: FieldSelection;
+  photoUrl?: FieldSelection;
+}
+
+// POST /api/duplicates/merge — merge two contacts with field selection
 router.post('/merge', async (req: Request, res: Response) => {
   try {
-    const { keepId, removeId } = req.body;
+    const { keepId, removeId, fieldSelections } = req.body as {
+      keepId: number;
+      removeId: number;
+      fieldSelections?: FieldSelections;
+    };
     if (!keepId || !removeId || keepId === removeId) {
       res.status(400).json({ error: 'keepId and removeId are required and must be different' });
       return;
@@ -105,7 +128,38 @@ router.post('/merge', async (req: Request, res: Response) => {
       return;
     }
 
+    // Determine which contact is "1" and which is "2" based on IDs
+    // Contact 1 = lower ID, Contact 2 = higher ID (consistent with frontend)
+    const contact1 = keepId < removeId ? keep : remove;
+    const contact2 = keepId < removeId ? remove : keep;
+
     await prisma.$transaction(async (tx) => {
+      // If fieldSelections provided, update the kept contact with selected field values
+      if (fieldSelections) {
+        const updateData: Record<string, unknown> = {};
+
+        const selectableFields = [
+          'name', 'email', 'phone', 'title', 'linkedinUrl', 'ecosystem',
+          'status', 'location', 'howConnected', 'personalDetails',
+          'roleDescription', 'notes', 'photoFile', 'photoUrl'
+        ] as const;
+
+        for (const field of selectableFields) {
+          const selection = fieldSelections[field];
+          if (selection) {
+            // Get value from selected contact (1 or 2)
+            const sourceContact = selection === 1 ? contact1 : contact2;
+            updateData[field] = sourceContact[field];
+          }
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await tx.contact.update({
+            where: { id: keepId },
+            data: updateData,
+          });
+        }
+      }
       // Move conversations
       await tx.conversation.updateMany({
         where: { contactId: removeId },

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Action, Contact, Company, LinkRecord } from '@/lib/types'
@@ -23,7 +23,9 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw } from 'lucide-react'
+import { useAutoSave } from '@/hooks/use-auto-save'
+import { SaveStatusIndicator } from '@/components/save-status'
 
 interface LinkEntry {
   url: string
@@ -107,6 +109,7 @@ export function ActionFormPage() {
     if (qCompanyId) initial.companyId = qCompanyId
     return initial
   })
+  const [originalForm, setOriginalForm] = useState<FormData | null>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(isEdit)
@@ -138,10 +141,12 @@ export function ActionFormPage() {
         api.get<LinkRecord[]>(`/links?actionId=${id}`),
       ])
         .then(([action, links]) => {
-          setForm({
+          const formData = {
             ...actionToForm(action),
             links: links.map((l) => ({ url: l.url, title: l.title })),
-          })
+          }
+          setForm(formData)
+          setOriginalForm(formData)
           setExistingLinkIds(links.map((l) => l.id))
         })
         .catch((err) => {
@@ -152,16 +157,33 @@ export function ActionFormPage() {
     }
   }, [id, isEdit, navigate])
 
-  function validate(): boolean {
+  function validate(data: FormData = form): boolean {
     const errs: Record<string, string> = {}
-    if (!form.title.trim()) errs.title = 'Title is required'
-    if (form.recurring && form.recurringIntervalDays) {
-      const days = parseInt(form.recurringIntervalDays)
+    if (!data.title.trim()) errs.title = 'Title is required'
+    if (data.recurring && data.recurringIntervalDays) {
+      const days = parseInt(data.recurringIntervalDays)
       if (isNaN(days) || days < 1) errs.recurringIntervalDays = 'Must be a positive number'
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
+
+  // Auto-save handler for edit mode - saves action fields only, not links
+  const handleAutoSave = useCallback(async (data: FormData) => {
+    const payload = formToPayload(data)
+    await api.put(`/actions/${id}`, payload)
+    // Note: Links are not auto-saved - they'll save when user clicks Done
+  }, [id])
+
+  // Use auto-save hook (only in edit mode)
+  const autoSave = useAutoSave({
+    data: form,
+    originalData: originalForm,
+    onSave: handleAutoSave,
+    validate: (data) => validate(data),
+    enabled: isEdit,
+    onRevert: setForm,
+  })
 
   // Link helpers
   function addLink() {
@@ -263,13 +285,31 @@ export function ActionFormPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {isEdit ? 'Edit Action' : 'New Action'}
-        </h1>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isEdit ? 'Edit Action' : 'New Action'}
+          </h1>
+        </div>
+        {isEdit && (
+          <div className="flex items-center gap-2">
+            <SaveStatusIndicator status={autoSave.status} />
+            {autoSave.isDirty && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={autoSave.revert}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Revert
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -429,7 +469,7 @@ export function ActionFormPage() {
               />
               {newContactName && !form.contactId && (
                 <p className="text-xs text-muted-foreground">
-                  A new contact will be created automatically.
+                  A new contact will be created when you click Done.
                 </p>
               )}
             </div>
@@ -454,7 +494,7 @@ export function ActionFormPage() {
               />
               {newCompanyName && !form.companyId && (
                 <p className="text-xs text-muted-foreground">
-                  A new company will be created automatically.
+                  A new company will be created when you click Done.
                 </p>
               )}
             </div>
@@ -502,9 +542,23 @@ export function ActionFormPage() {
 
         {/* Submit */}
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={saving} className="flex-1 sm:flex-initial">
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Action'}
-          </Button>
+          {isEdit ? (
+            <Button
+              type="button"
+              onClick={() => {
+                // Trigger full save with link management before navigating
+                handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+              }}
+              disabled={saving}
+              className="flex-1 sm:flex-initial"
+            >
+              {saving ? 'Saving...' : 'Done'}
+            </Button>
+          ) : (
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-initial">
+              {saving ? 'Saving...' : 'Create Action'}
+            </Button>
+          )}
           <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
             Cancel
           </Button>

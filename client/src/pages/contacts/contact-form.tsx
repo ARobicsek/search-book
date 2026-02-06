@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Contact, Company } from '@/lib/types'
@@ -29,7 +29,9 @@ import {
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
-import { ArrowLeft, ChevronDown, Plus, Trash2 , Loader2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw } from 'lucide-react'
+import { useAutoSave } from '@/hooks/use-auto-save'
+import { SaveStatusIndicator } from '@/components/save-status'
 
 type CompanyEntry = {
   value: string // company ID (numeric string) or new name
@@ -180,6 +182,7 @@ export function ContactFormPage() {
   const isEdit = Boolean(id)
 
   const [form, setForm] = useState<FormData>(emptyForm)
+  const [originalForm, setOriginalForm] = useState<FormData | null>(null)
   const [companies, setCompanies] = useState<Company[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(isEdit)
@@ -209,6 +212,7 @@ export function ContactFormPage() {
         .then((contact) => {
           const f = contactToForm(contact)
           setForm(f)
+          setOriginalForm(f)
           // Open sections that have data
           if (f.phone || f.linkedinUrl) setContactDetailsOpen(true)
           if (f.howConnected || f.mutualConnections.length > 0) setConnectionDetailsOpen(true)
@@ -223,16 +227,40 @@ export function ContactFormPage() {
     }
   }, [id, isEdit, navigate])
 
-  function validate(): boolean {
+  function validate(data: FormData = form): boolean {
     const errs: Record<string, string> = {}
-    if (!form.name.trim()) errs.name = 'Name is required'
-    const invalidEmail = form.emails.find((e) => e.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim()))
+    if (!data.name.trim()) errs.name = 'Name is required'
+    const invalidEmail = data.emails.find((e) => e.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim()))
     if (invalidEmail) errs.email = `Invalid email format: ${invalidEmail}`
-    if (form.linkedinUrl && !form.linkedinUrl.startsWith('http'))
+    if (data.linkedinUrl && !data.linkedinUrl.startsWith('http'))
       errs.linkedinUrl = 'URL must start with http'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
+
+  // Auto-save handler for edit mode - only saves existing company IDs, not new names
+  const handleAutoSave = useCallback(async (data: FormData) => {
+    // Only include company entries that are existing IDs (not new company names)
+    const existingCompanyEntries = data.companyEntries
+      .filter(entry => companies.some(c => c.id.toString() === entry.value))
+      .map(entry => ({ id: parseInt(entry.value), isCurrent: entry.isCurrent }))
+
+    const payload = formToPayload(data, existingCompanyEntries)
+    // Remove referredByName for auto-save (don't auto-create)
+    delete (payload as { referredByName?: string | null }).referredByName
+
+    await api.put(`/contacts/${id}`, payload)
+  }, [id, companies])
+
+  // Use auto-save hook (only in edit mode)
+  const autoSave = useAutoSave({
+    data: form,
+    originalData: originalForm,
+    onSave: handleAutoSave,
+    validate: (data) => validate(data),
+    enabled: isEdit,
+    onRevert: setForm,
+  })
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -346,12 +374,38 @@ export function ContactFormPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="submit" form="contact-form" disabled={saving} className="flex-1 sm:flex-initial">
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Contact'}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
-            Cancel
-          </Button>
+          {isEdit ? (
+            <>
+              <SaveStatusIndicator status={autoSave.status} />
+              {autoSave.isDirty && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={autoSave.revert}
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Revert
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={() => navigate(`/contacts/${id}`)}
+                className="flex-1 sm:flex-initial"
+              >
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="submit" form="contact-form" disabled={saving} className="flex-1 sm:flex-initial">
+                {saving ? 'Saving...' : 'Create Contact'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
+                Cancel
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -503,7 +557,7 @@ export function ContactFormPage() {
                 )}
                 {form.companyEntries.some((e) => e.value && !companies.some((c) => c.id.toString() === e.value)) && (
                   <p className="text-xs text-muted-foreground">
-                    New companies will be created automatically.
+                    New companies will be created when you click Done.
                   </p>
                 )}
               </div>
@@ -776,15 +830,17 @@ export function ContactFormPage() {
           </Card>
         </Collapsible>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={saving}>
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Contact'}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-            Cancel
-          </Button>
-        </div>
+        {/* Bottom actions only for create mode */}
+        {!isEdit && (
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={saving}>
+              {saving ? 'Saving...' : 'Create Contact'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+              Cancel
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   )

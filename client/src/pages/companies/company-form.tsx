@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Company } from '@/lib/types'
@@ -22,7 +22,9 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft , Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, RotateCcw } from 'lucide-react'
+import { useAutoSave } from '@/hooks/use-auto-save'
+import { SaveStatusIndicator } from '@/components/save-status'
 
 type FormData = {
   name: string
@@ -74,6 +76,7 @@ export function CompanyFormPage() {
   const isEdit = Boolean(id)
 
   const [form, setForm] = useState<FormData>(emptyForm)
+  const [originalForm, setOriginalForm] = useState<FormData | null>(null)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -82,7 +85,11 @@ export function CompanyFormPage() {
     if (isEdit && id) {
       api
         .get<Company>(`/companies/${id}`)
-        .then((company) => setForm(companyToForm(company)))
+        .then((company) => {
+          const formData = companyToForm(company)
+          setForm(formData)
+          setOriginalForm(formData)
+        })
         .catch((err) => {
           toast.error(err.message)
           navigate('/companies')
@@ -91,14 +98,30 @@ export function CompanyFormPage() {
     }
   }, [id, isEdit, navigate])
 
-  function validate(): boolean {
+  function validate(data: FormData = form): boolean {
     const errs: Record<string, string> = {}
-    if (!form.name.trim()) errs.name = 'Name is required'
-    if (form.website && !form.website.startsWith('http'))
+    if (!data.name.trim()) errs.name = 'Name is required'
+    if (data.website && !data.website.startsWith('http'))
       errs.website = 'URL must start with http'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
+
+  // Auto-save handler for edit mode
+  const handleAutoSave = useCallback(async (data: FormData) => {
+    const payload = formToPayload(data)
+    await api.put(`/companies/${id}`, payload)
+  }, [id])
+
+  // Use auto-save hook (only in edit mode)
+  const autoSave = useAutoSave({
+    data: form,
+    originalData: originalForm,
+    onSave: handleAutoSave,
+    validate: (data) => validate(data),
+    enabled: isEdit,
+    onRevert: setForm,
+  })
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -141,6 +164,22 @@ export function CompanyFormPage() {
         <h1 className="text-2xl font-bold tracking-tight">
           {isEdit ? 'Edit Company' : 'New Company'}
         </h1>
+        {isEdit && (
+          <div className="ml-auto flex items-center gap-2">
+            <SaveStatusIndicator status={autoSave.status} />
+            {autoSave.isDirty && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={autoSave.revert}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Revert
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -246,15 +285,30 @@ export function CompanyFormPage() {
           </CardContent>
         </Card>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={saving} className="flex-1 sm:flex-initial">
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Company'}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
-            Cancel
-          </Button>
-        </div>
+        {/* Actions - only show save/cancel for create mode */}
+        {!isEdit && (
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-initial">
+              {saving ? 'Saving...' : 'Create Company'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
+              Cancel
+            </Button>
+          </div>
+        )}
+
+        {/* For edit mode, show a "Done" button to go back */}
+        {isEdit && (
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              onClick={() => navigate(`/companies/${id}`)}
+              className="flex-1 sm:flex-initial"
+            >
+              Done
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   )

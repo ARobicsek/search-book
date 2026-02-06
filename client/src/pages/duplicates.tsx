@@ -17,15 +17,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
-import { Users, Loader2, RefreshCw } from 'lucide-react'
+import { Users, Loader2, RefreshCw, GitMerge } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface DuplicateContact {
   id: number
   name: string
   email: string | null
+  phone: string | null
   title: string | null
   linkedinUrl: string | null
+  ecosystem: string
+  status: string
+  location: string | null
+  howConnected: string | null
+  personalDetails: string | null
+  roleDescription: string | null
+  notes: string | null
+  photoFile: string | null
+  photoUrl: string | null
   company: { id: number; name: string } | null
 }
 
@@ -36,16 +50,35 @@ interface DuplicatePair {
   reasons: string[]
 }
 
+type FieldSelection = 1 | 2
+
+interface MergeState {
+  pair: DuplicatePair
+  keepId: number
+  fieldSelections: Record<string, FieldSelection>
+}
+
+// Fields that can be selected during merge
+const MERGEABLE_FIELDS = [
+  { key: 'name', label: 'Name' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'title', label: 'Title' },
+  { key: 'linkedinUrl', label: 'LinkedIn' },
+  { key: 'ecosystem', label: 'Ecosystem' },
+  { key: 'status', label: 'Status' },
+  { key: 'location', label: 'Location' },
+  { key: 'howConnected', label: 'How Connected' },
+  { key: 'personalDetails', label: 'Personal Details' },
+  { key: 'roleDescription', label: 'Role Description' },
+  { key: 'notes', label: 'Notes' },
+] as const
+
 export function DuplicatesPage() {
   const [duplicates, setDuplicates] = useState<DuplicatePair[]>([])
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
-  const [confirmMerge, setConfirmMerge] = useState<{
-    keepId: number
-    removeId: number
-    keepName: string
-    removeName: string
-  } | null>(null)
+  const [mergeState, setMergeState] = useState<MergeState | null>(null)
 
   function loadDuplicates() {
     setLoading(true)
@@ -60,22 +93,67 @@ export function DuplicatesPage() {
     loadDuplicates()
   }, [])
 
+  function openMergeDialog(pair: DuplicatePair, keepId: number) {
+    // Initialize field selections - default to keeping values from the "keep" contact
+    const isKeepingContact1 = keepId === pair.contact1.id
+    const defaultSelection: FieldSelection = isKeepingContact1 ? 1 : 2
+
+    const fieldSelections: Record<string, FieldSelection> = {}
+    for (const field of MERGEABLE_FIELDS) {
+      fieldSelections[field.key] = defaultSelection
+    }
+
+    setMergeState({ pair, keepId, fieldSelections })
+  }
+
+  function setFieldSelection(field: string, selection: FieldSelection) {
+    if (!mergeState) return
+    setMergeState({
+      ...mergeState,
+      fieldSelections: { ...mergeState.fieldSelections, [field]: selection },
+    })
+  }
+
   async function handleMerge() {
-    if (!confirmMerge) return
+    if (!mergeState) return
     setMerging(true)
+
+    const removeId = mergeState.keepId === mergeState.pair.contact1.id
+      ? mergeState.pair.contact2.id
+      : mergeState.pair.contact1.id
+    const keepName = mergeState.keepId === mergeState.pair.contact1.id
+      ? mergeState.pair.contact1.name
+      : mergeState.pair.contact2.name
+    const removeName = mergeState.keepId === mergeState.pair.contact1.id
+      ? mergeState.pair.contact2.name
+      : mergeState.pair.contact1.name
+
     try {
       await api.post('/duplicates/merge', {
-        keepId: confirmMerge.keepId,
-        removeId: confirmMerge.removeId,
+        keepId: mergeState.keepId,
+        removeId,
+        fieldSelections: mergeState.fieldSelections,
       })
-      toast.success(`Merged "${confirmMerge.removeName}" into "${confirmMerge.keepName}"`)
-      setConfirmMerge(null)
+      toast.success(`Merged "${removeName}" into "${keepName}"`)
+      setMergeState(null)
       loadDuplicates()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to merge')
     } finally {
       setMerging(false)
     }
+  }
+
+  function getFieldValue(contact: DuplicateContact, field: string): string {
+    const value = contact[field as keyof DuplicateContact]
+    if (value === null || value === undefined) return '(empty)'
+    if (typeof value === 'object') return JSON.stringify(value)
+    return String(value)
+  }
+
+  function truncate(str: string, maxLen: number): string {
+    if (str.length <= maxLen) return str
+    return str.slice(0, maxLen - 3) + '...'
   }
 
   return (
@@ -163,34 +241,22 @@ export function DuplicatesPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      setConfirmMerge({
-                        keepId: dup.contact1.id,
-                        removeId: dup.contact2.id,
-                        keepName: dup.contact1.name,
-                        removeName: dup.contact2.name,
-                      })
-                    }
+                    onClick={() => openMergeDialog(dup, dup.contact1.id)}
                   >
-                    Keep "{dup.contact1.name}"
+                    <GitMerge className="mr-2 h-4 w-4" />
+                    Merge (keep {truncate(dup.contact1.name, 15)})
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      setConfirmMerge({
-                        keepId: dup.contact2.id,
-                        removeId: dup.contact1.id,
-                        keepName: dup.contact2.name,
-                        removeName: dup.contact1.name,
-                      })
-                    }
+                    onClick={() => openMergeDialog(dup, dup.contact2.id)}
                   >
-                    Keep "{dup.contact2.name}"
+                    <GitMerge className="mr-2 h-4 w-4" />
+                    Merge (keep {truncate(dup.contact2.name, 15)})
                   </Button>
                 </div>
               </CardContent>
@@ -199,19 +265,83 @@ export function DuplicatesPage() {
         </div>
       )}
 
-      {/* Merge confirmation */}
-      <Dialog open={confirmMerge !== null} onOpenChange={(open) => !open && setConfirmMerge(null)}>
-        <DialogContent>
+      {/* Field Selection Merge Dialog */}
+      <Dialog open={mergeState !== null} onOpenChange={(open) => !open && setMergeState(null)}>
+        <DialogContent className="sm:max-w-2xl" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Merge Contacts</DialogTitle>
             <DialogDescription>
-              All conversations, actions, relationships, and other data from "{confirmMerge?.removeName}" will be
-              moved to "{confirmMerge?.keepName}". Then "{confirmMerge?.removeName}" will be deleted.
-              This cannot be undone.
+              Select which value to keep for each field. All conversations, actions, relationships,
+              and other data will be combined into the kept contact.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmMerge(null)}>
+
+          {mergeState && (
+            <ScrollArea className="max-h-[60vh] pr-4">
+              <div className="space-y-4">
+                {MERGEABLE_FIELDS.map(({ key, label }) => {
+                  const val1 = getFieldValue(mergeState.pair.contact1, key)
+                  const val2 = getFieldValue(mergeState.pair.contact2, key)
+                  const bothEmpty = val1 === '(empty)' && val2 === '(empty)'
+                  const sameValue = val1 === val2
+
+                  if (bothEmpty) return null
+
+                  return (
+                    <div key={key} className="space-y-2">
+                      <Label className="text-sm font-medium">{label}</Label>
+                      {sameValue ? (
+                        <div className="text-sm text-muted-foreground bg-muted/50 rounded-md p-2">
+                          {val1}
+                        </div>
+                      ) : (
+                        <RadioGroup
+                          value={String(mergeState.fieldSelections[key])}
+                          onValueChange={(v) => setFieldSelection(key, parseInt(v) as FieldSelection)}
+                          className="grid grid-cols-2 gap-2"
+                        >
+                          <Label
+                            htmlFor={`${key}-1`}
+                            className={cn(
+                              "flex items-start gap-2 rounded-md border p-3 cursor-pointer transition-colors",
+                              mergeState.fieldSelections[key] === 1
+                                ? "border-primary bg-primary/5"
+                                : "border-muted hover:border-muted-foreground/50"
+                            )}
+                          >
+                            <RadioGroupItem value="1" id={`${key}-1`} className="mt-0.5" />
+                            <span className="text-sm break-words">{val1}</span>
+                          </Label>
+                          <Label
+                            htmlFor={`${key}-2`}
+                            className={cn(
+                              "flex items-start gap-2 rounded-md border p-3 cursor-pointer transition-colors",
+                              mergeState.fieldSelections[key] === 2
+                                ? "border-primary bg-primary/5"
+                                : "border-muted hover:border-muted-foreground/50"
+                            )}
+                          >
+                            <RadioGroupItem value="2" id={`${key}-2`} className="mt-0.5" />
+                            <span className="text-sm break-words">{val2}</span>
+                          </Label>
+                        </RadioGroup>
+                      )}
+                    </div>
+                  )
+                })}
+
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Automatically combined:</strong> Company associations, conversations,
+                    actions, relationships, links, prep notes, and tags from both contacts.
+                  </p>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setMergeState(null)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleMerge} disabled={merging}>
@@ -221,7 +351,7 @@ export function DuplicatesPage() {
                   Merging...
                 </>
               ) : (
-                'Merge'
+                'Merge Contacts'
               )}
             </Button>
           </DialogFooter>

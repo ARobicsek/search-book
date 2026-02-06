@@ -1,4 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0f172a"/>
-  <text x="16" y="22" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle">SB</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 1980s retro gradient background -->
+  <defs>
+    <linearGradient id="retroBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b9d"/>
+      <stop offset="50%" style="stop-color:#c44569"/>
+      <stop offset="100%" style="stop-color:#6b2d5c"/>
+    </linearGradient>
+    <linearGradient id="sunGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffe66d"/>
+      <stop offset="100%" style="stop-color:#ff9a3c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="url(#retroBg)"/>
+
+  <!-- Horizontal scanlines for retro effect -->
+  <g opacity="0.1">
+    <rect x="0" y="60" width="512" height="4" fill="#000"/>
+    <rect x="0" y="120" width="512" height="4" fill="#000"/>
+    <rect x="0" y="180" width="512" height="4" fill="#000"/>
+    <rect x="0" y="240" width="512" height="4" fill="#000"/>
+    <rect x="0" y="300" width="512" height="4" fill="#000"/>
+    <rect x="0" y="360" width="512" height="4" fill="#000"/>
+    <rect x="0" y="420" width="512" height="4" fill="#000"/>
+  </g>
+
+  <!-- Open book icon -->
+  <g transform="translate(256, 280)">
+    <!-- Left page -->
+    <path d="M-120,-80 Q-120,-120 -60,-120 L-10,-120 L-10,80 L-60,80 Q-120,80 -120,40 Z"
+          fill="#fff" opacity="0.95"/>
+    <!-- Right page -->
+    <path d="M120,-80 Q120,-120 60,-120 L10,-120 L10,80 L60,80 Q120,80 120,40 Z"
+          fill="#fff" opacity="0.95"/>
+    <!-- Center spine -->
+    <rect x="-12" y="-120" width="24" height="200" fill="#ffe66d"/>
+    <!-- Page lines left -->
+    <g stroke="#c44569" stroke-width="3" opacity="0.6">
+      <line x1="-100" y1="-80" x2="-25" y2="-80"/>
+      <line x1="-100" y1="-50" x2="-25" y2="-50"/>
+      <line x1="-100" y1="-20" x2="-25" y2="-20"/>
+      <line x1="-100" y1="10" x2="-25" y2="10"/>
+      <line x1="-100" y1="40" x2="-25" y2="40"/>
+    </g>
+    <!-- Page lines right -->
+    <g stroke="#c44569" stroke-width="3" opacity="0.6">
+      <line x1="100" y1="-80" x2="25" y2="-80"/>
+      <line x1="100" y1="-50" x2="25" y2="-50"/>
+      <line x1="100" y1="-20" x2="25" y2="-20"/>
+      <line x1="100" y1="10" x2="25" y2="10"/>
+      <line x1="100" y1="40" x2="25" y2="40"/>
+    </g>
+  </g>
+
+  <!-- Magnifying glass -->
+  <g transform="translate(340, 160)">
+    <circle cx="0" cy="0" r="50" fill="none" stroke="url(#sunGlow)" stroke-width="12"/>
+    <circle cx="0" cy="0" r="35" fill="#fff" opacity="0.3"/>
+    <line x1="35" y1="35" x2="70" y2="70" stroke="url(#sunGlow)" stroke-width="12" stroke-linecap="round"/>
+  </g>
+
+  <!-- Retro text "SB" -->
+  <text x="256" y="470" font-family="Arial Black, Impact, sans-serif" font-size="64" font-weight="900"
+        fill="#ffe66d" text-anchor="middle" letter-spacing="8">
+    SEARCHBOOK
+  </text>
 </svg>

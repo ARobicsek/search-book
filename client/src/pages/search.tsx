@@ -1,9 +1,37 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { SearchResult, ContactSearchResult, CompanySearchResult } from '@/lib/types'
+import type { SearchResult, ContactSearchResult, CompanySearchResult, Ecosystem, ContactStatus, CompanyStatus } from '@/lib/types'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+
+const ecosystemColors: Record<Ecosystem, string> = {
+  RECRUITER: 'bg-blue-100 text-blue-800',
+  ROLODEX: 'bg-purple-100 text-purple-800',
+  TARGET: 'bg-green-100 text-green-800',
+  INFLUENCER: 'bg-amber-100 text-amber-800',
+  ACADEMIA: 'bg-rose-100 text-rose-800',
+  INTRO_SOURCE: 'bg-cyan-100 text-cyan-800',
+}
+
+const contactStatusColors: Record<ContactStatus, string> = {
+  NEW: 'bg-slate-100 text-slate-700',
+  CONNECTED: 'bg-green-100 text-green-700',
+  AWAITING_RESPONSE: 'bg-yellow-100 text-yellow-700',
+  FOLLOW_UP_NEEDED: 'bg-orange-100 text-orange-700',
+  WARM_LEAD: 'bg-emerald-100 text-emerald-700',
+  ON_HOLD: 'bg-gray-100 text-gray-500',
+  CLOSED: 'bg-red-100 text-red-700',
+}
+
+const companyStatusColors: Record<CompanyStatus, string> = {
+  RESEARCHING: 'bg-blue-100 text-blue-700',
+  ACTIVE_TARGET: 'bg-indigo-100 text-indigo-700',
+  IN_DISCUSSIONS: 'bg-violet-100 text-violet-700',
+  CONNECTED: 'bg-emerald-100 text-emerald-700',
+  ON_HOLD: 'bg-gray-100 text-gray-500',
+  CLOSED: 'bg-red-100 text-red-700',
+}
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -86,8 +114,12 @@ function ContactSearchCard({
               <p className="text-sm text-muted-foreground">{contact.company.name}</p>
             )}
             <div className="flex flex-wrap gap-1 mt-1">
-              <Badge variant="outline" className="text-xs">{contact.ecosystem}</Badge>
-              <Badge variant="outline" className="text-xs">{contact.status}</Badge>
+              <Badge variant="outline" className={`text-xs ${ecosystemColors[contact.ecosystem as Ecosystem] || ''}`}>
+                {contact.ecosystem.replace('_', ' ')}
+              </Badge>
+              <Badge variant="outline" className={`text-xs ${contactStatusColors[contact.status as ContactStatus] || ''}`}>
+                {contact.status.replace(/_/g, ' ')}
+              </Badge>
             </div>
           </div>
           {relatedCount > 0 && (
@@ -220,7 +252,9 @@ function CompanySearchCard({
               <p className="text-sm text-muted-foreground">{company.industry}</p>
             )}
             <div className="flex flex-wrap gap-1 mt-1">
-              <Badge variant="outline" className="text-xs">{company.status}</Badge>
+              <Badge variant="outline" className={`text-xs ${companyStatusColors[company.status as CompanyStatus] || ''}`}>
+                {company.status.replace(/_/g, ' ')}
+              </Badge>
               {company._count && company._count.contacts > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {company._count.contacts} contacts

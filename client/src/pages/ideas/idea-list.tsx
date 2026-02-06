@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import type { Idea, Contact, Company } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,25 @@ import {
 } from '@/components/ui/dialog'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Lightbulb, Search , Loader2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw } from 'lucide-react'
+import { useAutoSave } from '@/hooks/use-auto-save'
+import { SaveStatusIndicator } from '@/components/save-status'
+
+type IdeaForm = {
+  title: string
+  description: string
+  tags: string
+  contactValues: string[]
+  companyValues: string[]
+}
+
+const emptyForm: IdeaForm = {
+  title: '',
+  description: '',
+  tags: '',
+  contactValues: [],
+  companyValues: [],
+}
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -45,13 +63,8 @@ export function IdeaListPage() {
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
 
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    tags: '',
-    contactValues: [] as string[], // Can be IDs (numeric strings) or new names
-    companyValues: [] as string[], // Can be IDs (numeric strings) or new names
-  })
+  const [form, setForm] = useState<IdeaForm>(emptyForm)
+  const [originalForm, setOriginalForm] = useState<IdeaForm | null>(null)
 
   function loadIdeas() {
     api
@@ -83,21 +96,55 @@ export function IdeaListPage() {
 
   function openNew() {
     setEditId(null)
-    setForm({ title: '', description: '', tags: '', contactValues: [], companyValues: [] })
+    setForm(emptyForm)
+    setOriginalForm(null)
     setDialogOpen(true)
   }
 
   function openEdit(idea: Idea) {
     setEditId(idea.id)
-    setForm({
+    const loadedForm: IdeaForm = {
       title: idea.title,
       description: idea.description || '',
       tags: idea.tags || '',
       contactValues: idea.contacts?.map((ic) => ic.contact.id.toString()) || [],
       companyValues: idea.companies?.map((ic) => ic.company.id.toString()) || [],
-    })
+    }
+    setForm(loadedForm)
+    setOriginalForm(loadedForm)
     setDialogOpen(true)
   }
+
+  // Auto-save handler - only saves existing contacts/companies (not new entries)
+  const handleAutoSave = useCallback(async (data: IdeaForm) => {
+    if (!editId) return
+
+    // Only include existing contact/company IDs (not new names)
+    const existingContactIds = data.contactValues
+      .filter((val) => allContacts.some((c) => c.id.toString() === val))
+      .map((val) => parseInt(val))
+    const existingCompanyIds = data.companyValues
+      .filter((val) => allCompanies.some((c) => c.id.toString() === val))
+      .map((val) => parseInt(val))
+
+    const payload = {
+      title: data.title.trim(),
+      description: data.description.trim() || null,
+      tags: data.tags.trim() || null,
+      contactIds: existingContactIds,
+      companyIds: existingCompanyIds,
+    }
+    await api.put(`/ideas/${editId}`, payload)
+  }, [editId, allContacts, allCompanies])
+
+  const autoSave = useAutoSave({
+    data: form,
+    originalData: originalForm,
+    onSave: handleAutoSave,
+    validate: (data) => data.title.trim().length > 0,
+    enabled: editId !== null,
+    onRevert: setForm,
+  })
 
   async function handleSubmit() {
     if (!form.title.trim()) {
@@ -301,7 +348,10 @@ export function IdeaListPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle>{editId ? 'Edit Idea' : 'New Idea'}</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle>{editId ? 'Edit Idea' : 'New Idea'}</DialogTitle>
+              {editId && <SaveStatusIndicator status={autoSave.status} />}
+            </div>
             <DialogDescription>
               {editId ? 'Update your idea.' : 'Capture a thought, inspiration, or note.'}
             </DialogDescription>
@@ -360,12 +410,26 @@ export function IdeaListPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={saving}>
-              {saving ? 'Saving...' : editId ? 'Update' : 'Create'}
-            </Button>
+            {editId ? (
+              <>
+                {autoSave.isDirty && (
+                  <Button variant="outline" onClick={autoSave.revert}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Revert
+                  </Button>
+                )}
+                <Button onClick={() => setDialogOpen(false)}>Done</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} disabled={saving}>
+                  {saving ? 'Saving...' : 'Create'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

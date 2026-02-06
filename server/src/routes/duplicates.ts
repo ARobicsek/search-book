@@ -87,7 +87,7 @@ router.get('/', async (_req: Request, res: Response) => {
 });
 
 // Field selection type for merge
-type FieldSelection = 1 | 2;
+type FieldSelection = 1 | 2 | 'both';
 interface FieldSelections {
   name?: FieldSelection;
   email?: FieldSelection;
@@ -103,6 +103,10 @@ interface FieldSelections {
   notes?: FieldSelection;
   photoFile?: FieldSelection;
   photoUrl?: FieldSelection;
+  mutualConnections?: FieldSelection;
+  whereFound?: FieldSelection;
+  openQuestions?: FieldSelection;
+  flagged?: FieldSelection;
 }
 
 // POST /api/duplicates/merge — merge two contacts with field selection
@@ -141,12 +145,37 @@ router.post('/merge', async (req: Request, res: Response) => {
         const selectableFields = [
           'name', 'email', 'phone', 'title', 'linkedinUrl', 'ecosystem',
           'status', 'location', 'howConnected', 'personalDetails',
-          'roleDescription', 'notes', 'photoFile', 'photoUrl'
+          'roleDescription', 'notes', 'photoFile', 'photoUrl',
+          'mutualConnections', 'whereFound', 'openQuestions', 'flagged'
         ] as const;
 
         for (const field of selectableFields) {
           const selection = fieldSelections[field];
-          if (selection) {
+          if (!selection) continue;
+
+          // Special handling for email with 'both' option
+          if (field === 'email' && selection === 'both') {
+            // Combine all emails from both contacts
+            const getAllEmails = (contact: typeof contact1): string[] => {
+              const emails: string[] = [];
+              if (contact.email) emails.push(contact.email);
+              if (contact.additionalEmails) {
+                try {
+                  const additional = JSON.parse(contact.additionalEmails) as string[];
+                  emails.push(...additional);
+                } catch {
+                  // ignore parse errors
+                }
+              }
+              return emails;
+            };
+
+            const allEmails = [...new Set([...getAllEmails(contact1), ...getAllEmails(contact2)])];
+            if (allEmails.length > 0) {
+              updateData.email = allEmails[0];
+              updateData.additionalEmails = allEmails.length > 1 ? JSON.stringify(allEmails.slice(1)) : null;
+            }
+          } else if (selection === 1 || selection === 2) {
             // Get value from selected contact (1 or 2)
             const sourceContact = selection === 1 ? contact1 : contact2;
             updateData[field] = sourceContact[field];

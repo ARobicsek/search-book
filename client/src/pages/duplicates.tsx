@@ -28,6 +28,7 @@ interface DuplicateContact {
   id: number
   name: string
   email: string | null
+  additionalEmails: string | null // JSON array
   phone: string | null
   title: string | null
   linkedinUrl: string | null
@@ -40,6 +41,10 @@ interface DuplicateContact {
   notes: string | null
   photoFile: string | null
   photoUrl: string | null
+  mutualConnections: string | null
+  whereFound: string | null
+  openQuestions: string | null
+  flagged: boolean
   company: { id: number; name: string } | null
 }
 
@@ -50,13 +55,16 @@ interface DuplicatePair {
   reasons: string[]
 }
 
-type FieldSelection = 1 | 2
+type FieldSelection = 1 | 2 | 'both'
 
 interface MergeState {
   pair: DuplicatePair
   keepId: number
   fieldSelections: Record<string, FieldSelection>
 }
+
+// Fields that allow "Keep Both" option (multi-value fields)
+const MULTI_VALUE_FIELDS = ['email'] as const
 
 // Fields that can be selected during merge
 const MERGEABLE_FIELDS = [
@@ -72,6 +80,12 @@ const MERGEABLE_FIELDS = [
   { key: 'personalDetails', label: 'Personal Details' },
   { key: 'roleDescription', label: 'Role Description' },
   { key: 'notes', label: 'Notes' },
+  { key: 'mutualConnections', label: 'Mutual Connections' },
+  { key: 'whereFound', label: 'Where Found' },
+  { key: 'openQuestions', label: 'Open Questions' },
+  { key: 'photoUrl', label: 'Photo URL' },
+  { key: 'photoFile', label: 'Photo File' },
+  { key: 'flagged', label: 'Flagged' },
 ] as const
 
 export function DuplicatesPage() {
@@ -147,8 +161,36 @@ export function DuplicatesPage() {
   function getFieldValue(contact: DuplicateContact, field: string): string {
     const value = contact[field as keyof DuplicateContact]
     if (value === null || value === undefined) return '(empty)'
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No'
     if (typeof value === 'object') return JSON.stringify(value)
     return String(value)
+  }
+
+  // Get all emails for a contact (primary + additional)
+  function getAllEmails(contact: DuplicateContact): string[] {
+    const emails: string[] = []
+    if (contact.email) emails.push(contact.email)
+    if (contact.additionalEmails) {
+      try {
+        const additional = JSON.parse(contact.additionalEmails) as string[]
+        emails.push(...additional)
+      } catch {
+        // ignore parse errors
+      }
+    }
+    return emails
+  }
+
+  // Get display value for email field that includes all emails
+  function getEmailDisplay(contact: DuplicateContact): string {
+    const emails = getAllEmails(contact)
+    if (emails.length === 0) return '(empty)'
+    return emails.join(', ')
+  }
+
+  // Check if multi-value field has any values
+  function isMultiValueField(field: string): boolean {
+    return MULTI_VALUE_FIELDS.includes(field as typeof MULTI_VALUE_FIELDS[number])
   }
 
   function truncate(str: string, maxLen: number): string {
@@ -280,10 +322,13 @@ export function DuplicatesPage() {
             <ScrollArea className="max-h-[60vh] pr-4">
               <div className="space-y-4">
                 {MERGEABLE_FIELDS.map(({ key, label }) => {
-                  const val1 = getFieldValue(mergeState.pair.contact1, key)
-                  const val2 = getFieldValue(mergeState.pair.contact2, key)
+                  // For email field, use special display that shows all emails
+                  const isEmail = key === 'email'
+                  const val1 = isEmail ? getEmailDisplay(mergeState.pair.contact1) : getFieldValue(mergeState.pair.contact1, key)
+                  const val2 = isEmail ? getEmailDisplay(mergeState.pair.contact2) : getFieldValue(mergeState.pair.contact2, key)
                   const bothEmpty = val1 === '(empty)' && val2 === '(empty)'
                   const sameValue = val1 === val2
+                  const showKeepBoth = isMultiValueField(key) && !sameValue && val1 !== '(empty)' && val2 !== '(empty)'
 
                   if (bothEmpty) return null
 
@@ -297,8 +342,8 @@ export function DuplicatesPage() {
                       ) : (
                         <RadioGroup
                           value={String(mergeState.fieldSelections[key])}
-                          onValueChange={(v) => setFieldSelection(key, parseInt(v) as FieldSelection)}
-                          className="grid grid-cols-2 gap-2"
+                          onValueChange={(v) => setFieldSelection(key, v === 'both' ? 'both' : (parseInt(v) as FieldSelection))}
+                          className={cn("grid gap-2", showKeepBoth ? "grid-cols-3" : "grid-cols-2")}
                         >
                           <Label
                             htmlFor={`${key}-1`}
@@ -324,6 +369,20 @@ export function DuplicatesPage() {
                             <RadioGroupItem value="2" id={`${key}-2`} className="mt-0.5" />
                             <span className="text-sm break-words">{val2}</span>
                           </Label>
+                          {showKeepBoth && (
+                            <Label
+                              htmlFor={`${key}-both`}
+                              className={cn(
+                                "flex items-start gap-2 rounded-md border p-3 cursor-pointer transition-colors",
+                                mergeState.fieldSelections[key] === 'both'
+                                  ? "border-primary bg-primary/5"
+                                  : "border-muted hover:border-muted-foreground/50"
+                              )}
+                            >
+                              <RadioGroupItem value="both" id={`${key}-both`} className="mt-0.5" />
+                              <span className="text-sm break-words font-medium">Keep Both</span>
+                            </Label>
+                          )}
                         </RadioGroup>
                       )}
                     </div>

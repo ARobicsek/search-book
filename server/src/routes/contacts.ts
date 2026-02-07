@@ -6,7 +6,7 @@ const router = Router();
 // GET /api/contacts — list all contacts with optional filters and pagination
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { lastOutreachFrom, lastOutreachTo, includeNoOutreach, limit, offset, ecosystem, status, search } = req.query;
+    const { lastOutreachFrom, lastOutreachTo, includeNoOutreach, limit, offset, ecosystem, status, search, sortBy, sortDir } = req.query;
     const includeNone = includeNoOutreach !== 'false'; // default true
 
     // Pagination: default 50, max 200
@@ -36,31 +36,31 @@ router.get('/', async (req: Request, res: Response) => {
       ];
     }
 
-    // Get total count with filters applied
-    const total = await prisma.contact.count({ where });
+    const sortDescending = sortDir !== 'asc'; // default desc
+    const sortByLastOutreach = sortBy === 'lastOutreachDate';
 
+    // When sorting by lastOutreachDate, we need to fetch all contacts first,
+    // compute lastOutreachDate, sort, then paginate
     const contacts = await prisma.contact.findMany({
       where,
       include: {
         company: { select: { id: true, name: true } },
       },
-      orderBy: { updatedAt: 'desc' },
-      take,
-      skip,
+      orderBy: sortByLastOutreach ? undefined : { updatedAt: 'desc' },
+      take: sortByLastOutreach ? undefined : take,
+      skip: sortByLastOutreach ? undefined : skip,
     });
 
-    // Get last outreach dates efficiently for just this page of contacts
+    // Get last outreach dates for contacts
     const contactIds = contacts.map((c) => c.id);
     const lastOutreachMap = new Map<number, { date: string; precision: string }>();
 
     if (contactIds.length > 0) {
-      // Get all conversations for contacts on this page
       const conversations = await prisma.conversation.findMany({
         where: { contactId: { in: contactIds } },
         select: { contactId: true, date: true, datePrecision: true },
       });
 
-      // Group by contactId and find max date
       for (const conv of conversations) {
         const existing = lastOutreachMap.get(conv.contactId);
         if (!existing || conv.date > existing.date) {
@@ -92,11 +92,29 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
-    // Return with pagination info
-    res.json({
-      data: result,
-      pagination: { total, limit: take, offset: skip, hasMore: skip + result.length < total },
-    });
+    // Sort by lastOutreachDate if requested, then paginate
+    if (sortByLastOutreach) {
+      result.sort((a, b) => {
+        if (!a.lastOutreachDate && !b.lastOutreachDate) return 0;
+        if (!a.lastOutreachDate) return 1; // nulls last
+        if (!b.lastOutreachDate) return -1;
+        return sortDescending
+          ? b.lastOutreachDate.localeCompare(a.lastOutreachDate)
+          : a.lastOutreachDate.localeCompare(b.lastOutreachDate);
+      });
+      const total = result.length;
+      result = result.slice(skip, skip + take);
+      res.json({
+        data: result,
+        pagination: { total, limit: take, offset: skip, hasMore: skip + result.length < total },
+      });
+    } else {
+      const total = await prisma.contact.count({ where });
+      res.json({
+        data: result,
+        pagination: { total, limit: take, offset: skip, hasMore: skip + result.length < total },
+      });
+    }
   } catch (error) {
     console.error('Error fetching contacts:', error);
     res.status(500).json({ error: 'Failed to fetch contacts' });

@@ -422,6 +422,11 @@ export function ContactListPage() {
     if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
     if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
     if (!includeNoOutreach) params.set('includeNoOutreach', 'false')
+    // Server-side sorting for lastOutreachDate
+    if (sorting.length > 0 && sorting[0].id === 'lastOutreachDate') {
+      params.set('sortBy', 'lastOutreachDate')
+      params.set('sortDir', sorting[0].desc ? 'desc' : 'asc')
+    }
     // Pagination
     params.set('limit', pageSize.toString())
     params.set('offset', (page * pageSize).toString())
@@ -446,11 +451,11 @@ export function ContactListPage() {
     }
   }
 
-  // Reset to page 0 when filters change
+  // Reset to page 0 when filters or sorting change
   useEffect(() => {
     setCurrentPage(0)
     loadContacts(0)
-  }, [ecosystemFilter, statusFilter, showFlaggedOnly, debouncedSearch, lastOutreachFrom, lastOutreachTo, includeNoOutreach])
+  }, [ecosystemFilter, statusFilter, showFlaggedOnly, debouncedSearch, lastOutreachFrom, lastOutreachTo, includeNoOutreach, sorting])
 
   // Load contacts when page changes
   useEffect(() => {

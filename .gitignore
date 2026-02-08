@@ -15,6 +15,7 @@ Thumbs.db
 .vercel
 
 # Backups
+backups/
 server/backups/
 
 .vercel

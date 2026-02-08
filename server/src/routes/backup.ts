@@ -201,6 +201,51 @@ router.post('/restore', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/backup/save-local — save backup JSON to project backups/ folder
+router.post('/save-local', (req: Request, res: Response) => {
+  try {
+    // Only works when server has filesystem access (local dev)
+    const projectRoot = path.resolve(__dirname, '..', '..', '..');
+    const backupsDir = path.join(projectRoot, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+    const filename = `searchbook-backup-${timestamp}.json`;
+    const filePath = path.join(backupsDir, filename);
+
+    const json = JSON.stringify(req.body, null, 2);
+    fs.writeFileSync(filePath, json, 'utf-8');
+
+    res.json({ message: 'Backup saved locally', filename, path: filePath });
+  } catch (error) {
+    console.error('Save local error:', error);
+    res.status(500).json({ error: 'Failed to save backup locally' });
+  }
+});
+
+// Transform raw backup records for Prisma compatibility.
+// Browser-direct Turso export returns raw SQLite values:
+// - dates as strings ("2026-02-08 15:39:27") instead of Date objects
+// - booleans as integers (0/1) instead of true/false
+const DATETIME_FIELDS = new Set(['createdAt', 'updatedAt']);
+const BOOLEAN_FIELDS = new Set(['flagged', 'completed', 'recurring']);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function transformRecords(records: Record<string, unknown>[]): any[] {
+  return records.map((record) => {
+    const out: Record<string, unknown> = { ...record };
+    for (const key of Object.keys(out)) {
+      if (DATETIME_FIELDS.has(key) && out[key] != null) {
+        out[key] = new Date(String(out[key]));
+      }
+      if (BOOLEAN_FIELDS.has(key)) {
+        out[key] = out[key] === true || out[key] === 1;
+      }
+    }
+    return out;
+  });
+}
+
 // POST /api/backup/import — restore from a JSON backup (local dev fallback)
 router.post('/import', async (req: Request, res: Response) => {
   try {
@@ -230,12 +275,12 @@ router.post('/import', async (req: Request, res: Response) => {
     await prisma.contact.deleteMany();
     await prisma.company.deleteMany();
 
-    // Insert in parent-first order
-    if (data.Company?.length) await prisma.company.createMany({ data: data.Company });
+    // Insert in parent-first order (transformRecords handles date/boolean conversion)
+    if (data.Company?.length) await prisma.company.createMany({ data: transformRecords(data.Company) });
     if (data.Contact?.length) {
       // Insert contacts without self-references first
-      const contactsWithoutRefs = data.Contact.map((c: Record<string, unknown>) => ({ ...c, referredById: null }));
-      await prisma.contact.createMany({ data: contactsWithoutRefs });
+      const contacts = transformRecords(data.Contact).map((c: any) => ({ ...c, referredById: null }));
+      await prisma.contact.createMany({ data: contacts });
       // Restore self-references
       for (const c of data.Contact) {
         if (c.referredById) {
@@ -243,25 +288,25 @@ router.post('/import', async (req: Request, res: Response) => {
         }
       }
     }
-    if (data.Tag?.length) await prisma.tag.createMany({ data: data.Tag });
-    if (data.Idea?.length) await prisma.idea.createMany({ data: data.Idea });
-    if (data.EmploymentHistory?.length) await prisma.employmentHistory.createMany({ data: data.EmploymentHistory });
-    if (data.Conversation?.length) await prisma.conversation.createMany({ data: data.Conversation });
-    if (data.Action?.length) await prisma.action.createMany({ data: data.Action });
-    if (data.ContactTag?.length) await prisma.contactTag.createMany({ data: data.ContactTag });
-    if (data.CompanyTag?.length) await prisma.companyTag.createMany({ data: data.CompanyTag });
-    if (data.ConversationContact?.length) await prisma.conversationContact.createMany({ data: data.ConversationContact });
-    if (data.ConversationCompany?.length) await prisma.conversationCompany.createMany({ data: data.ConversationCompany });
-    if (data.IdeaContact?.length) await prisma.ideaContact.createMany({ data: data.IdeaContact });
-    if (data.IdeaCompany?.length) await prisma.ideaCompany.createMany({ data: data.IdeaCompany });
-    if (data.Link?.length) await prisma.link.createMany({ data: data.Link });
-    if (data.PrepNote?.length) await prisma.prepNote.createMany({ data: data.PrepNote });
-    if (data.Relationship?.length) await prisma.relationship.createMany({ data: data.Relationship });
+    if (data.Tag?.length) await prisma.tag.createMany({ data: transformRecords(data.Tag) });
+    if (data.Idea?.length) await prisma.idea.createMany({ data: transformRecords(data.Idea) });
+    if (data.EmploymentHistory?.length) await prisma.employmentHistory.createMany({ data: transformRecords(data.EmploymentHistory) });
+    if (data.Conversation?.length) await prisma.conversation.createMany({ data: transformRecords(data.Conversation) });
+    if (data.Action?.length) await prisma.action.createMany({ data: transformRecords(data.Action) });
+    if (data.ContactTag?.length) await prisma.contactTag.createMany({ data: transformRecords(data.ContactTag) });
+    if (data.CompanyTag?.length) await prisma.companyTag.createMany({ data: transformRecords(data.CompanyTag) });
+    if (data.ConversationContact?.length) await prisma.conversationContact.createMany({ data: transformRecords(data.ConversationContact) });
+    if (data.ConversationCompany?.length) await prisma.conversationCompany.createMany({ data: transformRecords(data.ConversationCompany) });
+    if (data.IdeaContact?.length) await prisma.ideaContact.createMany({ data: transformRecords(data.IdeaContact) });
+    if (data.IdeaCompany?.length) await prisma.ideaCompany.createMany({ data: transformRecords(data.IdeaCompany) });
+    if (data.Link?.length) await prisma.link.createMany({ data: transformRecords(data.Link) });
+    if (data.PrepNote?.length) await prisma.prepNote.createMany({ data: transformRecords(data.PrepNote) });
+    if (data.Relationship?.length) await prisma.relationship.createMany({ data: transformRecords(data.Relationship) });
 
     res.json({ message: 'Import completed successfully' });
-  } catch (error) {
-    console.error('Backup import error:', error);
-    res.status(500).json({ error: 'Failed to import backup' });
+  } catch (error: any) {
+    console.error('Backup import error:', error?.message || error);
+    res.status(500).json({ error: `Failed to import backup: ${error?.message || 'unknown error'}` });
   }
 });
 

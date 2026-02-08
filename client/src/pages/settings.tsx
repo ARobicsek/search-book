@@ -41,6 +41,9 @@ export function SettingsPage() {
         data = await api.get<Record<string, unknown>>('/backup/export')
       }
 
+      // Save to project backups/ folder (works locally, silently fails in production)
+      api.post('/backup/save-local', data).catch(() => {})
+
       const json = JSON.stringify(data, null, 2)
       const blob = new Blob([json], { type: 'application/json' })
       const url = URL.createObjectURL(blob)

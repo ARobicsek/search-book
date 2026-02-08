@@ -29,49 +29,50 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-No specific bugs queued. Possible directions:
-- **Phase 8: Document Search** — Full-text search across linked Google Drive documents (see ROADMAP.md)
-- **User-reported issues** — Test the app and report any bugs or feature requests
+(Add tasks here)
 
 ---
 
 ## What Was Completed Last Session
 
-### Last Outreach Column Fix
-The "Last Outreach" column showed "—" for all contacts on the default page. Root cause: bulk-imported contacts (no conversations) sorted first by `updatedAt desc`, so the first 2 pages had zero outreach data. The API was returning correct data — it was just on later pages.
+### Ctrl-K Command Palette Simplified
+Removed Quick Add, Navigate, Contacts, Companies sections from command palette initial view. Only Global Search remains when Ctrl-K/mobile search button is opened. Live search results still appear when typing.
 
-**Fix:** Added server-side sorting by `lastOutreachDate`. Clicking the column header now sorts across ALL contacts (server fetches all, computes dates from Conversation table, sorts with nulls last, then paginates).
+### Manual Merge Feature
+Added Combobox-based contact picker on duplicates page. Users can select any two contacts and merge them with field-by-field selection dialog (useful for non-obvious duplicates like "Dick Jones" vs "Richard Jones III").
 
-### Smarter Duplicate Detection
-"Katie Tucker" vs "Katie M. Tucker" wasn't flagged (Levenshtein similarity = 0.80, threshold was strict >0.8).
+### "Keep Both" for Phone Numbers
+Merge dialog now supports "Keep Both" for phone numbers (in addition to emails). Server combines phone numbers with " | " separator.
 
-**Fix:** Added `normalizeName()` that strips middle initials and suffixes (J.D., Jr., PhD, etc.) before comparison. Also added compound signal: same company + name similarity >0.6 flags as duplicate.
+### Duplicate Detection Performance Fix (Vercel Timeout)
+The duplicates page was timing out on Vercel's 30s limit. Multiple iterations:
+1. Pre-computed normalized names/tokens before comparison loop
+2. Rewrote algorithm with inverted-index candidate generation (name tokens + email) instead of O(n^2)
+3. Removed company/LinkedIn matching indexes to reduce candidate pairs
+4. Slimmed DB query to only `id`, `name`, `email`, `title`, `company` (was fetching all fields)
+5. Increased client-side fetch timeout from 15s to 30s
 
-### Links in Contact Edit Form
-Links were only manageable on the detail page, not in the edit form.
-
-**Fix:** Added a Links card to contact-form.tsx. Edit mode loads/adds/deletes via API. Create mode stores pending links locally and saves after contact creation.
-
-### CSV Export Includes Links
-Export now fetches all links, groups by contactId, and adds a "Links" column with pipe-separated entries.
+### Lazy-Load Merge Details
+Both auto-detected and manual merge buttons now fetch full contact details on demand via `/contacts/:id` before opening the merge dialog. This decouples the list response (slim) from the merge dialog (full), reducing payload size.
 
 ### Technical changes:
-- `server/src/routes/contacts.ts` — Added `sortBy`, `sortDir` query params; server-side lastOutreachDate sorting
-- `server/src/routes/duplicates.ts` — Added `normalizeName()`, normalized comparison, same-company signal
-- `client/src/pages/contacts/contact-list.tsx` — Passes sortBy/sortDir for lastOutreachDate; async CSV export with links
-- `client/src/pages/contacts/contact-form.tsx` — Links card with add/remove, pending links for create mode
+- `server/src/routes/duplicates.ts` — Slim DB query, inverted-index candidate generation (name tokens + email only), OR logic (similar name OR same email)
+- `client/src/pages/duplicates.tsx` — Split into `DuplicateContactSummary` (list) and `DuplicateContact` (merge dialog) types; async `openMergeDialog` with lazy-load; manual merge UI with Comboboxes; "Keep Both" for phone
+- `client/src/components/command-palette.tsx` — Stripped to Global Search only
+- `client/src/lib/api.ts` — Timeout increased from 15s to 30s
 
 ---
 
 ## What Was Completed Previous Session
 
-### Contacts List Performance + Pagination
-After importing ~100 contacts, the contacts page was timing out. Fixed with:
+### Last Outreach Column Fix
+Added server-side `sortBy=lastOutreachDate` + `sortDir` params so clicking the column header sorts across ALL contacts (not just current page).
 
-1. **Pagination** — Contacts list now loads 50 contacts per page with Previous/Next navigation
-2. **Server-side filtering** — Ecosystem, Status, Flagged, and Search filters now applied server-side
-3. **Lightweight `/contacts/names` endpoint** — Returns just id/name for comboboxes
-4. **Debounced search** — 300ms debounce to reduce API calls while typing
+### Links in Contact Edit Form
+Added a Links card to contact-form.tsx with inline add/remove. Edit mode loads via API; create mode stores pending links locally.
+
+### CSV Export Includes Links
+Export fetches all links, groups by contactId, adds "Links" column with pipe-separated entries.
 
 ---
 
@@ -127,4 +128,5 @@ printf 'value' | vercel env add VAR_NAME production
 8. **Contacts pagination** — Server returns `{ data: [...], pagination: { total, limit, offset, hasMore } }`
 9. **Server-side filters** — `/contacts` accepts `ecosystem`, `status`, `flagged`, `search` query params
 10. **Server-side sorting** — `/contacts` accepts `sortBy=lastOutreachDate` + `sortDir=asc|desc` for cross-page sort
-11. **Duplicate detection** — Normalizes names (strips middle initials, suffixes) before Levenshtein; also flags same-company + moderate name similarity
+11. **Duplicate detection** — Normalizes names (strips middle initials, suffixes) before Levenshtein; inverted-index candidate generation (name tokens + email); OR logic (similar name OR same email); slim DB query; merge dialog lazy-loads full details on demand
+12. **Client timeout** — `TIMEOUT_MS = 30000` in `client/src/lib/api.ts`; Vercel `maxDuration: 30` in `vercel.json`

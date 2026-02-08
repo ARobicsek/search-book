@@ -29,37 +29,49 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-1. **Fix Last Outreach column** — Column shows "—" for all contacts even those with conversations. The server code looks correct (queries `Conversation` table by `contactId`), but data isn't displaying. Debug why.
-2. **Phase 8: Document Search** — Begin Google Drive document search integration (see ROADMAP.md)
+No specific bugs queued. Possible directions:
+- **Phase 8: Document Search** — Full-text search across linked Google Drive documents (see ROADMAP.md)
+- **User-reported issues** — Test the app and report any bugs or feature requests
 
 ---
 
 ## What Was Completed Last Session
 
-### Contacts List Performance + Pagination
-After importing ~100 contacts, the contacts page was timing out. Fixed with:
+### Last Outreach Column Fix
+The "Last Outreach" column showed "—" for all contacts on the default page. Root cause: bulk-imported contacts (no conversations) sorted first by `updatedAt desc`, so the first 2 pages had zero outreach data. The API was returning correct data — it was just on later pages.
 
-1. **Pagination** — Contacts list now loads 50 contacts per page with Previous/Next navigation
-2. **Server-side filtering** — Ecosystem, Status, Flagged, and Search filters now applied server-side (so they filter all 171 contacts, not just current page)
-3. **Lightweight `/contacts/names` endpoint** — Returns just id/name for comboboxes (fast)
-4. **Debounced search** — 300ms debounce to reduce API calls while typing
+**Fix:** Added server-side sorting by `lastOutreachDate`. Clicking the column header now sorts across ALL contacts (server fetches all, computes dates from Conversation table, sorts with nulls last, then paginates).
+
+### Smarter Duplicate Detection
+"Katie Tucker" vs "Katie M. Tucker" wasn't flagged (Levenshtein similarity = 0.80, threshold was strict >0.8).
+
+**Fix:** Added `normalizeName()` that strips middle initials and suffixes (J.D., Jr., PhD, etc.) before comparison. Also added compound signal: same company + name similarity >0.6 flags as duplicate.
+
+### Links in Contact Edit Form
+Links were only manageable on the detail page, not in the edit form.
+
+**Fix:** Added a Links card to contact-form.tsx. Edit mode loads/adds/deletes via API. Create mode stores pending links locally and saves after contact creation.
+
+### CSV Export Includes Links
+Export now fetches all links, groups by contactId, and adds a "Links" column with pipe-separated entries.
 
 ### Technical changes:
-- `server/src/routes/contacts.ts` — Added pagination (`limit`, `offset`), server-side filters (`ecosystem`, `status`, `flagged`, `search`), and `/names` endpoint
-- `client/src/pages/contacts/contact-list.tsx` — Pagination UI, server-side filter params, debounced search
-- Other client files updated to use `/contacts/names` endpoint for comboboxes
-
-### Bug to fix next session:
-The `lastOutreachDate` query was fixed to use `Conversation.contactId` (not `ConversationContact` junction table), but the column still shows "—". Server logs show conversations exist. Need to debug.
+- `server/src/routes/contacts.ts` — Added `sortBy`, `sortDir` query params; server-side lastOutreachDate sorting
+- `server/src/routes/duplicates.ts` — Added `normalizeName()`, normalized comparison, same-company signal
+- `client/src/pages/contacts/contact-list.tsx` — Passes sortBy/sortDir for lastOutreachDate; async CSV export with links
+- `client/src/pages/contacts/contact-form.tsx` — Links card with add/remove, pending links for create mode
 
 ---
 
 ## What Was Completed Previous Session
 
-### Auto-save Extensions + Merge Enhancements
-1. **Auto-save for Ideas form** — Edit mode auto-saves after 1.5s debounce
-2. **Auto-save for Conversation dialog** — Edit mode auto-saves after 2s debounce
-3. **Enhanced duplicate merge** — All fields + "Keep Both" option for emails
+### Contacts List Performance + Pagination
+After importing ~100 contacts, the contacts page was timing out. Fixed with:
+
+1. **Pagination** — Contacts list now loads 50 contacts per page with Previous/Next navigation
+2. **Server-side filtering** — Ecosystem, Status, Flagged, and Search filters now applied server-side
+3. **Lightweight `/contacts/names` endpoint** — Returns just id/name for comboboxes
+4. **Debounced search** — 300ms debounce to reduce API calls while typing
 
 ---
 
@@ -114,3 +126,5 @@ printf 'value' | vercel env add VAR_NAME production
 7. **Auto-save pattern** — `useAutoSave` hook in `client/src/hooks/use-auto-save.ts` handles debounced saves
 8. **Contacts pagination** — Server returns `{ data: [...], pagination: { total, limit, offset, hasMore } }`
 9. **Server-side filters** — `/contacts` accepts `ecosystem`, `status`, `flagged`, `search` query params
+10. **Server-side sorting** — `/contacts` accepts `sortBy=lastOutreachDate` + `sortDir=asc|desc` for cross-page sort
+11. **Duplicate detection** — Normalizes names (strips middle initials, suffixes) before Levenshtein; also flags same-company + moderate name similarity

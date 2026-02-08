@@ -5,61 +5,40 @@ import prisma from '../db';
 
 const router = Router();
 
-function escapeSQL(value: unknown): string {
-  if (value === null || value === undefined) return 'NULL';
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'boolean') return value ? '1' : '0';
-  if (typeof value === 'number') return String(value);
-  if (value instanceof Date) return `'${value.toISOString()}'`;
-  const str = String(value).replace(/'/g, "''");
-  return `'${str}'`;
-}
 
-// GET /api/backup/download — download full database dump as SQL file
-router.get('/download', async (_req: Request, res: Response) => {
+// GET /api/backup/schema — returns table names + CREATE TABLE DDL (single fast query)
+router.get('/schema', async (_req: Request, res: Response) => {
   try {
-    // Get all table schemas from sqlite_master (works with both SQLite and Turso/libsql)
     const tables = await prisma.$queryRawUnsafe<{ name: string; sql: string }[]>(
       `SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'sqlite_%' ORDER BY name`
     );
-
-    // Fetch all table data in parallel to avoid sequential Turso round-trips
-    const tableData = await Promise.all(
-      tables.map(async (table) => ({
-        ...table,
-        rows: await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-          `SELECT * FROM "${table.name}"`
-        ),
-      }))
-    );
-
-    let output = '-- SearchBook Database Backup\n';
-    output += `-- Created: ${new Date().toISOString()}\n`;
-    output += '-- Usage: sqlite3 searchbook.db < this-file.sql\n\n';
-    output += 'PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n\n';
-
-    for (const table of tableData) {
-      output += `-- Table: ${table.name}\n`;
-      output += `DROP TABLE IF EXISTS "${table.name}";\n`;
-      output += `${table.sql};\n\n`;
-
-      for (const row of table.rows) {
-        const cols = Object.keys(row);
-        const vals = cols.map((c) => escapeSQL(row[c]));
-        output += `INSERT INTO "${table.name}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${vals.join(', ')});\n`;
-      }
-      if (table.rows.length > 0) output += '\n';
-    }
-
-    output += 'COMMIT;\nPRAGMA foreign_keys=ON;\n';
-
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    res.setHeader('Content-Type', 'application/sql');
-    res.setHeader('Content-Disposition', `attachment; filename="searchbook-backup-${ts}.sql"`);
-    res.send(output);
+    res.json(tables);
   } catch (error) {
-    console.error('Backup download error:', error);
-    res.status(500).json({ error: 'Failed to generate backup' });
+    console.error('Backup schema error:', error);
+    res.status(500).json({ error: 'Failed to fetch schema' });
+  }
+});
+
+// GET /api/backup/data/:tableName — returns all rows from a single table
+router.get('/data/:tableName', async (req: Request, res: Response) => {
+  try {
+    // Whitelist: only allow names returned by sqlite_master to prevent injection
+    const tables = await prisma.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'sqlite_%'`
+    );
+    const allowed = tables.map((t) => t.name);
+    const tableName = req.params.tableName as string;
+    if (!allowed.includes(tableName)) {
+      res.status(400).json({ error: 'Invalid table name' });
+      return;
+    }
+    const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+      `SELECT * FROM "${tableName}"`
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Backup data error:', error);
+    res.status(500).json({ error: 'Failed to fetch table data' });
   }
 });
 

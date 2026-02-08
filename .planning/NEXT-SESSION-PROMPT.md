@@ -29,7 +29,34 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-(Add tasks here)
+**Data backup — start from scratch.** The core question: how do I make sure I have a backup of the precious data in SearchBook in some place that I have full control over?
+
+### Context from failed attempts this session:
+- The Vercel serverless function has a **30-second timeout** (hobby plan max). Every server-side approach timed out:
+  1. Single endpoint with `$queryRawUnsafe` on `sqlite_master` + all table SELECTs — timed out
+  2. Parallel `Promise.all` on the same — timed out
+  3. Split into per-table endpoints (`/schema` + `/data/:tableName`) with client fetching one by one — timed out
+  4. Single endpoint with `prisma.*.findMany()` for all 16 models via `Promise.all` — timed out
+- The Turso/Prisma adapter appears to have significant overhead per query in Vercel's serverless environment (cold starts, connection setup, etc.)
+- **Current state of code:** The `/api/backup/export` endpoint exists (Prisma findMany approach) but doesn't complete within 30s on Vercel
+
+### Possible directions to explore:
+- **Turso's own backup/export tools** — Does Turso have a dump or export API?
+- **Direct libsql client** (bypass Prisma) — Might be faster than Prisma adapter
+- **Turso HTTP API** — Could call Turso directly from the client browser (no Vercel middleman)
+- **Scheduled export via GitHub Actions or external cron** — Not bound by Vercel's 30s limit
+- **Smaller incremental approach** — Export one table at a time from the client with separate button clicks or auto-periodic fetches
+
+---
+
+## What Was Completed This Session
+
+### Backup Feature (Partial — Not Working in Production)
+Attempted to implement "Create Backup" for the web version. Multiple approaches tried (see above), all timing out on Vercel's 30s serverless limit. The backup works conceptually but Turso queries via Prisma are too slow in the Vercel serverless environment.
+
+### Technical changes (current state):
+- `server/src/routes/backup.ts` — Has `/export` endpoint using `prisma.*.findMany()` for all 16 models (times out on Vercel)
+- `client/src/pages/settings.tsx` — Downloads JSON from `/backup/export`, triggers browser file download
 
 ---
 
@@ -45,34 +72,10 @@ Added Combobox-based contact picker on duplicates page. Users can select any two
 Merge dialog now supports "Keep Both" for phone numbers (in addition to emails). Server combines phone numbers with " | " separator.
 
 ### Duplicate Detection Performance Fix (Vercel Timeout)
-The duplicates page was timing out on Vercel's 30s limit. Multiple iterations:
-1. Pre-computed normalized names/tokens before comparison loop
-2. Rewrote algorithm with inverted-index candidate generation (name tokens + email) instead of O(n^2)
-3. Removed company/LinkedIn matching indexes to reduce candidate pairs
-4. Slimmed DB query to only `id`, `name`, `email`, `title`, `company` (was fetching all fields)
-5. Increased client-side fetch timeout from 15s to 30s
+The duplicates page was timing out on Vercel's 30s limit. Fixed with inverted-index candidate generation and slimmed DB queries.
 
 ### Lazy-Load Merge Details
-Both auto-detected and manual merge buttons now fetch full contact details on demand via `/contacts/:id` before opening the merge dialog. This decouples the list response (slim) from the merge dialog (full), reducing payload size.
-
-### Technical changes:
-- `server/src/routes/duplicates.ts` — Slim DB query, inverted-index candidate generation (name tokens + email only), OR logic (similar name OR same email)
-- `client/src/pages/duplicates.tsx` — Split into `DuplicateContactSummary` (list) and `DuplicateContact` (merge dialog) types; async `openMergeDialog` with lazy-load; manual merge UI with Comboboxes; "Keep Both" for phone
-- `client/src/components/command-palette.tsx` — Stripped to Global Search only
-- `client/src/lib/api.ts` — Timeout increased from 15s to 30s
-
----
-
-## What Was Completed Previous Session
-
-### Last Outreach Column Fix
-Added server-side `sortBy=lastOutreachDate` + `sortDir` params so clicking the column header sorts across ALL contacts (not just current page).
-
-### Links in Contact Edit Form
-Added a Links card to contact-form.tsx with inline add/remove. Edit mode loads via API; create mode stores pending links locally.
-
-### CSV Export Includes Links
-Export fetches all links, groups by contactId, adds "Links" column with pipe-separated entries.
+Both auto-detected and manual merge buttons now fetch full contact details on demand via `/contacts/:id` before opening the merge dialog.
 
 ---
 
@@ -130,3 +133,4 @@ printf 'value' | vercel env add VAR_NAME production
 10. **Server-side sorting** — `/contacts` accepts `sortBy=lastOutreachDate` + `sortDir=asc|desc` for cross-page sort
 11. **Duplicate detection** — Normalizes names (strips middle initials, suffixes) before Levenshtein; inverted-index candidate generation (name tokens + email); OR logic (similar name OR same email); slim DB query; merge dialog lazy-loads full details on demand
 12. **Client timeout** — `TIMEOUT_MS = 30000` in `client/src/lib/api.ts`; Vercel `maxDuration: 30` in `vercel.json`
+13. **Vercel 30s timeout** — Hobby plan max. Bulk Turso queries via Prisma adapter are too slow for this limit. Any backup/export solution must account for this constraint.

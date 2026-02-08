@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Download, Upload, Loader2 } from 'lucide-react'
+import { Download, Upload, Loader2, FolderOpen, X } from 'lucide-react'
 
 export function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false)
@@ -27,6 +27,7 @@ export function SettingsPage() {
   const [restoreProgress, setRestoreProgress] = useState<BackupProgress | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [showSaveReminder, setShowSaveReminder] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function handleBackup() {
@@ -55,6 +56,7 @@ export function SettingsPage() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       toast.success('Backup downloaded')
+      setShowSaveReminder(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Backup failed')
     } finally {
@@ -139,6 +141,32 @@ export function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {showSaveReminder && (
+        <div className="relative rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <button
+            onClick={() => setShowSaveReminder(false)}
+            className="absolute right-2 top-2 rounded p-1 text-amber-600 hover:bg-amber-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="flex items-start gap-3 pr-6">
+            <FolderOpen className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-semibold text-amber-900">
+                Copy backup to project folder
+              </p>
+              <p className="mt-1 text-sm text-amber-800">
+                Move the downloaded JSON file from your Downloads folder into{' '}
+                <code className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-xs">
+                  SearchBook/backups/
+                </code>{' '}
+                to keep a local copy with your project.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader>

@@ -14,8 +14,9 @@ Thumbs.db
 # Vercel
 .vercel
 
-# Backups
-backups/
+# Backups (keep the folder, ignore contents)
+backups/*
+!backups/.gitkeep
 server/backups/
 
 .vercel

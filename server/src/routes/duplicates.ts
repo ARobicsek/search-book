@@ -31,6 +31,17 @@ function similarity(a: string, b: string): number {
   return (longer.length - levenshtein(longer.toLowerCase(), shorter.toLowerCase())) / longer.length;
 }
 
+// Normalize name: strip middle initials, suffixes, and extra whitespace
+function normalizeName(name: string): string {
+  let n = name;
+  // Remove common suffixes (with or without preceding comma)
+  n = n.replace(/,?\s*(J\.?D\.?|M\.?D\.?|Ph\.?D\.?|MBA|Jr\.?|Sr\.?|III|II|IV|Esq\.?)$/gi, '');
+  // Remove middle initials (single letter optionally followed by a period, between spaces)
+  n = n.replace(/\s+[A-Z]\.?\s+/g, ' ');
+  // Collapse whitespace and trim
+  return n.replace(/\s+/g, ' ').trim();
+}
+
 // GET /api/duplicates — find potential duplicate contacts
 router.get('/', async (_req: Request, res: Response) => {
   try {
@@ -51,10 +62,19 @@ router.get('/', async (_req: Request, res: Response) => {
         const c2 = contacts[j];
         const reasons: string[] = [];
 
-        // Name similarity
-        const nameSim = similarity(c1.name, c2.name);
+        // Name similarity — compare both raw and normalized names, take higher score
+        const rawSim = similarity(c1.name, c2.name);
+        const normSim = similarity(normalizeName(c1.name), normalizeName(c2.name));
+        const nameSim = Math.max(rawSim, normSim);
         if (nameSim > 0.8) {
           reasons.push(`Similar names (${Math.round(nameSim * 100)}%)`);
+        }
+
+        // Same company + moderate name similarity
+        const sameCompany = (c1.companyId && c2.companyId && c1.companyId === c2.companyId) ||
+          (c1.companyName && c2.companyName && c1.companyName.toLowerCase() === c2.companyName.toLowerCase());
+        if (sameCompany && nameSim > 0.6 && !reasons.length) {
+          reasons.push(`Similar names + same company (${Math.round(nameSim * 100)}%)`);
         }
 
         // Exact email match

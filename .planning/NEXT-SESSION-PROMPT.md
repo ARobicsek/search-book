@@ -29,53 +29,42 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-**Data backup — start from scratch.** The core question: how do I make sure I have a backup of the precious data in SearchBook in some place that I have full control over?
+**Backup is fully working.** Both bugs are fixed. Ready for Phase 8 or user feedback items.
 
-### Context from failed attempts this session:
-- The Vercel serverless function has a **30-second timeout** (hobby plan max). Every server-side approach timed out:
-  1. Single endpoint with `$queryRawUnsafe` on `sqlite_master` + all table SELECTs — timed out
-  2. Parallel `Promise.all` on the same — timed out
-  3. Split into per-table endpoints (`/schema` + `/data/:tableName`) with client fetching one by one — timed out
-  4. Single endpoint with `prisma.*.findMany()` for all 16 models via `Promise.all` — timed out
-- The Turso/Prisma adapter appears to have significant overhead per query in Vercel's serverless environment (cold starts, connection setup, etc.)
-- **Current state of code:** The `/api/backup/export` endpoint exists (Prisma findMany approach) but doesn't complete within 30s on Vercel
-
-### Possible directions to explore:
-- **Turso's own backup/export tools** — Does Turso have a dump or export API?
-- **Direct libsql client** (bypass Prisma) — Might be faster than Prisma adapter
-- **Turso HTTP API** — Could call Turso directly from the client browser (no Vercel middleman)
-- **Scheduled export via GitHub Actions or external cron** — Not bound by Vercel's 30s limit
-- **Smaller incremental approach** — Export one table at a time from the client with separate button clicks or auto-periodic fetches
+Possible next directions:
+- **Phase 8: Document Search** — Full-text search across linked Google Drive documents (see ROADMAP.md)
+- **User feedback** — Any new items from testing
+- **Push to deploy** — Run `npm run prepush && git push` to deploy the backup fixes + save reminder UI to production
 
 ---
 
 ## What Was Completed This Session
 
-### Backup Feature (Partial — Not Working in Production)
-Attempted to implement "Create Backup" for the web version. Multiple approaches tried (see above), all timing out on Vercel's 30s serverless limit. The backup works conceptually but Turso queries via Prisma are too slow in the Vercel serverless environment.
+### Backup Bug Fixes
+1. **Date parsing fixed** — `transformRecords()` in `server/src/routes/backup.ts` now handles all three Turso date formats via `toDate()` helper: Unix millisecond timestamps (`1770157191736`), ISO strings with timezone (`"2026-02-06T16:18:17.954+00:00"`), and raw SQLite strings (`"2026-02-08 15:39:27"`). Local restore from production backup works.
+2. **Save-local path fixed** — Robust project root detection tries three candidate paths (`__dirname`-based, `process.cwd()`, parent of cwd) and verifies each contains `server/` + `client/` subdirectories.
+3. **Backups folder** — Created `backups/` directory with `.gitkeep` (contents gitignored via `backups/*` + `!backups/.gitkeep`).
+4. **Save reminder UI** — Amber banner on Settings page after backup download reminds user to copy JSON from Downloads into `SearchBook/backups/`.
 
-### Technical changes (current state):
-- `server/src/routes/backup.ts` — Has `/export` endpoint using `prisma.*.findMany()` for all 16 models (times out on Vercel)
-- `client/src/pages/settings.tsx` — Downloads JSON from `/backup/export`, triggers browser file download
+### Backup Architecture (completed last session):
+- `GET /api/backup/credentials` — returns Turso URL + auth token (404 in local dev)
+- `client/src/lib/backup.ts` — `exportViaTurso()` and `importViaTurso()` using `@libsql/client/web`
+- `client/src/pages/settings.tsx` — tries browser-direct first, falls back to server-side Prisma
+- `POST /api/backup/import` — server-side restore for local dev (uses `transformRecords()` for type conversion)
+- `POST /api/backup/save-local` — writes backup JSON to project `backups/` folder (local dev only)
+
+### Flow:
+- **Production export:** Browser → Turso directly (no Vercel timeout) → JSON download + amber reminder to copy to backups/
+- **Production restore:** Browser → Turso directly (import via batch INSERTs)
+- **Local dev export:** Server Prisma `findMany` fallback → JSON download + auto-save to backups/
+- **Local dev restore:** Server Prisma `createMany` fallback (working)
 
 ---
 
 ## What Was Completed Last Session
 
-### Ctrl-K Command Palette Simplified
-Removed Quick Add, Navigate, Contacts, Companies sections from command palette initial view. Only Global Search remains when Ctrl-K/mobile search button is opened. Live search results still appear when typing.
-
-### Manual Merge Feature
-Added Combobox-based contact picker on duplicates page. Users can select any two contacts and merge them with field-by-field selection dialog (useful for non-obvious duplicates like "Dick Jones" vs "Richard Jones III").
-
-### "Keep Both" for Phone Numbers
-Merge dialog now supports "Keep Both" for phone numbers (in addition to emails). Server combines phone numbers with " | " separator.
-
-### Duplicate Detection Performance Fix (Vercel Timeout)
-The duplicates page was timing out on Vercel's 30s limit. Fixed with inverted-index candidate generation and slimmed DB queries.
-
-### Lazy-Load Merge Details
-Both auto-detected and manual merge buttons now fetch full contact details on demand via `/contacts/:id` before opening the merge dialog.
+### Browser-Direct Turso Backup
+Implemented `@libsql/client/web` in the browser to query Turso directly, bypassing Vercel's 30-second timeout.
 
 ---
 
@@ -122,7 +111,7 @@ printf 'value' | vercel env add VAR_NAME production
 ## Technical Notes
 
 1. **Turso CLI on Windows requires WSL** — Use web dashboard instead
-2. **@libsql/client version** — Downgraded to 0.5.6 to avoid "migration jobs" 400 errors
+2. **@libsql/client versions** — Server: 0.5.6 (downgraded for Prisma adapter compatibility). Client: 0.17.0 (browser-direct via `/web` export)
 3. **Vercel env vars** — Use `printf` not heredoc to avoid trailing newlines that break URLs/tokens
 4. **build:vercel script** — Must install client and server dependencies before build
 5. **Photos in production** — Only Vercel Blob URLs work; local `/photos/` paths are dev-only
@@ -133,4 +122,9 @@ printf 'value' | vercel env add VAR_NAME production
 10. **Server-side sorting** — `/contacts` accepts `sortBy=lastOutreachDate` + `sortDir=asc|desc` for cross-page sort
 11. **Duplicate detection** — Normalizes names (strips middle initials, suffixes) before Levenshtein; inverted-index candidate generation (name tokens + email); OR logic (similar name OR same email); slim DB query; merge dialog lazy-loads full details on demand
 12. **Client timeout** — `TIMEOUT_MS = 30000` in `client/src/lib/api.ts`; Vercel `maxDuration: 30` in `vercel.json`
-13. **Vercel 30s timeout** — Hobby plan max. Bulk Turso queries via Prisma adapter are too slow for this limit. Any backup/export solution must account for this constraint.
+13. **Vercel 30s timeout** — Hobby plan max. Browser-direct Turso access bypasses this for backup/restore.
+14. **Browser-direct Turso** — `@libsql/client/web` in client connects to Turso over HTTPS. The `/web` export auto-converts `libsql://` URLs to `https://`. Used for backup export and restore to avoid Vercel timeout.
+15. **Backup security** — Turso auth token is exposed to browser via `/api/backup/credentials`. Acceptable for personal single-user app. Can create read-only token later for hardening.
+16. **Express body limit** — Increased to 50MB (`express.json({ limit: '50mb' })` in `app.ts`) for backup import payloads.
+17. **Backup date formats** — Turso returns dates as Unix ms timestamps, ISO strings, or raw SQLite strings. `toDate()` in `backup.ts` handles all three.
+18. **Production backup workflow** — JSON downloads to browser; user manually copies to `SearchBook/backups/` (amber UI reminder). Save-local endpoint only works in local dev (Vercel has read-only filesystem).

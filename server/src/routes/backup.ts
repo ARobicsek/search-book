@@ -204,8 +204,17 @@ router.post('/restore', async (req: Request, res: Response) => {
 // POST /api/backup/save-local — save backup JSON to project backups/ folder
 router.post('/save-local', (req: Request, res: Response) => {
   try {
-    // Only works when server has filesystem access (local dev)
-    const projectRoot = path.resolve(__dirname, '..', '..', '..');
+    // Find project root (directory containing both server/ and client/)
+    const candidates = [
+      path.resolve(__dirname, '..', '..', '..'),  // from server/src/routes/
+      process.cwd(),                                // if cwd is project root
+      path.resolve(process.cwd(), '..'),            // if cwd is server/
+    ];
+    const projectRoot = candidates.find(dir =>
+      fs.existsSync(path.join(dir, 'server')) && fs.existsSync(path.join(dir, 'client'))
+    ) || candidates[0];
+    console.log('[save-local] projectRoot:', projectRoot);
+
     const backupsDir = path.join(projectRoot, 'backups');
     fs.mkdirSync(backupsDir, { recursive: true });
 
@@ -236,7 +245,8 @@ function transformRecords(records: Record<string, unknown>[]): any[] {
     const out: Record<string, unknown> = { ...record };
     for (const key of Object.keys(out)) {
       if (DATETIME_FIELDS.has(key) && out[key] != null) {
-        out[key] = new Date(String(out[key]));
+        const s = String(out[key]);
+        out[key] = new Date(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
       }
       if (BOOLEAN_FIELDS.has(key)) {
         out[key] = out[key] === true || out[key] === 1;

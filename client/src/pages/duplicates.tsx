@@ -25,11 +25,28 @@ import { Users, Loader2, RefreshCw, GitMerge } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 
+// Slim type returned by the duplicates API (for list display)
+interface DuplicateContactSummary {
+  id: number
+  name: string
+  email: string | null
+  title: string | null
+  company: { id: number; name: string } | null
+}
+
+interface DuplicatePair {
+  contact1: DuplicateContactSummary
+  contact2: DuplicateContactSummary
+  score: number
+  reasons: string[]
+}
+
+// Full type for merge dialog (loaded on demand)
 interface DuplicateContact {
   id: number
   name: string
   email: string | null
-  additionalEmails: string | null // JSON array
+  additionalEmails: string | null
   phone: string | null
   title: string | null
   linkedinUrl: string | null
@@ -49,17 +66,11 @@ interface DuplicateContact {
   company: { id: number; name: string } | null
 }
 
-interface DuplicatePair {
-  contact1: DuplicateContact
-  contact2: DuplicateContact
-  score: number
-  reasons: string[]
-}
-
 type FieldSelection = 1 | 2 | 'both'
 
 interface MergeState {
-  pair: DuplicatePair
+  contact1: DuplicateContact
+  contact2: DuplicateContact
   keepId: number
   fieldSelections: Record<string, FieldSelection>
 }
@@ -100,6 +111,7 @@ export function DuplicatesPage() {
   const [manualContact1, setManualContact1] = useState('')
   const [manualContact2, setManualContact2] = useState('')
   const [loadingManualMerge, setLoadingManualMerge] = useState(false)
+  const [loadingMergeDetails, setLoadingMergeDetails] = useState(false)
 
   function loadDuplicates() {
     setLoading(true)
@@ -128,17 +140,7 @@ export function DuplicatesPage() {
 
     setLoadingManualMerge(true)
     try {
-      const [c1, c2] = await Promise.all([
-        api.get<DuplicateContact>(`/contacts/${id1}`),
-        api.get<DuplicateContact>(`/contacts/${id2}`),
-      ])
-      const pair: DuplicatePair = {
-        contact1: c1,
-        contact2: c2,
-        score: 0,
-        reasons: ['Manual merge'],
-      }
-      openMergeDialog(pair, keepId)
+      await openMergeDialog(id1, id2, keepId)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load contacts')
     } finally {
@@ -146,17 +148,30 @@ export function DuplicatesPage() {
     }
   }
 
-  function openMergeDialog(pair: DuplicatePair, keepId: number) {
-    // Initialize field selections - default to keeping values from the "keep" contact
-    const isKeepingContact1 = keepId === pair.contact1.id
-    const defaultSelection: FieldSelection = isKeepingContact1 ? 1 : 2
+  async function openMergeDialog(id1: number, id2: number, keepId: number) {
+    setLoadingMergeDetails(true)
+    try {
+      const [c1, c2] = await Promise.all([
+        api.get<DuplicateContact>(`/contacts/${id1}`),
+        api.get<DuplicateContact>(`/contacts/${id2}`),
+      ])
+      // Contact 1 = lower ID, Contact 2 = higher ID (consistent ordering)
+      const [contact1, contact2] = c1.id < c2.id ? [c1, c2] : [c2, c1]
 
-    const fieldSelections: Record<string, FieldSelection> = {}
-    for (const field of MERGEABLE_FIELDS) {
-      fieldSelections[field.key] = defaultSelection
+      const isKeepingContact1 = keepId === contact1.id
+      const defaultSelection: FieldSelection = isKeepingContact1 ? 1 : 2
+
+      const fieldSelections: Record<string, FieldSelection> = {}
+      for (const field of MERGEABLE_FIELDS) {
+        fieldSelections[field.key] = defaultSelection
+      }
+
+      setMergeState({ contact1, contact2, keepId, fieldSelections })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load contact details')
+    } finally {
+      setLoadingMergeDetails(false)
     }
-
-    setMergeState({ pair, keepId, fieldSelections })
   }
 
   function setFieldSelection(field: string, selection: FieldSelection) {
@@ -171,15 +186,15 @@ export function DuplicatesPage() {
     if (!mergeState) return
     setMerging(true)
 
-    const removeId = mergeState.keepId === mergeState.pair.contact1.id
-      ? mergeState.pair.contact2.id
-      : mergeState.pair.contact1.id
-    const keepName = mergeState.keepId === mergeState.pair.contact1.id
-      ? mergeState.pair.contact1.name
-      : mergeState.pair.contact2.name
-    const removeName = mergeState.keepId === mergeState.pair.contact1.id
-      ? mergeState.pair.contact2.name
-      : mergeState.pair.contact1.name
+    const removeId = mergeState.keepId === mergeState.contact1.id
+      ? mergeState.contact2.id
+      : mergeState.contact1.id
+    const keepName = mergeState.keepId === mergeState.contact1.id
+      ? mergeState.contact1.name
+      : mergeState.contact2.name
+    const removeName = mergeState.keepId === mergeState.contact1.id
+      ? mergeState.contact2.name
+      : mergeState.contact1.name
 
     try {
       await api.post('/duplicates/merge', {
@@ -385,17 +400,19 @@ export function DuplicatesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => openMergeDialog(dup, dup.contact1.id)}
+                    disabled={loadingMergeDetails}
+                    onClick={() => openMergeDialog(dup.contact1.id, dup.contact2.id, dup.contact1.id)}
                   >
-                    <GitMerge className="mr-2 h-4 w-4" />
+                    {loadingMergeDetails ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
                     Merge (keep {truncate(dup.contact1.name, 15)})
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => openMergeDialog(dup, dup.contact2.id)}
+                    disabled={loadingMergeDetails}
+                    onClick={() => openMergeDialog(dup.contact1.id, dup.contact2.id, dup.contact2.id)}
                   >
-                    <GitMerge className="mr-2 h-4 w-4" />
+                    {loadingMergeDetails ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
                     Merge (keep {truncate(dup.contact2.name, 15)})
                   </Button>
                 </div>
@@ -422,8 +439,8 @@ export function DuplicatesPage() {
                 {MERGEABLE_FIELDS.map(({ key, label }) => {
                   // For email field, use special display that shows all emails
                   const isEmail = key === 'email'
-                  const val1 = isEmail ? getEmailDisplay(mergeState.pair.contact1) : getFieldValue(mergeState.pair.contact1, key)
-                  const val2 = isEmail ? getEmailDisplay(mergeState.pair.contact2) : getFieldValue(mergeState.pair.contact2, key)
+                  const val1 = isEmail ? getEmailDisplay(mergeState.contact1) : getFieldValue(mergeState.contact1, key)
+                  const val2 = isEmail ? getEmailDisplay(mergeState.contact2) : getFieldValue(mergeState.contact2, key)
                   const bothEmpty = val1 === '(empty)' && val2 === '(empty)'
                   const sameValue = val1 === val2
                   const showKeepBoth = isMultiValueField(key) && !sameValue && val1 !== '(empty)' && val2 !== '(empty)'

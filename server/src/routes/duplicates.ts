@@ -77,14 +77,19 @@ function tokensMatch(a: string[], b: string[]): boolean {
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const t0 = Date.now();
+    // Minimal query: only fields needed for name/email comparison + display
     const contacts = await prisma.contact.findMany({
-      include: { company: { select: { id: true, name: true } } },
+      select: {
+        id: true, name: true, email: true, title: true,
+        company: { select: { id: true, name: true } },
+      },
     });
     console.log(`[duplicates] DB query: ${Date.now() - t0}ms, ${contacts.length} contacts`);
 
+    type SlimContact = typeof contacts[0];
     const duplicates: Array<{
-      contact1: typeof contacts[0];
-      contact2: typeof contacts[0];
+      contact1: SlimContact;
+      contact2: SlimContact;
       score: number;
       reasons: string[];
     }> = [];
@@ -93,8 +98,10 @@ router.get('/', async (_req: Request, res: Response) => {
     const normalized = contacts.map(c => normalizeName(c.name));
     const allTokens = contacts.map(c => nameTokens(c.name));
 
-    // Build inverted index: token → set of contact indices
-    // Only run expensive Levenshtein on pairs sharing a name token
+    // Build candidate pairs from name tokens + email index
+    const candidates = new Set<string>();
+
+    // Name token index
     const tokenIndex = new Map<string, number[]>();
     for (let i = 0; i < contacts.length; i++) {
       for (const token of allTokens[i]) {
@@ -103,58 +110,24 @@ router.get('/', async (_req: Request, res: Response) => {
         arr.push(i);
       }
     }
-
-    // Collect candidate pairs (share at least one name token)
-    const candidates = new Set<string>();
     for (const indices of tokenIndex.values()) {
       for (let a = 0; a < indices.length; a++) {
         for (let b = a + 1; b < indices.length; b++) {
-          const lo = Math.min(indices[a], indices[b]);
-          const hi = Math.max(indices[a], indices[b]);
-          candidates.add(`${lo},${hi}`);
+          candidates.add(`${Math.min(indices[a], indices[b])},${Math.max(indices[a], indices[b])}`);
         }
       }
     }
 
-    // Also add pairs sharing same company (for company-based matching)
-    const companyIndex = new Map<string, number[]>();
-    for (let i = 0; i < contacts.length; i++) {
-      const c = contacts[i];
-      const key = c.companyId ? `id:${c.companyId}` : c.companyName ? `name:${c.companyName.toLowerCase()}` : null;
-      if (key) {
-        let arr = companyIndex.get(key);
-        if (!arr) { arr = []; companyIndex.set(key, arr); }
-        arr.push(i);
-      }
-    }
-    for (const indices of companyIndex.values()) {
-      for (let a = 0; a < indices.length; a++) {
-        for (let b = a + 1; b < indices.length; b++) {
-          const lo = Math.min(indices[a], indices[b]);
-          const hi = Math.max(indices[a], indices[b]);
-          candidates.add(`${lo},${hi}`);
-        }
-      }
-    }
-
-    // Build email/LinkedIn indexes for O(1) lookup
+    // Email index
     const emailIndex = new Map<string, number[]>();
-    const linkedinIndex = new Map<string, number[]>();
     for (let i = 0; i < contacts.length; i++) {
-      const c = contacts[i];
-      if (c.email) {
-        const key = c.email.toLowerCase();
+      if (contacts[i].email) {
+        const key = contacts[i].email!.toLowerCase();
         let arr = emailIndex.get(key);
         if (!arr) { arr = []; emailIndex.set(key, arr); }
         arr.push(i);
       }
-      if (c.linkedinUrl) {
-        let arr = linkedinIndex.get(c.linkedinUrl);
-        if (!arr) { arr = []; linkedinIndex.set(c.linkedinUrl, arr); }
-        arr.push(i);
-      }
     }
-    // Add email/LinkedIn pairs to candidates
     for (const indices of emailIndex.values()) {
       for (let a = 0; a < indices.length; a++) {
         for (let b = a + 1; b < indices.length; b++) {
@@ -162,24 +135,19 @@ router.get('/', async (_req: Request, res: Response) => {
         }
       }
     }
-    for (const indices of linkedinIndex.values()) {
-      for (let a = 0; a < indices.length; a++) {
-        for (let b = a + 1; b < indices.length; b++) {
-          candidates.add(`${Math.min(indices[a], indices[b])},${Math.max(indices[a], indices[b])}`);
-        }
-      }
-    }
 
-    // Only evaluate candidate pairs (not all n² pairs)
+    console.log(`[duplicates] Indexing: ${Date.now() - t0}ms, ${candidates.size} candidates`);
+
+    // Evaluate candidate pairs
     for (const key of candidates) {
       const [i, j] = key.split(',').map(Number);
       const c1 = contacts[i];
       const c2 = contacts[j];
       const reasons: string[] = [];
 
-      // Name similarity with early-exit (minSim=0.6 for cheapest threshold)
-      const rawSim = similarity(c1.name, c2.name, 0.6);
-      const normSim = similarity(normalized[i], normalized[j], 0.6);
+      // Name similarity
+      const rawSim = similarity(c1.name, c2.name, 0.8);
+      const normSim = similarity(normalized[i], normalized[j], 0.8);
       const nameSim = Math.max(rawSim, normSim);
       if (nameSim > 0.8) {
         reasons.push(`Similar names (${Math.round(nameSim * 100)}%)`);
@@ -192,21 +160,9 @@ router.get('/', async (_req: Request, res: Response) => {
         reasons.push('Same name (normalized)');
       }
 
-      // Same company + moderate name similarity
-      const sameCompany = (c1.companyId && c2.companyId && c1.companyId === c2.companyId) ||
-        (c1.companyName && c2.companyName && c1.companyName.toLowerCase() === c2.companyName.toLowerCase());
-      if (sameCompany && nameSim > 0.6 && !reasons.length) {
-        reasons.push(`Similar names + same company (${Math.round(nameSim * 100)}%)`);
-      }
-
       // Exact email match
       if (c1.email && c2.email && c1.email.toLowerCase() === c2.email.toLowerCase()) {
         reasons.push('Same email');
-      }
-
-      // LinkedIn match
-      if (c1.linkedinUrl && c2.linkedinUrl && c1.linkedinUrl === c2.linkedinUrl) {
-        reasons.push('Same LinkedIn');
       }
 
       const effectiveScore = tokensMatch(tokens1, tokens2) ? Math.max(nameSim, 0.95) : nameSim;

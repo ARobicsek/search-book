@@ -3,30 +3,39 @@ import prisma from '../db';
 
 const router = Router();
 
-// Levenshtein distance (single-row optimization — O(min(m,n)) memory)
-function levenshtein(a: string, b: string): number {
+// Levenshtein distance with early exit when distance exceeds maxDist
+function levenshtein(a: string, b: string, maxDist?: number): number {
   if (a.length < b.length) { const t = a; a = b; b = t; }
   const m = a.length, n = b.length;
+  if (maxDist !== undefined && (m - n) > maxDist) return maxDist + 1;
   let prev = new Array(n + 1);
   let curr = new Array(n + 1);
   for (let j = 0; j <= n; j++) prev[j] = j;
   for (let i = 1; i <= m; i++) {
     curr[0] = i;
+    let rowMin = curr[0];
     for (let j = 1; j <= n; j++) {
       curr[j] = a[i - 1] === b[j - 1]
         ? prev[j - 1]
         : 1 + Math.min(prev[j - 1], prev[j], curr[j - 1]);
+      if (curr[j] < rowMin) rowMin = curr[j];
     }
+    if (maxDist !== undefined && rowMin > maxDist) return maxDist + 1;
     [prev, curr] = [curr, prev];
   }
   return prev[n];
 }
 
-function similarity(a: string, b: string): number {
+// Compute similarity only if it could exceed minSim (avoids wasted Levenshtein)
+function similarity(a: string, b: string, minSim: number = 0): number {
   const longer = a.length > b.length ? a : b;
   const shorter = a.length > b.length ? b : a;
   if (longer.length === 0) return 1.0;
-  return (longer.length - levenshtein(longer.toLowerCase(), shorter.toLowerCase())) / longer.length;
+  const maxDist = Math.floor((1 - minSim) * longer.length);
+  if (longer.length - shorter.length > maxDist) return 0;
+  const dist = levenshtein(longer.toLowerCase(), shorter.toLowerCase(), maxDist);
+  if (dist > maxDist) return 0;
+  return (longer.length - dist) / longer.length;
 }
 
 // Normalize name: strip middle initials, suffixes, and extra whitespace
@@ -78,59 +87,130 @@ router.get('/', async (_req: Request, res: Response) => {
       reasons: string[];
     }> = [];
 
-    // Pre-compute normalized names and tokens once (avoids O(n²) recomputation)
+    // Pre-compute normalized names and tokens
     const normalized = contacts.map(c => normalizeName(c.name));
-    const tokens = contacts.map(c => nameTokens(c.name));
+    const allTokens = contacts.map(c => nameTokens(c.name));
 
+    // Build inverted index: token → set of contact indices
+    // Only run expensive Levenshtein on pairs sharing a name token
+    const tokenIndex = new Map<string, number[]>();
     for (let i = 0; i < contacts.length; i++) {
-      for (let j = i + 1; j < contacts.length; j++) {
-        const c1 = contacts[i];
-        const c2 = contacts[j];
-        const reasons: string[] = [];
+      for (const token of allTokens[i]) {
+        let arr = tokenIndex.get(token);
+        if (!arr) { arr = []; tokenIndex.set(token, arr); }
+        arr.push(i);
+      }
+    }
 
-        // Name similarity — compare both raw and normalized names, take higher score
-        const rawSim = similarity(c1.name, c2.name);
-        const normSim = similarity(normalized[i], normalized[j]);
-        const nameSim = Math.max(rawSim, normSim);
-        if (nameSim > 0.8) {
-          reasons.push(`Similar names (${Math.round(nameSim * 100)}%)`);
+    // Collect candidate pairs (share at least one name token)
+    const candidates = new Set<string>();
+    for (const indices of tokenIndex.values()) {
+      for (let a = 0; a < indices.length; a++) {
+        for (let b = a + 1; b < indices.length; b++) {
+          const lo = Math.min(indices[a], indices[b]);
+          const hi = Math.max(indices[a], indices[b]);
+          candidates.add(`${lo},${hi}`);
         }
+      }
+    }
 
-        // Token-based match — catches "Katie M. Tucker" vs "Katie Tucker" even if Levenshtein misses
-        const tokens1 = tokens[i];
-        const tokens2 = tokens[j];
-        if (!reasons.length && tokensMatch(tokens1, tokens2) && tokens1.length >= 2 && tokens2.length >= 2) {
-          reasons.push('Same name (normalized)');
+    // Also add pairs sharing same company (for company-based matching)
+    const companyIndex = new Map<string, number[]>();
+    for (let i = 0; i < contacts.length; i++) {
+      const c = contacts[i];
+      const key = c.companyId ? `id:${c.companyId}` : c.companyName ? `name:${c.companyName.toLowerCase()}` : null;
+      if (key) {
+        let arr = companyIndex.get(key);
+        if (!arr) { arr = []; companyIndex.set(key, arr); }
+        arr.push(i);
+      }
+    }
+    for (const indices of companyIndex.values()) {
+      for (let a = 0; a < indices.length; a++) {
+        for (let b = a + 1; b < indices.length; b++) {
+          const lo = Math.min(indices[a], indices[b]);
+          const hi = Math.max(indices[a], indices[b]);
+          candidates.add(`${lo},${hi}`);
         }
+      }
+    }
 
-        // Same company + moderate name similarity
-        const sameCompany = (c1.companyId && c2.companyId && c1.companyId === c2.companyId) ||
-          (c1.companyName && c2.companyName && c1.companyName.toLowerCase() === c2.companyName.toLowerCase());
-        if (sameCompany && nameSim > 0.6 && !reasons.length) {
-          reasons.push(`Similar names + same company (${Math.round(nameSim * 100)}%)`);
+    // Build email/LinkedIn indexes for O(1) lookup
+    const emailIndex = new Map<string, number[]>();
+    const linkedinIndex = new Map<string, number[]>();
+    for (let i = 0; i < contacts.length; i++) {
+      const c = contacts[i];
+      if (c.email) {
+        const key = c.email.toLowerCase();
+        let arr = emailIndex.get(key);
+        if (!arr) { arr = []; emailIndex.set(key, arr); }
+        arr.push(i);
+      }
+      if (c.linkedinUrl) {
+        let arr = linkedinIndex.get(c.linkedinUrl);
+        if (!arr) { arr = []; linkedinIndex.set(c.linkedinUrl, arr); }
+        arr.push(i);
+      }
+    }
+    // Add email/LinkedIn pairs to candidates
+    for (const indices of emailIndex.values()) {
+      for (let a = 0; a < indices.length; a++) {
+        for (let b = a + 1; b < indices.length; b++) {
+          candidates.add(`${Math.min(indices[a], indices[b])},${Math.max(indices[a], indices[b])}`);
         }
-
-        // Exact email match
-        if (c1.email && c2.email && c1.email.toLowerCase() === c2.email.toLowerCase()) {
-          reasons.push('Same email');
+      }
+    }
+    for (const indices of linkedinIndex.values()) {
+      for (let a = 0; a < indices.length; a++) {
+        for (let b = a + 1; b < indices.length; b++) {
+          candidates.add(`${Math.min(indices[a], indices[b])},${Math.max(indices[a], indices[b])}`);
         }
+      }
+    }
 
-        // LinkedIn match
-        if (c1.linkedinUrl && c2.linkedinUrl && c1.linkedinUrl === c2.linkedinUrl) {
-          reasons.push('Same LinkedIn');
-        }
+    // Only evaluate candidate pairs (not all n² pairs)
+    for (const key of candidates) {
+      const [i, j] = key.split(',').map(Number);
+      const c1 = contacts[i];
+      const c2 = contacts[j];
+      const reasons: string[] = [];
 
-        // Use token match or normSim as score when Levenshtein was low
-        const effectiveScore = tokensMatch(tokens1, tokens2) ? Math.max(nameSim, 0.95) : nameSim;
+      // Name similarity with early-exit (minSim=0.6 for cheapest threshold)
+      const rawSim = similarity(c1.name, c2.name, 0.6);
+      const normSim = similarity(normalized[i], normalized[j], 0.6);
+      const nameSim = Math.max(rawSim, normSim);
+      if (nameSim > 0.8) {
+        reasons.push(`Similar names (${Math.round(nameSim * 100)}%)`);
+      }
 
-        if (reasons.length > 0) {
-          duplicates.push({
-            contact1: c1,
-            contact2: c2,
-            score: effectiveScore,
-            reasons,
-          });
-        }
+      // Token-based match
+      const tokens1 = allTokens[i];
+      const tokens2 = allTokens[j];
+      if (!reasons.length && tokensMatch(tokens1, tokens2) && tokens1.length >= 2 && tokens2.length >= 2) {
+        reasons.push('Same name (normalized)');
+      }
+
+      // Same company + moderate name similarity
+      const sameCompany = (c1.companyId && c2.companyId && c1.companyId === c2.companyId) ||
+        (c1.companyName && c2.companyName && c1.companyName.toLowerCase() === c2.companyName.toLowerCase());
+      if (sameCompany && nameSim > 0.6 && !reasons.length) {
+        reasons.push(`Similar names + same company (${Math.round(nameSim * 100)}%)`);
+      }
+
+      // Exact email match
+      if (c1.email && c2.email && c1.email.toLowerCase() === c2.email.toLowerCase()) {
+        reasons.push('Same email');
+      }
+
+      // LinkedIn match
+      if (c1.linkedinUrl && c2.linkedinUrl && c1.linkedinUrl === c2.linkedinUrl) {
+        reasons.push('Same LinkedIn');
+      }
+
+      const effectiveScore = tokensMatch(tokens1, tokens2) ? Math.max(nameSim, 0.95) : nameSim;
+
+      if (reasons.length > 0) {
+        duplicates.push({ contact1: c1, contact2: c2, score: effectiveScore, reasons });
       }
     }
 

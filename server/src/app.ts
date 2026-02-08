@@ -50,7 +50,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Serve uploaded photos statically (for local dev - Vercel will use Blob storage)
 if (process.env.NODE_ENV !== 'production') {

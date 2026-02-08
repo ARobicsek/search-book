@@ -5,6 +5,18 @@ import prisma from '../db';
 
 const router = Router();
 
+// GET /api/backup/credentials — return Turso credentials for browser-direct backup/restore
+router.get('/credentials', (_req: Request, res: Response) => {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (!url || !authToken) {
+    res.status(404).json({ error: 'Turso credentials not configured' });
+    return;
+  }
+
+  res.json({ url, authToken });
+});
 
 // GET /api/backup/export — returns all data as JSON using Prisma findMany (proven with Turso)
 router.get('/export', async (_req: Request, res: Response) => {
@@ -186,6 +198,70 @@ router.post('/restore', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Restore error:', error);
     res.status(500).json({ error: 'Failed to restore backup' });
+  }
+});
+
+// POST /api/backup/import — restore from a JSON backup (local dev fallback)
+router.post('/import', async (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    if (!data || !data._meta) {
+      res.status(400).json({ error: 'Invalid backup format: missing _meta' });
+      return;
+    }
+
+    // Delete all data in child-first order (FK safety)
+    await prisma.conversationContact.deleteMany();
+    await prisma.conversationCompany.deleteMany();
+    await prisma.contactTag.deleteMany();
+    await prisma.companyTag.deleteMany();
+    await prisma.ideaContact.deleteMany();
+    await prisma.ideaCompany.deleteMany();
+    await prisma.link.deleteMany();
+    await prisma.prepNote.deleteMany();
+    await prisma.relationship.deleteMany();
+    await prisma.action.deleteMany();
+    await prisma.conversation.deleteMany();
+    await prisma.employmentHistory.deleteMany();
+    await prisma.idea.deleteMany();
+    await prisma.tag.deleteMany();
+    // Clear self-references before deleting contacts
+    await prisma.contact.updateMany({ data: { referredById: null } });
+    await prisma.contact.deleteMany();
+    await prisma.company.deleteMany();
+
+    // Insert in parent-first order
+    if (data.Company?.length) await prisma.company.createMany({ data: data.Company });
+    if (data.Contact?.length) {
+      // Insert contacts without self-references first
+      const contactsWithoutRefs = data.Contact.map((c: Record<string, unknown>) => ({ ...c, referredById: null }));
+      await prisma.contact.createMany({ data: contactsWithoutRefs });
+      // Restore self-references
+      for (const c of data.Contact) {
+        if (c.referredById) {
+          await prisma.contact.update({ where: { id: c.id as number }, data: { referredById: c.referredById as number } });
+        }
+      }
+    }
+    if (data.Tag?.length) await prisma.tag.createMany({ data: data.Tag });
+    if (data.Idea?.length) await prisma.idea.createMany({ data: data.Idea });
+    if (data.EmploymentHistory?.length) await prisma.employmentHistory.createMany({ data: data.EmploymentHistory });
+    if (data.Conversation?.length) await prisma.conversation.createMany({ data: data.Conversation });
+    if (data.Action?.length) await prisma.action.createMany({ data: data.Action });
+    if (data.ContactTag?.length) await prisma.contactTag.createMany({ data: data.ContactTag });
+    if (data.CompanyTag?.length) await prisma.companyTag.createMany({ data: data.CompanyTag });
+    if (data.ConversationContact?.length) await prisma.conversationContact.createMany({ data: data.ConversationContact });
+    if (data.ConversationCompany?.length) await prisma.conversationCompany.createMany({ data: data.ConversationCompany });
+    if (data.IdeaContact?.length) await prisma.ideaContact.createMany({ data: data.IdeaContact });
+    if (data.IdeaCompany?.length) await prisma.ideaCompany.createMany({ data: data.IdeaCompany });
+    if (data.Link?.length) await prisma.link.createMany({ data: data.Link });
+    if (data.PrepNote?.length) await prisma.prepNote.createMany({ data: data.PrepNote });
+    if (data.Relationship?.length) await prisma.relationship.createMany({ data: data.Relationship });
+
+    res.json({ message: 'Import completed successfully' });
+  } catch (error) {
+    console.error('Backup import error:', error);
+    res.status(500).json({ error: 'Failed to import backup' });
   }
 });
 

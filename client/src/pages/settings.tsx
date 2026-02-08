@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '@/lib/api'
+import { exportViaTurso, importViaTurso, type BackupProgress } from '@/lib/backup'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import {
   Card,
   CardContent,
@@ -9,13 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -27,30 +20,27 @@ import {
 import { toast } from 'sonner'
 import { Download, Upload, Loader2 } from 'lucide-react'
 
-interface Backup {
-  name: string
-  created: string
-}
-
 export function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false)
-  const [backups, setBackups] = useState<Backup[]>([])
-  const [selectedBackup, setSelectedBackup] = useState('')
+  const [backupProgress, setBackupProgress] = useState<BackupProgress | null>(null)
   const [restoring, setRestoring] = useState(false)
+  const [restoreProgress, setRestoreProgress] = useState<BackupProgress | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
-
-  function loadBackups() {
-    api.get<Backup[]>('/backup').then(setBackups).catch(() => {})
-  }
-
-  useEffect(() => {
-    loadBackups()
-  }, [])
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function handleBackup() {
     setBackingUp(true)
+    setBackupProgress(null)
     try {
-      const data = await api.get<Record<string, unknown>>('/backup/export')
+      // Try browser-direct Turso export first
+      let data = await exportViaTurso((p) => setBackupProgress(p))
+
+      // Fallback to server-side export (local dev)
+      if (data === null) {
+        data = await api.get<Record<string, unknown>>('/backup/export')
+      }
+
       const json = JSON.stringify(data, null, 2)
       const blob = new Blob([json], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
@@ -66,22 +56,54 @@ export function SettingsPage() {
       toast.error(err instanceof Error ? err.message : 'Backup failed')
     } finally {
       setBackingUp(false)
+      setBackupProgress(null)
     }
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPendingFile(file)
+    setConfirmOpen(true)
+    // Reset input so the same file can be re-selected
+    e.target.value = ''
+  }
+
   async function handleRestore() {
-    if (!selectedBackup) return
+    if (!pendingFile) return
     setRestoring(true)
+    setRestoreProgress(null)
+    setConfirmOpen(false)
     try {
-      await api.post('/backup/restore', { backupName: selectedBackup })
-      toast.success('Restore completed. Reloading page...')
-      setConfirmOpen(false)
-      setTimeout(() => window.location.reload(), 2000)
+      const text = await pendingFile.text()
+      const data = JSON.parse(text)
+
+      if (!data._meta) {
+        throw new Error('Invalid backup file: missing _meta field')
+      }
+
+      // Try browser-direct Turso import first
+      const result = await importViaTurso(data, (p) => setRestoreProgress(p))
+
+      // Fallback to server-side import (local dev)
+      if (result === null) {
+        await api.post('/backup/import', data)
+      }
+
+      toast.success('Restore completed. Reloading...')
+      setTimeout(() => window.location.reload(), 1500)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Restore failed')
-    } finally {
       setRestoring(false)
+      setRestoreProgress(null)
     }
+  }
+
+  function formatProgress(progress: BackupProgress | null, defaultText: string): string {
+    if (!progress) return defaultText
+    const { phase, table, index, total } = progress
+    const label = phase === 'delete' ? 'Clearing' : phase === 'import' ? 'Restoring' : 'Exporting'
+    return `${label} ${table} (${index + 1}/${total})...`
   }
 
   return (
@@ -99,11 +121,11 @@ export function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={handleBackup} disabled={backingUp}>
+          <Button onClick={handleBackup} disabled={backingUp || restoring}>
             {backingUp ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating backup...
+                {formatProgress(backupProgress, 'Starting backup...')}
               </>
             ) : (
               <>
@@ -119,39 +141,34 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>Restore from Backup</CardTitle>
           <CardDescription>
-            Replace your current data with a previous backup. This cannot be undone.
+            Upload a backup JSON file to replace all current data. This cannot be undone.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {backups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No backups available.</p>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label>Select Backup</Label>
-                <Select value={selectedBackup} onValueChange={setSelectedBackup}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Choose a backup..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {backups.map((b) => (
-                      <SelectItem key={b.name} value={b.name}>
-                        {b.name} — {new Date(b.created).toLocaleString()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                variant="destructive"
-                disabled={!selectedBackup || restoring}
-                onClick={() => setConfirmOpen(true)}
-              >
+        <CardContent>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <Button
+            variant="destructive"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={backingUp || restoring}
+          >
+            {restoring ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {formatProgress(restoreProgress, 'Starting restore...')}
+              </>
+            ) : (
+              <>
                 <Upload className="mr-2 h-4 w-4" />
-                Restore Backup
-              </Button>
-            </>
-          )}
+                Restore from JSON File
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 
@@ -159,25 +176,18 @@ export function SettingsPage() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Restore Backup</DialogTitle>
+            <DialogTitle>Restore from Backup</DialogTitle>
             <DialogDescription>
-              This will replace your current database and photos with the selected backup.
-              This action cannot be undone. Are you sure?
+              This will delete all current data and replace it with the contents of{' '}
+              <strong>{pendingFile?.name}</strong>. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleRestore} disabled={restoring}>
-              {restoring ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Restoring...
-                </>
-              ) : (
-                'Restore'
-              )}
+            <Button variant="destructive" onClick={handleRestore}>
+              Restore
             </Button>
           </DialogFooter>
         </DialogContent>

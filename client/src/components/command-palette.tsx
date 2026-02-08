@@ -374,7 +374,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder="Search contacts, companies, or create new..."
+        placeholder="Search contacts, companies, actions..."
         value={query}
         onValueChange={setQuery}
       />
@@ -387,68 +387,14 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
 
         {!isSearching && !hasSearchResults && query.length < 2 && (
           <>
-            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandEmpty>Type to search...</CommandEmpty>
 
-            <CommandGroup heading="Quick Add">
-              <CommandItem onSelect={() => setMode('add-contact')}>
-                <Plus className="mr-2 h-4 w-4" />
-                <span>New Contact</span>
-              </CommandItem>
-              <CommandItem onSelect={() => setMode('add-action')}>
-                <Plus className="mr-2 h-4 w-4" />
-                <span>New Action</span>
-              </CommandItem>
-              <CommandItem onSelect={() => setMode('add-note')}>
-                <Lightbulb className="mr-2 h-4 w-4" />
-                <span>New Note / Idea</span>
-              </CommandItem>
-            </CommandGroup>
-
-            <CommandSeparator />
-
-            <CommandGroup heading="Navigate">
+            <CommandGroup>
               <CommandItem onSelect={() => { close(); navigate('/search') }}>
                 <Search className="mr-2 h-4 w-4" />
                 <span>Global Search</span>
               </CommandItem>
-              <CommandItem onSelect={() => { close(); navigate('/actions') }}>
-                <ListTodo className="mr-2 h-4 w-4" />
-                <span>All Actions</span>
-              </CommandItem>
-              <CommandItem onSelect={() => { close(); navigate('/calendar') }}>
-                <Search className="mr-2 h-4 w-4" />
-                <span>Calendar</span>
-              </CommandItem>
             </CommandGroup>
-
-            {contacts.length > 0 && (
-              <>
-                <CommandSeparator />
-                <CommandGroup heading="Contacts">
-                  {contacts.slice(0, 10).map((c) => (
-                    <CommandItem key={`contact-${c.id}`} onSelect={() => { close(); navigate(`/contacts/${c.id}`) }}>
-                      <BookUser className="mr-2 h-4 w-4" />
-                      <span>{c.name}</span>
-                      {c.title && <span className="ml-2 text-xs text-muted-foreground">{c.title}</span>}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </>
-            )}
-
-            {companies.length > 0 && (
-              <>
-                <CommandSeparator />
-                <CommandGroup heading="Companies">
-                  {companies.slice(0, 10).map((c) => (
-                    <CommandItem key={`company-${c.id}`} onSelect={() => { close(); navigate(`/companies/${c.id}`) }}>
-                      <Building2 className="mr-2 h-4 w-4" />
-                      <span>{c.name}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </>
-            )}
           </>
         )}
 

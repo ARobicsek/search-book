@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { Users, Loader2, RefreshCw, GitMerge } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 
 interface DuplicateContact {
   id: number
@@ -94,6 +95,12 @@ export function DuplicatesPage() {
   const [merging, setMerging] = useState(false)
   const [mergeState, setMergeState] = useState<MergeState | null>(null)
 
+  // Manual merge state
+  const [contactOptions, setContactOptions] = useState<ComboboxOption[]>([])
+  const [manualContact1, setManualContact1] = useState('')
+  const [manualContact2, setManualContact2] = useState('')
+  const [loadingManualMerge, setLoadingManualMerge] = useState(false)
+
   function loadDuplicates() {
     setLoading(true)
     api
@@ -103,9 +110,41 @@ export function DuplicatesPage() {
       .finally(() => setLoading(false))
   }
 
+  const loadContactNames = useCallback(() => {
+    api.get<{ id: number; name: string }[]>('/contacts/names')
+      .then((names) => setContactOptions(names.map(c => ({ value: String(c.id), label: c.name }))))
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     loadDuplicates()
-  }, [])
+    loadContactNames()
+  }, [loadContactNames])
+
+  async function openManualMerge(keepId: number) {
+    const id1 = parseInt(manualContact1)
+    const id2 = parseInt(manualContact2)
+    if (!id1 || !id2 || id1 === id2) return
+
+    setLoadingManualMerge(true)
+    try {
+      const [c1, c2] = await Promise.all([
+        api.get<DuplicateContact>(`/contacts/${id1}`),
+        api.get<DuplicateContact>(`/contacts/${id2}`),
+      ])
+      const pair: DuplicatePair = {
+        contact1: c1,
+        contact2: c2,
+        score: 0,
+        reasons: ['Manual merge'],
+      }
+      openMergeDialog(pair, keepId)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load contacts')
+    } finally {
+      setLoadingManualMerge(false)
+    }
+  }
 
   function openMergeDialog(pair: DuplicatePair, keepId: number) {
     // Initialize field selections - default to keeping values from the "keep" contact
@@ -150,7 +189,10 @@ export function DuplicatesPage() {
       })
       toast.success(`Merged "${removeName}" into "${keepName}"`)
       setMergeState(null)
+      setManualContact1('')
+      setManualContact2('')
       loadDuplicates()
+      loadContactNames()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to merge')
     } finally {
@@ -212,6 +254,62 @@ export function DuplicatesPage() {
           Rescan
         </Button>
       </div>
+
+      {/* Manual Merge */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Manual Merge</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Select two contacts to combine (e.g. when names differ but it's the same person).
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Contact 1</Label>
+              <Combobox
+                options={contactOptions.filter(o => o.value !== manualContact2)}
+                value={manualContact1}
+                onChange={(v) => setManualContact1(v)}
+                placeholder="Select contact..."
+                searchPlaceholder="Search contacts..."
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Contact 2</Label>
+              <Combobox
+                options={contactOptions.filter(o => o.value !== manualContact1)}
+                value={manualContact2}
+                onChange={(v) => setManualContact2(v)}
+                placeholder="Select contact..."
+                searchPlaceholder="Search contacts..."
+              />
+            </div>
+          </div>
+          {manualContact1 && manualContact2 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openManualMerge(parseInt(manualContact1))}
+                disabled={loadingManualMerge}
+              >
+                {loadingManualMerge ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
+                Keep {contactOptions.find(o => o.value === manualContact1)?.label}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openManualMerge(parseInt(manualContact2))}
+                disabled={loadingManualMerge}
+              >
+                {loadingManualMerge ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
+                Keep {contactOptions.find(o => o.value === manualContact2)?.label}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">

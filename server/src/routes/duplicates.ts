@@ -33,13 +33,37 @@ function similarity(a: string, b: string): number {
 
 // Normalize name: strip middle initials, suffixes, and extra whitespace
 function normalizeName(name: string): string {
-  let n = name;
-  // Remove common suffixes (with or without preceding comma)
-  n = n.replace(/,?\s*(J\.?D\.?|M\.?D\.?|Ph\.?D\.?|MBA|Jr\.?|Sr\.?|III|II|IV|Esq\.?)$/gi, '');
+  let n = name.trim();
+  // Remove parenthesized suffixes like "(J.D.)" or "(PhD)"
+  n = n.replace(/\s*\([^)]*\)\s*$/, '');
+  // Remove common suffixes (with or without preceding comma/dash)
+  // Loop to handle chained suffixes like "Jr., J.D."
+  const suffixPattern = /[,\s\-]+(J\.?D\.?|M\.?D\.?|Ph\.?D\.?|D\.?O\.?|MBA|MPA|MPH|CPA|CFP|CFA|LCSW|RN|Jr\.?|Sr\.?|III|II|IV|V|Esq\.?)\s*$/gi;
+  for (let i = 0; i < 3; i++) {
+    const before = n;
+    n = n.replace(suffixPattern, '');
+    if (n === before) break;
+  }
   // Remove middle initials (single letter optionally followed by a period, between spaces)
-  n = n.replace(/\s+[A-Z]\.?\s+/g, ' ');
+  n = n.replace(/\s+[A-Za-z]\.?\s+/g, ' ');
   // Collapse whitespace and trim
   return n.replace(/\s+/g, ' ').trim();
+}
+
+// Extract lowercase name tokens for set-based comparison
+function nameTokens(name: string): string[] {
+  return normalizeName(name).toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+// Check if two token sets represent the same person (one is subset of the other)
+function tokensMatch(a: string[], b: string[]): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  // One is a subset of the other (handles "Katie Tucker" vs "Katie Marie Tucker")
+  const aSubsetB = a.every(t => setB.has(t));
+  const bSubsetA = b.every(t => setA.has(t));
+  return aSubsetB || bSubsetA;
 }
 
 // GET /api/duplicates — find potential duplicate contacts
@@ -70,6 +94,13 @@ router.get('/', async (_req: Request, res: Response) => {
           reasons.push(`Similar names (${Math.round(nameSim * 100)}%)`);
         }
 
+        // Token-based match — catches "Katie M. Tucker" vs "Katie Tucker" even if Levenshtein misses
+        const tokens1 = nameTokens(c1.name);
+        const tokens2 = nameTokens(c2.name);
+        if (!reasons.length && tokensMatch(tokens1, tokens2) && tokens1.length >= 2 && tokens2.length >= 2) {
+          reasons.push('Same name (normalized)');
+        }
+
         // Same company + moderate name similarity
         const sameCompany = (c1.companyId && c2.companyId && c1.companyId === c2.companyId) ||
           (c1.companyName && c2.companyName && c1.companyName.toLowerCase() === c2.companyName.toLowerCase());
@@ -87,11 +118,14 @@ router.get('/', async (_req: Request, res: Response) => {
           reasons.push('Same LinkedIn');
         }
 
+        // Use token match or normSim as score when Levenshtein was low
+        const effectiveScore = tokensMatch(tokens1, tokens2) ? Math.max(nameSim, 0.95) : nameSim;
+
         if (reasons.length > 0) {
           duplicates.push({
             contact1: c1,
             contact2: c2,
-            score: nameSim,
+            score: effectiveScore,
             reasons,
           });
         }

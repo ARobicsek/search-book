@@ -1,7 +1,7 @@
 const API_BASE = '/api';
 
 
-const TIMEOUT_MS = 15000;
+const TIMEOUT_MS = 30000;
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}) {
   const controller = new AbortController();

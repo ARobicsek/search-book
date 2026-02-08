@@ -76,9 +76,11 @@ function tokensMatch(a: string[], b: string[]): boolean {
 // GET /api/duplicates — find potential duplicate contacts
 router.get('/', async (_req: Request, res: Response) => {
   try {
+    const t0 = Date.now();
     const contacts = await prisma.contact.findMany({
       include: { company: { select: { id: true, name: true } } },
     });
+    console.log(`[duplicates] DB query: ${Date.now() - t0}ms, ${contacts.length} contacts`);
 
     const duplicates: Array<{
       contact1: typeof contacts[0];
@@ -215,6 +217,7 @@ router.get('/', async (_req: Request, res: Response) => {
     }
 
     duplicates.sort((a, b) => b.score - a.score);
+    console.log(`[duplicates] Total: ${Date.now() - t0}ms, ${candidates.size} candidates, ${duplicates.length} duplicates`);
     res.json(duplicates);
   } catch (error) {
     console.error('Error finding duplicates:', error);

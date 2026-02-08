@@ -1,8 +1,61 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import prisma from '../db';
 
 const router = Router();
+
+function escapeSQL(value: unknown): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'boolean') return value ? '1' : '0';
+  if (typeof value === 'number') return String(value);
+  if (value instanceof Date) return `'${value.toISOString()}'`;
+  const str = String(value).replace(/'/g, "''");
+  return `'${str}'`;
+}
+
+// GET /api/backup/download — download full database dump as SQL file
+router.get('/download', async (_req: Request, res: Response) => {
+  try {
+    // Get all table schemas from sqlite_master (works with both SQLite and Turso/libsql)
+    const tables = await prisma.$queryRawUnsafe<{ name: string; sql: string }[]>(
+      `SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'sqlite_%' ORDER BY name`
+    );
+
+    let output = '-- SearchBook Database Backup\n';
+    output += `-- Created: ${new Date().toISOString()}\n`;
+    output += '-- Usage: sqlite3 searchbook.db < this-file.sql\n\n';
+    output += 'PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n\n';
+
+    for (const table of tables) {
+      output += `-- Table: ${table.name}\n`;
+      output += `DROP TABLE IF EXISTS "${table.name}";\n`;
+      output += `${table.sql};\n\n`;
+
+      const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+        `SELECT * FROM "${table.name}"`
+      );
+
+      for (const row of rows) {
+        const cols = Object.keys(row);
+        const vals = cols.map((c) => escapeSQL(row[c]));
+        output += `INSERT INTO "${table.name}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${vals.join(', ')});\n`;
+      }
+      if (rows.length > 0) output += '\n';
+    }
+
+    output += 'COMMIT;\nPRAGMA foreign_keys=ON;\n';
+
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    res.setHeader('Content-Type', 'application/sql');
+    res.setHeader('Content-Disposition', `attachment; filename="searchbook-backup-${ts}.sql"`);
+    res.send(output);
+  } catch (error) {
+    console.error('Backup download error:', error);
+    res.status(500).json({ error: 'Failed to generate backup' });
+  }
+});
 
 // GET /api/backup — list available backups
 router.get('/', async (_req: Request, res: Response) => {

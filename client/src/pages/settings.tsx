@@ -50,9 +50,23 @@ export function SettingsPage() {
   async function handleBackup() {
     setBackingUp(true)
     try {
-      const result = await api.post<{ message: string; name: string; path: string }>('/backup', {})
-      toast.success(`Backup created: ${result.name}`)
-      loadBackups()
+      const response = await fetch('/api/backup/download')
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.error || 'Backup failed')
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const disposition = response.headers.get('Content-Disposition')
+      const match = disposition?.match(/filename="(.+)"/)
+      a.download = match?.[1] || `searchbook-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.sql`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Backup downloaded')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Backup failed')
     } finally {
@@ -86,7 +100,7 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>Create Backup</CardTitle>
           <CardDescription>
-            Back up your database and photos. Backups are saved in the server's backups folder.
+            Download a SQL backup of your entire database. Can be imported into a local SQLite database if needed.
           </CardDescription>
         </CardHeader>
         <CardContent>

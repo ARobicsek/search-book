@@ -6,39 +6,59 @@ import prisma from '../db';
 const router = Router();
 
 
-// GET /api/backup/schema — returns table names + CREATE TABLE DDL (single fast query)
-router.get('/schema', async (_req: Request, res: Response) => {
+// GET /api/backup/export — returns all data as JSON using Prisma findMany (proven with Turso)
+router.get('/export', async (_req: Request, res: Response) => {
   try {
-    const tables = await prisma.$queryRawUnsafe<{ name: string; sql: string }[]>(
-      `SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'sqlite_%' ORDER BY name`
-    );
-    res.json(tables);
-  } catch (error) {
-    console.error('Backup schema error:', error);
-    res.status(500).json({ error: 'Failed to fetch schema' });
-  }
-});
+    const [
+      contacts, companies, employmentHistory, tags, contactTags, companyTags,
+      conversations, conversationContacts, conversationCompanies,
+      actions, ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
+    ] = await Promise.all([
+      prisma.contact.findMany(),
+      prisma.company.findMany(),
+      prisma.employmentHistory.findMany(),
+      prisma.tag.findMany(),
+      prisma.contactTag.findMany(),
+      prisma.companyTag.findMany(),
+      prisma.conversation.findMany(),
+      prisma.conversationContact.findMany(),
+      prisma.conversationCompany.findMany(),
+      prisma.action.findMany(),
+      prisma.idea.findMany(),
+      prisma.ideaContact.findMany(),
+      prisma.ideaCompany.findMany(),
+      prisma.link.findMany(),
+      prisma.prepNote.findMany(),
+      prisma.relationship.findMany(),
+    ]);
 
-// GET /api/backup/data/:tableName — returns all rows from a single table
-router.get('/data/:tableName', async (req: Request, res: Response) => {
-  try {
-    // Whitelist: only allow names returned by sqlite_master to prevent injection
-    const tables = await prisma.$queryRawUnsafe<{ name: string }[]>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'sqlite_%'`
-    );
-    const allowed = tables.map((t) => t.name);
-    const tableName = req.params.tableName as string;
-    if (!allowed.includes(tableName)) {
-      res.status(400).json({ error: 'Invalid table name' });
-      return;
-    }
-    const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-      `SELECT * FROM "${tableName}"`
-    );
-    res.json(rows);
+    const data = {
+      _meta: { exportedAt: new Date().toISOString(), version: 1 },
+      Contact: contacts,
+      Company: companies,
+      EmploymentHistory: employmentHistory,
+      Tag: tags,
+      ContactTag: contactTags,
+      CompanyTag: companyTags,
+      Conversation: conversations,
+      ConversationContact: conversationContacts,
+      ConversationCompany: conversationCompanies,
+      Action: actions,
+      Idea: ideas,
+      IdeaContact: ideaContacts,
+      IdeaCompany: ideaCompanies,
+      Link: links,
+      PrepNote: prepNotes,
+      Relationship: relationships,
+    };
+
+    // Handle BigInt serialization (Prisma/libsql may return BigInt for integers)
+    const json = JSON.stringify(data, (_, v) => typeof v === 'bigint' ? Number(v) : v, 2);
+    res.setHeader('Content-Type', 'application/json');
+    res.send(json);
   } catch (error) {
-    console.error('Backup data error:', error);
-    res.status(500).json({ error: 'Failed to fetch table data' });
+    console.error('Backup export error:', error);
+    res.status(500).json({ error: 'Failed to export data' });
   }
 });
 

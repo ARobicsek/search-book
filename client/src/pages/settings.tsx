@@ -32,15 +32,6 @@ interface Backup {
   created: string
 }
 
-function escapeSQL(value: unknown): string {
-  if (value === null || value === undefined) return 'NULL'
-  if (typeof value === 'bigint') return value.toString()
-  if (typeof value === 'boolean') return value ? '1' : '0'
-  if (typeof value === 'number') return String(value)
-  const str = String(value).replace(/'/g, "''")
-  return `'${str}'`
-}
-
 export function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false)
   const [backups, setBackups] = useState<Backup[]>([])
@@ -59,43 +50,13 @@ export function SettingsPage() {
   async function handleBackup() {
     setBackingUp(true)
     try {
-      // 1. Fetch table schemas (single fast query)
-      const tables = await api.get<{ name: string; sql: string }[]>('/backup/schema')
-
-      // 2. Fetch each table's data individually (avoids Vercel 30s timeout)
-      const tableData: { name: string; sql: string; rows: Record<string, unknown>[] }[] = []
-      for (const table of tables) {
-        const rows = await api.get<Record<string, unknown>[]>(`/backup/data/${table.name}`)
-        tableData.push({ ...table, rows })
-      }
-
-      // 3. Assemble SQL dump client-side
-      let sql = '-- SearchBook Database Backup\n'
-      sql += `-- Created: ${new Date().toISOString()}\n`
-      sql += '-- Usage: sqlite3 searchbook.db < this-file.sql\n\n'
-      sql += 'PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n\n'
-
-      for (const table of tableData) {
-        sql += `-- Table: ${table.name}\n`
-        sql += `DROP TABLE IF EXISTS "${table.name}";\n`
-        sql += `${table.sql};\n\n`
-
-        for (const row of table.rows) {
-          const cols = Object.keys(row)
-          const vals = cols.map((c) => escapeSQL(row[c]))
-          sql += `INSERT INTO "${table.name}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${vals.join(', ')});\n`
-        }
-        if (table.rows.length > 0) sql += '\n'
-      }
-
-      sql += 'COMMIT;\nPRAGMA foreign_keys=ON;\n'
-
-      // 4. Trigger browser download
-      const blob = new Blob([sql], { type: 'application/sql' })
+      const data = await api.get<Record<string, unknown>>('/backup/export')
+      const json = JSON.stringify(data, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `searchbook-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.sql`
+      a.download = `searchbook-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -134,7 +95,7 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>Create Backup</CardTitle>
           <CardDescription>
-            Download a SQL backup of your entire database. Can be imported into a local SQLite database if needed.
+            Download a full backup of your database as JSON.
           </CardDescription>
         </CardHeader>
         <CardContent>

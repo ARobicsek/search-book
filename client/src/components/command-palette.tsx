@@ -10,9 +10,9 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { api } from '@/lib/api'
-import type { Contact, Company, Action, Idea, SearchResult } from '@/lib/types'
+import type { Contact, Action, Idea, SearchResult } from '@/lib/types'
 import { toast } from 'sonner'
-import { BookUser, Building2, ListTodo, Plus, Lightbulb, Search, Loader2 } from 'lucide-react'
+import { BookUser, Building2, ListTodo, Lightbulb, Search, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -82,8 +82,6 @@ export function CommandPalette() {
 function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('search')
-  const [contacts, setContacts] = useState<Contact[]>([])
-  const [companies, setCompanies] = useState<Company[]>([])
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
   const [isSearching, setIsSearching] = useState(false)
@@ -114,27 +112,14 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
     return () => document.removeEventListener('keydown', down)
   }, [open, setOpen])
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [contactNames, co] = await Promise.all([
-        api.get<{ id: number; name: string }[]>('/contacts/names'),
-        api.get<Company[]>('/companies'),
-      ])
-      // Cast to Contact[] since we only need id/name for the palette
-      setContacts(contactNames as Contact[])
-      setCompanies(co)
-    } catch { /* silent */ }
-  }, [])
-
   useEffect(() => {
     if (open) {
-      fetchData()
       setMode('search')
       setQuery('')
       setSearchResults(null)
       resetForms()
     }
-  }, [open, fetchData])
+  }, [open])
 
   // Live search
   useEffect(() => {

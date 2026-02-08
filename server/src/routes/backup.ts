@@ -23,26 +23,32 @@ router.get('/download', async (_req: Request, res: Response) => {
       `SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'sqlite_%' ORDER BY name`
     );
 
+    // Fetch all table data in parallel to avoid sequential Turso round-trips
+    const tableData = await Promise.all(
+      tables.map(async (table) => ({
+        ...table,
+        rows: await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+          `SELECT * FROM "${table.name}"`
+        ),
+      }))
+    );
+
     let output = '-- SearchBook Database Backup\n';
     output += `-- Created: ${new Date().toISOString()}\n`;
     output += '-- Usage: sqlite3 searchbook.db < this-file.sql\n\n';
     output += 'PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n\n';
 
-    for (const table of tables) {
+    for (const table of tableData) {
       output += `-- Table: ${table.name}\n`;
       output += `DROP TABLE IF EXISTS "${table.name}";\n`;
       output += `${table.sql};\n\n`;
 
-      const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-        `SELECT * FROM "${table.name}"`
-      );
-
-      for (const row of rows) {
+      for (const row of table.rows) {
         const cols = Object.keys(row);
         const vals = cols.map((c) => escapeSQL(row[c]));
         output += `INSERT INTO "${table.name}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${vals.join(', ')});\n`;
       }
-      if (rows.length > 0) output += '\n';
+      if (table.rows.length > 0) output += '\n';
     }
 
     output += 'COMMIT;\nPRAGMA foreign_keys=ON;\n';

@@ -233,11 +233,20 @@ router.post('/save-local', (req: Request, res: Response) => {
 });
 
 // Transform raw backup records for Prisma compatibility.
-// Browser-direct Turso export returns raw SQLite values:
-// - dates as strings ("2026-02-08 15:39:27") instead of Date objects
-// - booleans as integers (0/1) instead of true/false
+// Browser-direct Turso export returns dates in multiple formats:
+// - Unix timestamps (milliseconds): 1770157191736
+// - ISO strings with timezone: "2026-02-06T16:18:17.954+00:00"
+// - Raw SQLite strings: "2026-02-08 15:39:27"
+// Booleans come as integers (0/1) instead of true/false.
 const DATETIME_FIELDS = new Set(['createdAt', 'updatedAt']);
 const BOOLEAN_FIELDS = new Set(['flagged', 'completed', 'recurring']);
+
+function toDate(value: unknown): Date {
+  if (typeof value === 'number') return new Date(value);
+  const s = String(value);
+  if (s.includes('T')) return new Date(s);
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformRecords(records: Record<string, unknown>[]): any[] {
@@ -245,8 +254,7 @@ function transformRecords(records: Record<string, unknown>[]): any[] {
     const out: Record<string, unknown> = { ...record };
     for (const key of Object.keys(out)) {
       if (DATETIME_FIELDS.has(key) && out[key] != null) {
-        const s = String(out[key]);
-        out[key] = new Date(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+        out[key] = toDate(out[key]);
       }
       if (BOOLEAN_FIELDS.has(key)) {
         out[key] = out[key] === true || out[key] === 1;

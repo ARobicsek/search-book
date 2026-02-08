@@ -65,7 +65,7 @@ interface MergeState {
 }
 
 // Fields that allow "Keep Both" option (multi-value fields)
-const MULTI_VALUE_FIELDS = ['email'] as const
+const MULTI_VALUE_FIELDS = ['email', 'phone'] as const
 
 // Fields that can be selected during merge
 const MERGEABLE_FIELDS = [

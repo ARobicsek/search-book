@@ -231,6 +231,11 @@ router.post('/merge', async (req: Request, res: Response) => {
               updateData.email = allEmails[0];
               updateData.additionalEmails = allEmails.length > 1 ? JSON.stringify(allEmails.slice(1)) : null;
             }
+          } else if (field === 'phone' && selection === 'both') {
+            // Combine phone numbers with separator
+            const phones = [contact1.phone, contact2.phone].filter(Boolean);
+            const unique = [...new Set(phones)];
+            updateData.phone = unique.join(' | ') || null;
           } else if (selection === 1 || selection === 2) {
             // Get value from selected contact (1 or 2)
             const sourceContact = selection === 1 ? contact1 : contact2;

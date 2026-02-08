@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Contact, Company } from '@/lib/types'
+import type { Contact, Company, LinkRecord } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,7 +29,7 @@ import {
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
-import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 
@@ -189,6 +189,52 @@ export function ContactFormPage() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Links state (managed separately from form since they're a separate entity)
+  const [links, setLinks] = useState<LinkRecord[]>([])
+  const [pendingLinks, setPendingLinks] = useState<{ url: string; title: string }[]>([])
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkTitle, setNewLinkTitle] = useState('')
+
+  function loadLinks() {
+    if (id) {
+      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
+    }
+  }
+
+  async function addLink() {
+    if (!newLinkUrl.trim()) return
+    if (isEdit && id) {
+      try {
+        await api.post('/links', {
+          url: newLinkUrl.trim(),
+          title: newLinkTitle.trim() || newLinkUrl.trim(),
+          contactId: parseInt(id),
+        })
+        loadLinks()
+        setNewLinkUrl('')
+        setNewLinkTitle('')
+        toast.success('Link added')
+      } catch {
+        toast.error('Failed to add link')
+      }
+    } else {
+      // Create mode: store pending links to save after contact creation
+      setPendingLinks((prev) => [...prev, { url: newLinkUrl.trim(), title: newLinkTitle.trim() || newLinkUrl.trim() }])
+      setNewLinkUrl('')
+      setNewLinkTitle('')
+    }
+  }
+
+  async function deleteLink(linkId: number) {
+    try {
+      await api.delete(`/links/${linkId}`)
+      loadLinks()
+      toast.success('Link removed')
+    } catch {
+      toast.error('Failed to remove link')
+    }
+  }
+
   // Progressive disclosure: auto-open if fields have data
   const hasContactDetails = !!(form.phone || form.linkedinUrl)
   const hasConnectionDetails = !!(form.howConnected || form.mutualConnections.length > 0)
@@ -224,6 +270,8 @@ export function ContactFormPage() {
           navigate('/contacts')
         })
         .finally(() => setLoading(false))
+      // Load links for this contact
+      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
     }
   }, [id, isEdit, navigate])
 
@@ -331,6 +379,12 @@ export function ContactFormPage() {
         navigate(`/contacts/${id}`)
       } else {
         const created = await api.post<Contact>('/contacts', payload)
+        // Save any pending links
+        for (const link of pendingLinks) {
+          try {
+            await api.post('/links', { url: link.url, title: link.title, contactId: created.id })
+          } catch { /* ignore individual link failures */ }
+        }
         toast.success('Contact created')
         navigate(`/contacts/${created.id}`)
       }
@@ -829,6 +883,79 @@ export function ContactFormPage() {
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* Links */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Links</CardTitle>
+            <CardDescription>Google Drive docs, websites, profiles, etc.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Existing links (edit mode) */}
+            {links.length > 0 && (
+              <ul className="space-y-2">
+                {links.map((link) => (
+                  <li key={link.id} className="flex items-center justify-between gap-2">
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      {link.title}
+                    </a>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* Pending links (create mode) */}
+            {pendingLinks.length > 0 && (
+              <ul className="space-y-2">
+                {pendingLinks.map((link, i) => (
+                  <li key={i} className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground truncate">
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      {link.title}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => setPendingLinks((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                <Input
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  placeholder="URL (Google Drive, webpage, etc.)"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLink() } }}
+                />
+                <Input
+                  value={newLinkTitle}
+                  onChange={(e) => setNewLinkTitle(e.target.value)}
+                  placeholder="Label (optional)"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLink() } }}
+                />
+              </div>
+              <Button type="button" size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+                <Plus className="mr-1 h-3 w-3" />
+                Add
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Bottom actions only for create mode */}
         {!isEdit && (

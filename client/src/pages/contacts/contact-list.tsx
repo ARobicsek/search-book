@@ -15,7 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag, ChevronLeft, ChevronRight } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
-import type { Contact, Ecosystem, ContactStatus, DatePrecision } from '@/lib/types'
+import type { Contact, Ecosystem, ContactStatus, DatePrecision, LinkRecord } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -527,11 +527,26 @@ export function ContactListPage() {
     setShowFlaggedOnly(false)
   }
 
-  function exportToCsv() {
+  async function exportToCsv() {
     const rows = table.getFilteredRowModel().rows.map((row) => row.original)
     if (rows.length === 0) {
       toast.error('No contacts to export')
       return
+    }
+
+    // Fetch all links for contacts and group by contactId
+    let linksByContact = new Map<number, LinkRecord[]>()
+    try {
+      const allLinks = await api.get<LinkRecord[]>('/links')
+      for (const link of allLinks) {
+        if (link.contactId) {
+          const existing = linksByContact.get(link.contactId) || []
+          existing.push(link)
+          linksByContact.set(link.contactId, existing)
+        }
+      }
+    } catch {
+      // Continue export without links if fetch fails
     }
 
     // CSV headers
@@ -552,31 +567,37 @@ export function ContactListPage() {
       'Open Questions',
       'Notes',
       'Personal Details',
+      'Links',
       'Created',
       'Updated',
     ]
 
     // CSV rows
-    const csvRows = rows.map((c) => [
-      c.name,
-      c.title ?? '',
-      c.roleDescription ?? '',
-      c.company?.name ?? c.companyName ?? '',
-      getLabel(c.ecosystem, ECOSYSTEM_OPTIONS),
-      getLabel(c.status, CONTACT_STATUS_OPTIONS),
-      c.email ?? '',
-      c.phone ?? '',
-      c.linkedinUrl ?? '',
-      c.location ?? '',
-      c.howConnected ?? '',
-      c.mutualConnections ?? '',
-      c.whereFound ?? '',
-      c.openQuestions ?? '',
-      c.notes ?? '',
-      c.personalDetails ?? '',
-      new Date(c.createdAt).toLocaleDateString(),
-      new Date(c.updatedAt).toLocaleDateString(),
-    ])
+    const csvRows = rows.map((c) => {
+      const contactLinks = linksByContact.get(c.id) || []
+      const linksStr = contactLinks.map((l) => l.title !== l.url ? `${l.title}: ${l.url}` : l.url).join(' | ')
+      return [
+        c.name,
+        c.title ?? '',
+        c.roleDescription ?? '',
+        c.company?.name ?? c.companyName ?? '',
+        getLabel(c.ecosystem, ECOSYSTEM_OPTIONS),
+        getLabel(c.status, CONTACT_STATUS_OPTIONS),
+        c.email ?? '',
+        c.phone ?? '',
+        c.linkedinUrl ?? '',
+        c.location ?? '',
+        c.howConnected ?? '',
+        c.mutualConnections ?? '',
+        c.whereFound ?? '',
+        c.openQuestions ?? '',
+        c.notes ?? '',
+        c.personalDetails ?? '',
+        linksStr,
+        new Date(c.createdAt).toLocaleDateString(),
+        new Date(c.updatedAt).toLocaleDateString(),
+      ]
+    })
 
     // Escape CSV values
     const escapeCell = (val: string) => {

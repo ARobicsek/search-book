@@ -24,7 +24,8 @@ router.get('/export', async (_req: Request, res: Response) => {
     const [
       contacts, companies, employmentHistory, tags, contactTags, companyTags,
       conversations, conversationContacts, conversationCompanies,
-      actions, ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
+      actions, actionContacts, actionCompanies,
+      ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
     ] = await Promise.all([
       prisma.contact.findMany(),
       prisma.company.findMany(),
@@ -36,6 +37,8 @@ router.get('/export', async (_req: Request, res: Response) => {
       prisma.conversationContact.findMany(),
       prisma.conversationCompany.findMany(),
       prisma.action.findMany(),
+      prisma.actionContact.findMany(),
+      prisma.actionCompany.findMany(),
       prisma.idea.findMany(),
       prisma.ideaContact.findMany(),
       prisma.ideaCompany.findMany(),
@@ -56,6 +59,8 @@ router.get('/export', async (_req: Request, res: Response) => {
       ConversationContact: conversationContacts,
       ConversationCompany: conversationCompanies,
       Action: actions,
+      ActionContact: actionContacts,
+      ActionCompany: actionCompanies,
       Idea: ideas,
       IdeaContact: ideaContacts,
       IdeaCompany: ideaCompanies,
@@ -283,6 +288,8 @@ router.post('/import', async (req: Request, res: Response) => {
     await prisma.link.deleteMany();
     await prisma.prepNote.deleteMany();
     await prisma.relationship.deleteMany();
+    await prisma.actionContact.deleteMany();
+    await prisma.actionCompany.deleteMany();
     await prisma.action.deleteMany();
     await prisma.conversation.deleteMany();
     await prisma.employmentHistory.deleteMany();
@@ -311,6 +318,8 @@ router.post('/import', async (req: Request, res: Response) => {
     if (data.EmploymentHistory?.length) await prisma.employmentHistory.createMany({ data: transformRecords(data.EmploymentHistory) });
     if (data.Conversation?.length) await prisma.conversation.createMany({ data: transformRecords(data.Conversation) });
     if (data.Action?.length) await prisma.action.createMany({ data: transformRecords(data.Action) });
+    if (data.ActionContact?.length) await prisma.actionContact.createMany({ data: transformRecords(data.ActionContact) });
+    if (data.ActionCompany?.length) await prisma.actionCompany.createMany({ data: transformRecords(data.ActionCompany) });
     if (data.ContactTag?.length) await prisma.contactTag.createMany({ data: transformRecords(data.ContactTag) });
     if (data.CompanyTag?.length) await prisma.companyTag.createMany({ data: transformRecords(data.CompanyTag) });
     if (data.ConversationContact?.length) await prisma.conversationContact.createMany({ data: transformRecords(data.ConversationContact) });

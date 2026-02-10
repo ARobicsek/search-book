@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { CommandPaletteProvider, useCommandPalette } from '@/components/command-palette'
@@ -8,6 +8,7 @@ import { Search } from 'lucide-react'
 
 function LayoutContent() {
   const { open: openPalette } = useCommandPalette()
+  const navigate = useNavigate()
 
   return (
     <>
@@ -23,7 +24,7 @@ function LayoutContent() {
               variant="ghost"
               size="icon"
               className="h-11 w-11 sm:hidden"
-              onClick={openPalette}
+              onClick={() => navigate('/search')}
               aria-label="Open search"
             >
               <Search className="h-5 w-5" />

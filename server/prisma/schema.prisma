@@ -51,6 +51,7 @@ model Contact {
   relationshipsTo          Relationship[] @relation("RelTo")
   discussedInConversations ConversationContact[] @relation("DiscussedInConversations")
   ideaContacts             IdeaContact[]
+  actionContacts           ActionContact[] @relation("ActionContacts")
 }
 
 // ─── Companies ───────────────────────────────────────────────
@@ -74,6 +75,7 @@ model Company {
   discussedInConversations ConversationCompany[]
   employmentHistory        EmploymentHistory[]
   ideaCompanies            IdeaCompany[]
+  actionCompanies          ActionCompany[] @relation("ActionCompanies")
 }
 
 // ─── Employment History ─────────────────────────────────────
@@ -181,6 +183,28 @@ model Action {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
   links                 Link[]
+  actionContacts        ActionContact[]
+  actionCompanies       ActionCompany[]
+}
+
+// Junction: contacts associated with an action
+model ActionContact {
+  actionId  Int
+  action    Action  @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  contactId Int
+  contact   Contact @relation("ActionContacts", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([actionId, contactId])
+}
+
+// Junction: companies associated with an action
+model ActionCompany {
+  actionId  Int
+  action    Action  @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  companyId Int
+  company   Company @relation("ActionCompanies", fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([actionId, companyId])
 }
 
 // ─── Ideas ───────────────────────────────────────────────────

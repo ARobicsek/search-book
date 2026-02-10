@@ -200,7 +200,7 @@ export function ContactDetailPage() {
 
   function loadLinks() {
     if (id) {
-      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
+      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
     }
   }
 
@@ -241,13 +241,13 @@ export function ContactDetailPage() {
       })
       .finally(() => setLoading(false))
 
-    api.get<Action[]>(`/actions?contactId=${id}`).then(setActions).catch(() => {})
-    api.get<Conversation[]>(`/conversations?contactId=${id}`).then(setConversations).catch(() => {})
-    api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => {})
-    api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
-    api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => {})
-    api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => {})
-    api.get<Tag[]>(`/tags/contact/${id}`).then(setTags).catch(() => {})
+    api.get<Action[]>(`/actions?contactId=${id}`).then(setActions).catch(() => { })
+    api.get<Conversation[]>(`/conversations?contactId=${id}`).then(setConversations).catch(() => { })
+    api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => { })
+    api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
+    api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => { })
+    api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => { })
+    api.get<Tag[]>(`/tags/contact/${id}`).then(setTags).catch(() => { })
   }, [id, navigate])
 
   useEffect(() => {
@@ -255,11 +255,11 @@ export function ContactDetailPage() {
     // Load contacts and companies for comboboxes in dialogs
     api.get<{ id: number; name: string }[]>('/contacts/names').then(
       (data) => setAllContacts(data)
-    ).catch(() => {})
+    ).catch(() => { })
     api.get<{ id: number; name: string }[]>('/companies').then(
       (data) => setAllCompanies(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
-    ).catch(() => {})
-    api.get<Tag[]>('/tags').then(setAllTags).catch(() => {})
+    ).catch(() => { })
+    api.get<Tag[]>('/tags').then(setAllTags).catch(() => { })
   }, [loadData])
 
   async function toggleActionComplete(action: Action) {
@@ -490,19 +490,28 @@ export function ContactDetailPage() {
             <MessageSquare className="mr-1 h-4 w-4" />
             Conversations
             {conversations.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({conversations.length})</span>
+              <>
+                <span className="ml-1 text-xs text-muted-foreground">({conversations.length})</span>
+                <span className="ml-1 h-2 w-2 rounded-full bg-green-500 inline-block" />
+              </>
             )}
           </TabsTrigger>
           <TabsTrigger value="relationships" className="shrink-0">
             <Users className="mr-1 h-4 w-4" />
             Relationships
             {relationships.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({relationships.length})</span>
+              <>
+                <span className="ml-1 text-xs text-muted-foreground">({relationships.length})</span>
+                <span className="ml-1 h-2 w-2 rounded-full bg-green-500 inline-block" />
+              </>
             )}
           </TabsTrigger>
           <TabsTrigger value="prep" className="shrink-0">
             <FileText className="mr-1 h-4 w-4" />
             Prep Sheet
+            {prepNotes.length > 0 && (
+              <span className="ml-1 h-2 w-2 rounded-full bg-green-500 inline-block" />
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -715,19 +724,17 @@ export function ContactDetailPage() {
                       >
                         <button
                           onClick={() => toggleActionComplete(action)}
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                            action.completed
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${action.completed
                               ? 'border-green-500 bg-green-500 text-white'
                               : 'border-muted-foreground/30 hover:border-green-500'
-                          }`}
+                            }`}
                         >
                           {action.completed && <Check className="h-2.5 w-2.5" />}
                         </button>
                         <Link
                           to={`/actions/${action.id}`}
-                          className={`flex-1 text-sm hover:underline ${
-                            action.completed ? 'text-muted-foreground line-through' : ''
-                          }`}
+                          className={`flex-1 text-sm hover:underline ${action.completed ? 'text-muted-foreground line-through' : ''
+                            }`}
                         >
                           {action.title}
                         </Link>
@@ -745,11 +752,10 @@ export function ContactDetailPage() {
                         </Badge>
                         {action.dueDate && (
                           <span
-                            className={`text-xs ${
-                              overdue
+                            className={`text-xs ${overdue
                                 ? 'font-semibold text-red-600'
                                 : 'text-muted-foreground'
-                            }`}
+                              }`}
                           >
                             {new Date(action.dueDate + 'T00:00:00').toLocaleDateString(
                               'en-US',
@@ -1345,175 +1351,175 @@ function ConversationsTab({
             )}
             {/* Conversation form */}
             <div className="grid gap-4 py-2">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => set('date', e.target.value)}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Date</Label>
+                  <Input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => set('date', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Precision</Label>
+                  <Select value={form.datePrecision} onValueChange={(v) => set('datePrecision', v as DatePrecision)}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {DATE_PRECISION_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
               <div className="space-y-2">
-                <Label>Precision</Label>
-                <Select value={form.datePrecision} onValueChange={(v) => set('datePrecision', v as DatePrecision)}>
+                <Label>Type</Label>
+                <Select value={form.type} onValueChange={(v) => set('type', v as ConversationType)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {DATE_PRECISION_OPTIONS.map((o) => (
+                    {CONVERSATION_TYPE_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={form.type} onValueChange={(v) => set('type', v as ConversationType)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CONVERSATION_TYPE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label>Summary</Label>
+                <Input
+                  value={form.summary}
+                  onChange={(e) => set('summary', e.target.value)}
+                  placeholder="Brief summary of the conversation"
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label>Summary</Label>
-              <Input
-                value={form.summary}
-                onChange={(e) => set('summary', e.target.value)}
-                placeholder="Brief summary of the conversation"
-              />
-            </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) => set('notes', e.target.value)}
+                  placeholder="Detailed notes..."
+                  rows={6}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea
-                value={form.notes}
-                onChange={(e) => set('notes', e.target.value)}
-                placeholder="Detailed notes..."
-                rows={6}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label>Next Steps</Label>
+                <Textarea
+                  value={form.nextSteps}
+                  onChange={(e) => set('nextSteps', e.target.value)}
+                  placeholder="What to do next..."
+                  rows={2}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label>Next Steps</Label>
-              <Textarea
-                value={form.nextSteps}
-                onChange={(e) => set('nextSteps', e.target.value)}
-                placeholder="What to do next..."
-                rows={2}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label>People Discussed</Label>
+                <MultiCombobox
+                  options={localContactOptions}
+                  values={form.contactsDiscussed}
+                  onChange={(v) => set('contactsDiscussed', v)}
+                  placeholder="Search or type new name..."
+                  searchPlaceholder="Search contacts..."
+                  allowFreeText={true}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label>People Discussed</Label>
-              <MultiCombobox
-                options={localContactOptions}
-                values={form.contactsDiscussed}
-                onChange={(v) => set('contactsDiscussed', v)}
-                placeholder="Search or type new name..."
-                searchPlaceholder="Search contacts..."
-                allowFreeText={true}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label>Companies Discussed</Label>
+                <MultiCombobox
+                  options={localCompanyOptions}
+                  values={form.companiesDiscussed}
+                  onChange={(v) => set('companiesDiscussed', v)}
+                  placeholder="Search or type new name..."
+                  searchPlaceholder="Search companies..."
+                  allowFreeText={true}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label>Companies Discussed</Label>
-              <MultiCombobox
-                options={localCompanyOptions}
-                values={form.companiesDiscussed}
-                onChange={(v) => set('companiesDiscussed', v)}
-                placeholder="Search or type new name..."
-                searchPlaceholder="Search companies..."
-                allowFreeText={true}
-              />
-            </div>
+              {/* Links */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Links</Label>
+                  <Button type="button" variant="ghost" size="sm" onClick={addLink}>
+                    <Plus className="mr-1 h-3 w-3" />
+                    Add Link
+                  </Button>
+                </div>
+                {form.links.map((link, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                      <Input
+                        value={link.url}
+                        onChange={(e) => updateLink(i, 'url', e.target.value)}
+                        placeholder="URL (e.g. https://drive.google.com/...)"
+                      />
+                      <Input
+                        value={link.title}
+                        onChange={(e) => updateLink(i, 'title', e.target.value)}
+                        placeholder="Label (optional)"
+                      />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeLink(i)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
 
-            {/* Links */}
-            <div className="space-y-2">
+              {/* Follow-up actions (create and edit) */}
+              <Separator />
               <div className="flex items-center justify-between">
-                <Label>Links</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={addLink}>
+                <p className="text-sm font-medium text-muted-foreground">{editId ? 'Add Actions' : 'Follow-Up Actions'}</p>
+                <Button type="button" variant="ghost" size="sm" onClick={addAction}>
                   <Plus className="mr-1 h-3 w-3" />
-                  Add Link
+                  Add Action
                 </Button>
               </div>
-              {form.links.map((link, i) => (
-                <div key={i} className="flex gap-2 items-start">
-                  <div className="flex-1 grid gap-2 sm:grid-cols-2">
-                    <Input
-                      value={link.url}
-                      onChange={(e) => updateLink(i, 'url', e.target.value)}
-                      placeholder="URL (e.g. https://drive.google.com/...)"
-                    />
-                    <Input
-                      value={link.title}
-                      onChange={(e) => updateLink(i, 'title', e.target.value)}
-                      placeholder="Label (optional)"
-                    />
+              {form.actions.map((action, i) => (
+                <div key={i} className="space-y-2 rounded-md border p-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">Action {i + 1}</Label>
+                    {form.actions.length > 1 && (
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
-                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeLink(i)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  <Input
+                    value={action.title}
+                    onChange={(e) => updateAction(i, 'title', e.target.value)}
+                    placeholder="e.g. Send follow-up email"
+                  />
+                  {action.title && (
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <Select value={action.type} onValueChange={(v) => updateAction(i, 'type', v)}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ACTION_TYPE_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={action.dueDate}
+                        onChange={(e) => updateAction(i, 'dueDate', e.target.value)}
+                      />
+                      <Select value={action.priority} onValueChange={(v) => updateAction(i, 'priority', v)}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ACTION_PRIORITY_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-
-            {/* Follow-up actions (create and edit) */}
-            <Separator />
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-muted-foreground">{editId ? 'Add Actions' : 'Follow-Up Actions'}</p>
-              <Button type="button" variant="ghost" size="sm" onClick={addAction}>
-                <Plus className="mr-1 h-3 w-3" />
-                Add Action
-              </Button>
-            </div>
-            {form.actions.map((action, i) => (
-              <div key={i} className="space-y-2 rounded-md border p-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Action {i + 1}</Label>
-                  {form.actions.length > 1 && (
-                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-                <Input
-                  value={action.title}
-                  onChange={(e) => updateAction(i, 'title', e.target.value)}
-                  placeholder="e.g. Send follow-up email"
-                />
-                {action.title && (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <Select value={action.type} onValueChange={(v) => updateAction(i, 'type', v)}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {ACTION_TYPE_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="date"
-                      value={action.dueDate}
-                      onChange={(e) => updateAction(i, 'dueDate', e.target.value)}
-                    />
-                    <Select value={action.priority} onValueChange={(v) => updateAction(i, 'priority', v)}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {ACTION_PRIORITY_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
           </div>
           <DialogFooter>
             {editId ? (

@@ -29,7 +29,7 @@ import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, ECOSYSTEM_OPTIONS } from 
 type Mode = 'search' | 'add-contact' | 'add-action' | 'add-note'
 
 // Context to allow opening palette from anywhere
-const CommandPaletteContext = createContext<{ open: () => void }>({ open: () => {} })
+const CommandPaletteContext = createContext<{ open: () => void; navigateToSearch: () => void }>({ open: () => { }, navigateToSearch: () => { } })
 
 export function useCommandPalette() {
   return useContext(CommandPaletteContext)
@@ -48,13 +48,30 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export function CommandPaletteProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
+  const navigate = useNavigate()
 
   const openPalette = useCallback(() => {
     setIsOpen(true)
   }, [])
 
+  const navigateToSearch = useCallback(() => {
+    navigate('/search')
+  }, [navigate])
+
+  // Ctrl+K navigates directly to /search
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        navigate('/search')
+      }
+    }
+    document.addEventListener('keydown', down)
+    return () => document.removeEventListener('keydown', down)
+  }, [navigate])
+
   return (
-    <CommandPaletteContext.Provider value={{ open: openPalette }}>
+    <CommandPaletteContext.Provider value={{ open: openPalette, navigateToSearch }}>
       {children}
       <CommandPaletteInner open={isOpen} setOpen={setIsOpen} />
     </CommandPaletteContext.Provider>
@@ -64,17 +81,6 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
 // Legacy component for backward compatibility
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        setOpen((o) => !o)
-      }
-    }
-    document.addEventListener('keydown', down)
-    return () => document.removeEventListener('keydown', down)
-  }, [])
 
   return <CommandPaletteInner open={open} setOpen={setOpen} />
 }
@@ -100,17 +106,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
 
   const [saving, setSaving] = useState(false)
 
-  // Keyboard shortcut
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        setOpen(!open)
-      }
-    }
-    document.addEventListener('keydown', down)
-    return () => document.removeEventListener('keydown', down)
-  }, [open, setOpen])
+  // Keyboard shortcut handled by CommandPaletteProvider now (navigates to /search)
 
   useEffect(() => {
     if (open) {

@@ -285,25 +285,45 @@ export function ActionDetailPage() {
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-2">
-            <Field label="Contact">
-              {action.contact && (
-                <Link
-                  to={`/contacts/${action.contact.id}`}
-                  className="text-primary hover:underline"
-                >
-                  {action.contact.name}
-                </Link>
-              )}
+            <Field label={action.actionContacts && action.actionContacts.length > 1 ? 'Contacts' : 'Contact'}>
+              {(() => {
+                const contacts = action.actionContacts?.length
+                  ? action.actionContacts.map((ac) => ac.contact)
+                  : action.contact ? [action.contact] : []
+                return contacts.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {contacts.map((c) => (
+                      <Link
+                        key={c.id}
+                        to={`/contacts/${c.id}`}
+                        className="text-primary hover:underline"
+                      >
+                        {c.name}{contacts.indexOf(c) < contacts.length - 1 ? ',' : ''}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null
+              })()}
             </Field>
-            <Field label="Company">
-              {action.company && (
-                <Link
-                  to={`/companies/${action.company.id}`}
-                  className="text-primary hover:underline"
-                >
-                  {action.company.name}
-                </Link>
-              )}
+            <Field label={action.actionCompanies && action.actionCompanies.length > 1 ? 'Companies' : 'Company'}>
+              {(() => {
+                const companies = action.actionCompanies?.length
+                  ? action.actionCompanies.map((ac) => ac.company)
+                  : action.company ? [action.company] : []
+                return companies.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {companies.map((c) => (
+                      <Link
+                        key={c.id}
+                        to={`/companies/${c.id}`}
+                        className="text-primary hover:underline"
+                      >
+                        {c.name}{companies.indexOf(c) < companies.length - 1 ? ',' : ''}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null
+              })()}
             </Field>
             <Field label="Conversation">
               {action.conversation && (

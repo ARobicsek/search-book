@@ -118,6 +118,8 @@ export interface Action {
   recurringEndDate: string | null;
   createdAt: string;
   updatedAt: string;
+  actionContacts?: { contact: { id: number; name: string } }[];
+  actionCompanies?: { company: { id: number; name: string } }[];
 }
 
 export const ACTION_TYPE_OPTIONS: { value: ActionType; label: string }[] = [

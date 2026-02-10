@@ -6,6 +6,7 @@ const TABLES_PARENT_FIRST = [
   'EmploymentHistory', 'Conversation', 'Action',
   'ContactTag', 'CompanyTag',
   'ConversationContact', 'ConversationCompany',
+  'ActionContact', 'ActionCompany',
   'IdeaContact', 'IdeaCompany',
   'Link', 'PrepNote', 'Relationship',
 ] as const;

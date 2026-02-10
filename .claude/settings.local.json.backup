@@ -11,7 +11,8 @@
       "Bash(cmd:*)",
       "Bash(where:*)",
       "Bash(copy:*)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

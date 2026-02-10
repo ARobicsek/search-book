@@ -7,6 +7,12 @@ const actionIncludes = {
   contact: { select: { id: true, name: true } },
   company: { select: { id: true, name: true } },
   conversation: { select: { id: true, summary: true } },
+  actionContacts: {
+    include: { contact: { select: { id: true, name: true } } },
+  },
+  actionCompanies: {
+    include: { company: { select: { id: true, name: true } } },
+  },
 };
 
 // GET /api/actions — list all actions with optional filters
@@ -19,8 +25,34 @@ router.get('/', async (req: Request, res: Response) => {
     // Build where clause from query params
     const where: Record<string, unknown> = {};
 
-    if (contactId) where.contactId = parseInt(contactId as string);
-    if (companyId) where.companyId = parseInt(companyId as string);
+    if (contactId) {
+      const cId = parseInt(contactId as string);
+      where.OR = [
+        { contactId: cId },
+        { actionContacts: { some: { contactId: cId } } },
+      ];
+    }
+    if (companyId) {
+      const coId = parseInt(companyId as string);
+      // If we already have OR from contactId, wrap in AND
+      if (where.OR) {
+        where.AND = [
+          { OR: where.OR as unknown[] },
+          {
+            OR: [
+              { companyId: coId },
+              { actionCompanies: { some: { companyId: coId } } },
+            ]
+          },
+        ];
+        delete where.OR;
+      } else {
+        where.OR = [
+          { companyId: coId },
+          { actionCompanies: { some: { companyId: coId } } },
+        ];
+      }
+    }
 
     if (status === 'pending') {
       where.completed = false;
@@ -68,13 +100,22 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/actions — create
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { title, ...rest } = req.body;
+    const { title, contactIds, companyIds, ...rest } = req.body;
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       res.status(400).json({ error: 'Title is required' });
       return;
     }
     const action = await prisma.action.create({
-      data: { title: title.trim(), ...rest },
+      data: {
+        title: title.trim(),
+        ...rest,
+        actionContacts: contactIds?.length
+          ? { create: (contactIds as number[]).map((cId) => ({ contactId: cId })) }
+          : undefined,
+        actionCompanies: companyIds?.length
+          ? { create: (companyIds as number[]).map((cId) => ({ companyId: cId })) }
+          : undefined,
+      },
       include: actionIncludes,
     });
     res.status(201).json(action);
@@ -100,9 +141,27 @@ router.put('/:id', async (req: Request, res: Response) => {
       }
       req.body.title = req.body.title.trim();
     }
+
+    const { contactIds, companyIds, ...rest } = req.body;
+
+    // If contactIds or companyIds provided, update junction tables
+    const junctionUpdates: Record<string, unknown> = {};
+    if (contactIds !== undefined) {
+      junctionUpdates.actionContacts = {
+        deleteMany: {},
+        create: (contactIds as number[]).map((cId: number) => ({ contactId: cId })),
+      };
+    }
+    if (companyIds !== undefined) {
+      junctionUpdates.actionCompanies = {
+        deleteMany: {},
+        create: (companyIds as number[]).map((cId: number) => ({ companyId: cId })),
+      };
+    }
+
     const action = await prisma.action.update({
       where: { id },
-      data: req.body,
+      data: { ...rest, ...junctionUpdates },
       include: actionIncludes,
     });
     res.json(action);
@@ -116,7 +175,10 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.patch('/:id/complete', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string);
-    const existing = await prisma.action.findUnique({ where: { id } });
+    const existing = await prisma.action.findUnique({
+      where: { id },
+      include: { actionContacts: true, actionCompanies: true },
+    });
     if (!existing) {
       res.status(404).json({ error: 'Action not found' });
       return;
@@ -154,6 +216,13 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
             recurring: true,
             recurringIntervalDays: existing.recurringIntervalDays,
             recurringEndDate: existing.recurringEndDate,
+            // Copy junction table entries to next occurrence
+            actionContacts: existing.actionContacts.length
+              ? { create: existing.actionContacts.map((ac) => ({ contactId: ac.contactId })) }
+              : undefined,
+            actionCompanies: existing.actionCompanies.length
+              ? { create: existing.actionCompanies.map((ac) => ({ companyId: ac.companyId })) }
+              : undefined,
           },
           include: actionIncludes,
         });

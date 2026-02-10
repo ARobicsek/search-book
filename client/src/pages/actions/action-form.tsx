@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
+import { MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import {
   Card,
   CardContent,
@@ -38,8 +38,8 @@ type FormData = {
   type: string
   priority: string
   dueDate: string
-  contactId: string
-  companyId: string
+  contactIds: string[]
+  companyIds: string[]
   recurring: boolean
   recurringIntervalDays: string
   recurringEndDate: string
@@ -52,8 +52,8 @@ const emptyForm: FormData = {
   type: 'OTHER',
   priority: 'MEDIUM',
   dueDate: '',
-  contactId: '',
-  companyId: '',
+  contactIds: [],
+  companyIds: [],
   recurring: false,
   recurringIntervalDays: '',
   recurringEndDate: '',
@@ -61,14 +61,22 @@ const emptyForm: FormData = {
 }
 
 function actionToForm(action: Action): FormData {
+  // Build contactIds from junction table entries, falling back to legacy single ID
+  const contactIds = action.actionContacts?.length
+    ? action.actionContacts.map((ac) => ac.contact.id.toString())
+    : action.contactId ? [action.contactId.toString()] : []
+  const companyIds = action.actionCompanies?.length
+    ? action.actionCompanies.map((ac) => ac.company.id.toString())
+    : action.companyId ? [action.companyId.toString()] : []
+
   return {
     title: action.title,
     description: action.description ?? '',
     type: action.type,
     priority: action.priority,
     dueDate: action.dueDate ?? '',
-    contactId: action.contactId?.toString() ?? '',
-    companyId: action.companyId?.toString() ?? '',
+    contactIds,
+    companyIds,
     recurring: action.recurring,
     recurringIntervalDays: action.recurringIntervalDays?.toString() ?? '',
     recurringEndDate: action.recurringEndDate ?? '',
@@ -83,8 +91,8 @@ function formToPayload(form: FormData) {
     type: form.type,
     priority: form.priority,
     dueDate: form.dueDate || null,
-    contactId: form.contactId ? parseInt(form.contactId) : null,
-    companyId: form.companyId ? parseInt(form.companyId) : null,
+    contactIds: form.contactIds.map((id) => parseInt(id)),
+    companyIds: form.companyIds.map((id) => parseInt(id)),
     recurring: form.recurring,
     recurringIntervalDays: form.recurring && form.recurringIntervalDays
       ? parseInt(form.recurringIntervalDays)
@@ -102,11 +110,11 @@ export function ActionFormPage() {
   const isEdit = Boolean(id)
 
   const [form, setForm] = useState<FormData>(() => {
-    const initial = { ...emptyForm }
+    const initial = { ...emptyForm, contactIds: [...emptyForm.contactIds], companyIds: [...emptyForm.companyIds] }
     const qContactId = searchParams.get('contactId')
     const qCompanyId = searchParams.get('companyId')
-    if (qContactId) initial.contactId = qContactId
-    if (qCompanyId) initial.companyId = qCompanyId
+    if (qContactId) initial.contactIds = [qContactId]
+    if (qCompanyId) initial.companyIds = [qCompanyId]
     return initial
   })
   const [originalForm, setOriginalForm] = useState<FormData | null>(null)
@@ -115,8 +123,6 @@ export function ActionFormPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [newContactName, setNewContactName] = useState('')
-  const [newCompanyName, setNewCompanyName] = useState('')
 
   // Options for comboboxes
   const contactOptions: ComboboxOption[] = contacts.map((c) => ({
@@ -215,33 +221,6 @@ export function ActionFormPage() {
     try {
       const payload = formToPayload(form)
 
-      // Auto-create contact if user typed a new name
-      if (!payload.contactId && newContactName) {
-        try {
-          const newContact = await api.post<Contact>('/contacts', {
-            name: newContactName,
-            status: 'CONNECTED',
-            ecosystem: 'ROLODEX',
-          })
-          payload.contactId = newContact.id
-        } catch {
-          // If creation fails, proceed without link
-        }
-      }
-
-      // Auto-create company if user typed a new name
-      if (!payload.companyId && newCompanyName) {
-        try {
-          const newCompany = await api.post<Company>('/companies', {
-            name: newCompanyName,
-            status: 'CONNECTED',
-          })
-          payload.companyId = newCompany.id
-        } catch {
-          // If creation fails, proceed without link
-        }
-      }
-
       let actionId: number
 
       if (isEdit) {
@@ -249,7 +228,7 @@ export function ActionFormPage() {
         actionId = parseInt(id!)
         // Delete old links
         for (const linkId of existingLinkIds) {
-          await api.delete(`/links/${linkId}`).catch(() => {})
+          await api.delete(`/links/${linkId}`).catch(() => { })
         }
       } else {
         const created = await api.post<Action>('/actions', payload)
@@ -263,7 +242,7 @@ export function ActionFormPage() {
             url: link.url.trim(),
             title: link.title.trim() || link.url.trim(),
             actionId,
-          }).catch(() => {})
+          }).catch(() => { })
         }
       }
 
@@ -448,57 +427,29 @@ export function ActionFormPage() {
         <Card>
           <CardHeader>
             <CardTitle>Related To</CardTitle>
-            <CardDescription>Connect to a contact or company</CardDescription>
+            <CardDescription>Connect to contacts or companies</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="contactId">Contact</Label>
-              <Combobox
+              <Label>Contacts</Label>
+              <MultiCombobox
                 options={contactOptions}
-                value={form.contactId || newContactName}
-                onChange={(val, isNew) => {
-                  if (isNew) {
-                    setForm((prev) => ({ ...prev, contactId: '' }))
-                    setNewContactName(val)
-                  } else {
-                    setForm((prev) => ({ ...prev, contactId: val }))
-                    setNewContactName('')
-                  }
-                }}
-                placeholder="Search or type new name..."
+                values={form.contactIds}
+                onChange={(vals) => setForm((prev) => ({ ...prev, contactIds: vals }))}
+                placeholder="Search contacts..."
                 searchPlaceholder="Search contacts..."
-                allowFreeText={true}
               />
-              {newContactName && !form.contactId && (
-                <p className="text-xs text-muted-foreground">
-                  A new contact will be created when you click Done.
-                </p>
-              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="companyId">Company</Label>
-              <Combobox
+              <Label>Companies</Label>
+              <MultiCombobox
                 options={companyOptions}
-                value={form.companyId || newCompanyName}
-                onChange={(val, isNew) => {
-                  if (isNew) {
-                    setForm((prev) => ({ ...prev, companyId: '' }))
-                    setNewCompanyName(val)
-                  } else {
-                    setForm((prev) => ({ ...prev, companyId: val }))
-                    setNewCompanyName('')
-                  }
-                }}
-                placeholder="Search or type new name..."
+                values={form.companyIds}
+                onChange={(vals) => setForm((prev) => ({ ...prev, companyIds: vals }))}
+                placeholder="Search companies..."
                 searchPlaceholder="Search companies..."
-                allowFreeText={true}
               />
-              {newCompanyName && !form.companyId && (
-                <p className="text-xs text-muted-foreground">
-                  A new company will be created when you click Done.
-                </p>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -549,7 +500,7 @@ export function ActionFormPage() {
               type="button"
               onClick={() => {
                 // Trigger full save with link management before navigating
-                handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+                handleSubmit({ preventDefault: () => { } } as React.FormEvent)
               }}
               disabled={saving}
               className="flex-1 sm:flex-initial"

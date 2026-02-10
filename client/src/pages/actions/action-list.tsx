@@ -73,12 +73,17 @@ const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) =
   const search = filterValue.toLowerCase()
   const action = row.original
 
-  // Search across title, description, contact name, company name
+  // Search across title, description, contact names, company names
+  const contactNames = action.actionContacts?.map((ac) => ac.contact.name) ?? []
+  if (action.contact?.name) contactNames.push(action.contact.name)
+  const companyNames = action.actionCompanies?.map((ac) => ac.company.name) ?? []
+  if (action.company?.name) companyNames.push(action.company.name)
+
   const searchFields = [
     action.title,
     action.description,
-    action.contact?.name,
-    action.company?.name,
+    ...contactNames,
+    ...companyNames,
   ]
 
   return searchFields.some((field) => field?.toLowerCase().includes(search))
@@ -133,11 +138,10 @@ export function ActionListPage() {
       cell: ({ row }) => (
         <button
           onClick={(e) => toggleComplete(e, row.original)}
-          className={`flex h-11 w-11 sm:h-5 sm:w-5 items-center justify-center rounded-lg sm:rounded border transition-colors ${
-            row.original.completed
+          className={`flex h-11 w-11 sm:h-5 sm:w-5 items-center justify-center rounded-lg sm:rounded border transition-colors ${row.original.completed
               ? 'border-green-500 bg-green-500 text-white'
               : 'border-muted-foreground/30 hover:border-green-500'
-          }`}
+            }`}
         >
           {row.original.completed && <Check className="h-5 w-5 sm:h-3 sm:w-3" />}
         </button>
@@ -159,9 +163,8 @@ export function ActionListPage() {
       cell: ({ row }) => (
         <Link
           to={`/actions/${row.original.id}`}
-          className={`font-medium hover:underline ${
-            row.original.completed ? 'text-muted-foreground line-through' : 'text-foreground'
-          }`}
+          className={`font-medium hover:underline ${row.original.completed ? 'text-muted-foreground line-through' : 'text-foreground'
+            }`}
         >
           {row.original.title}
         </Link>
@@ -232,7 +235,11 @@ export function ActionListPage() {
     },
     {
       id: 'contact',
-      accessorFn: (row) => row.contact?.name ?? '',
+      accessorFn: (row) => {
+        const names = row.actionContacts?.map((ac) => ac.contact.name) ?? []
+        if (!names.length && row.contact?.name) names.push(row.contact.name)
+        return names.join(', ')
+      },
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -244,22 +251,33 @@ export function ActionListPage() {
         </Button>
       ),
       cell: ({ row }) => {
-        const contact = row.original.contact
-        if (!contact) return <span className="text-muted-foreground">—</span>
+        const contacts = row.original.actionContacts?.length
+          ? row.original.actionContacts.map((ac) => ac.contact)
+          : row.original.contact ? [row.original.contact] : []
+        if (!contacts.length) return <span className="text-muted-foreground">—</span>
         return (
-          <Link
-            to={`/contacts/${contact.id}`}
-            className="hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {contact.name}
-          </Link>
+          <div className="flex flex-wrap gap-x-1">
+            {contacts.map((c, i) => (
+              <Link
+                key={c.id}
+                to={`/contacts/${c.id}`}
+                className="hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {c.name}{i < contacts.length - 1 ? ',' : ''}
+              </Link>
+            ))}
+          </div>
         )
       },
     },
     {
       id: 'company',
-      accessorFn: (row) => row.company?.name ?? '',
+      accessorFn: (row) => {
+        const names = row.actionCompanies?.map((ac) => ac.company.name) ?? []
+        if (!names.length && row.company?.name) names.push(row.company.name)
+        return names.join(', ')
+      },
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -271,38 +289,45 @@ export function ActionListPage() {
         </Button>
       ),
       cell: ({ row }) => {
-        const company = row.original.company
-        if (!company) return <span className="text-muted-foreground">—</span>
+        const companies = row.original.actionCompanies?.length
+          ? row.original.actionCompanies.map((ac) => ac.company)
+          : row.original.company ? [row.original.company] : []
+        if (!companies.length) return <span className="text-muted-foreground">—</span>
         return (
-          <Link
-            to={`/companies/${company.id}`}
-            className="hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {company.name}
-          </Link>
+          <div className="flex flex-wrap gap-x-1">
+            {companies.map((c, i) => (
+              <Link
+                key={c.id}
+                to={`/companies/${c.id}`}
+                className="hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {c.name}{i < companies.length - 1 ? ',' : ''}
+              </Link>
+            ))}
+          </div>
         )
       },
     },
     ...(filter === 'completed'
       ? [
-          {
-            accessorKey: 'completedDate' as const,
-            header: ({ column }: { column: { toggleSorting: (asc: boolean) => void; getIsSorted: () => string | false } }) => (
-              <Button
-                variant="ghost"
-                className="-ml-4"
-                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-              >
-                Completed
-                <ArrowUpDown className="ml-1 h-4 w-4" />
-              </Button>
-            ),
-            cell: ({ getValue }: { getValue: () => unknown }) => (
-              <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
-            ),
-          } as ColumnDef<Action>,
-        ]
+        {
+          accessorKey: 'completedDate' as const,
+          header: ({ column }: { column: { toggleSorting: (asc: boolean) => void; getIsSorted: () => string | false } }) => (
+            <Button
+              variant="ghost"
+              className="-ml-4"
+              onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+            >
+              Completed
+              <ArrowUpDown className="ml-1 h-4 w-4" />
+            </Button>
+          ),
+          cell: ({ getValue }: { getValue: () => unknown }) => (
+            <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
+          ),
+        } as ColumnDef<Action>,
+      ]
       : []),
   ]
 

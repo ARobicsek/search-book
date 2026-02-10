@@ -1,13 +1,12 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
-import { CommandPaletteProvider, useCommandPalette } from '@/components/command-palette'
+import { CommandPaletteProvider } from '@/components/command-palette'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
 import { Search } from 'lucide-react'
 
 function LayoutContent() {
-  const { open: openPalette } = useCommandPalette()
   const navigate = useNavigate()
 
   return (

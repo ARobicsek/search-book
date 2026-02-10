@@ -29,42 +29,44 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-**Backup is fully working.** Both bugs are fixed. Ready for Phase 8 or user feedback items.
+**All user feedback features are deployed and working.** Ready for Phase 8 or new feedback items.
 
 Possible next directions:
 - **Phase 8: Document Search** — Full-text search across linked Google Drive documents (see ROADMAP.md)
 - **User feedback** — Any new items from testing
-- **Push to deploy** — Run `npm run prepush && git push` to deploy the backup fixes + save reminder UI to production
+- **Schema migrations** — If adding new tables, remember to run DDL against Turso directly (see Technical Notes #19)
 
 ---
 
 ## What Was Completed This Session
 
-### Backup Bug Fixes
-1. **Date parsing fixed** — `transformRecords()` in `server/src/routes/backup.ts` now handles all three Turso date formats via `toDate()` helper: Unix millisecond timestamps (`1770157191736`), ISO strings with timezone (`"2026-02-06T16:18:17.954+00:00"`), and raw SQLite strings (`"2026-02-08 15:39:27"`). Local restore from production backup works.
-2. **Save-local path fixed** — Robust project root detection tries three candidate paths (`__dirname`-based, `process.cwd()`, parent of cwd) and verifies each contains `server/` + `client/` subdirectories.
-3. **Backups folder** — Created `backups/` directory with `.gitkeep` (contents gitignored via `backups/*` + `!backups/.gitkeep`).
-4. **Save reminder UI** — Amber banner on Settings page after backup download reminds user to copy JSON from Downloads into `SearchBook/backups/`.
+### User Feedback Features (3 items)
 
-### Backup Architecture (completed last session):
-- `GET /api/backup/credentials` — returns Turso URL + auth token (404 in local dev)
-- `client/src/lib/backup.ts` — `exportViaTurso()` and `importViaTurso()` using `@libsql/client/web`
-- `client/src/pages/settings.tsx` — tries browser-direct first, falls back to server-side Prisma
-- `POST /api/backup/import` — server-side restore for local dev (uses `transformRecords()` for type conversion)
-- `POST /api/backup/save-local` — writes backup JSON to project `backups/` folder (local dev only)
+1. **Data indicators on contact card tabs** — Green dot indicators on Conversations, Relationships, and Prep Sheet tabs when data exists (`contact-detail.tsx`).
 
-### Flow:
-- **Production export:** Browser → Turso directly (no Vercel timeout) → JSON download + amber reminder to copy to backups/
-- **Production restore:** Browser → Turso directly (import via batch INSERTs)
-- **Local dev export:** Server Prisma `findMany` fallback → JSON download + auto-save to backups/
-- **Local dev restore:** Server Prisma `createMany` fallback (working)
+2. **Direct global search** — Ctrl+K and mobile search button now navigate directly to `/search` instead of opening the command palette modal (`command-palette.tsx`, `layout.tsx`).
+
+3. **Multi-select contacts/companies on actions** — Full implementation:
+   - Added `ActionContact` and `ActionCompany` junction tables to Prisma schema
+   - Updated server `actions.ts` (GET/POST/PUT/PATCH) to handle `contactIds[]`/`companyIds[]` arrays
+   - Converted `action-form.tsx` from single `Combobox` to `MultiCombobox`
+   - Updated `action-detail.tsx` and `action-list.tsx` to display multiple contacts/companies
+   - Updated both client and server backup systems for new tables
+   - Backward compatible — existing single `contactId`/`companyId` fields still work for legacy data
+   - Created junction tables in Turso production via direct DDL
+
+### Build Fix
+- Removed unused `openPalette` import in `layout.tsx` that caused Vercel build failure (strict unused variable check)
 
 ---
 
 ## What Was Completed Last Session
 
-### Browser-Direct Turso Backup
-Implemented `@libsql/client/web` in the browser to query Turso directly, bypassing Vercel's 30-second timeout.
+### Backup Bug Fixes
+1. **Date parsing** — `transformRecords()` handles all three Turso date formats via `toDate()` helper
+2. **Save-local path** — Robust project root detection
+3. **Backups folder** — `backups/` with `.gitkeep`
+4. **Save reminder UI** — Amber banner on Settings page
 
 ---
 
@@ -128,3 +130,5 @@ printf 'value' | vercel env add VAR_NAME production
 16. **Express body limit** — Increased to 50MB (`express.json({ limit: '50mb' })` in `app.ts`) for backup import payloads.
 17. **Backup date formats** — Turso returns dates as Unix ms timestamps, ISO strings, or raw SQLite strings. `toDate()` in `backup.ts` handles all three.
 18. **Production backup workflow** — JSON downloads to browser; user manually copies to `SearchBook/backups/` (amber UI reminder). Save-local endpoint only works in local dev (Vercel has read-only filesystem).
+19. **Turso schema migrations** — Prisma `db push` only works against local SQLite. For Turso production, run DDL directly: temporarily uncomment Turso creds in `server/.env`, use `node -e "require('dotenv').config(); const { createClient } = require('@libsql/client'); ..."` to execute CREATE TABLE statements, then re-comment creds.
+20. **Multi-select actions** — Actions support 0-N contacts and companies via `ActionContact`/`ActionCompany` junction tables. Legacy single `contactId`/`companyId` fields preserved for backward compatibility. All views (form, detail, list) fall back to legacy fields when junction tables are empty.

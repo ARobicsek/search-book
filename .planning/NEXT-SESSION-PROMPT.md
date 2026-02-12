@@ -28,30 +28,20 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## What Was Completed This Session
+## What Was Completed Last Session
 
 ### Bug Fixes (3 items)
 
-1. **Fixed Single Past Company Bug** — Resolved issue where a contact's only company was treated as "Current" even if marked "Past". Server logic updated (`server/src/routes/contacts.ts`) to correctly unset `companyId` if all entries are past.
+1. **??Fixed Single Past Company Bug** — Resolved issue where a contact's only company was treated as "Current" even if marked "Past". Server logic updated (`server/src/routes/contacts.ts`) to correctly unset `companyId` if all entries are past.
 
-2. **Fixed Multiple Past Companies Bug** — Resolved race condition in `contact-form.tsx` where `autoSave` (triggered by typing) would overwrite the `handleSubmit` payload, causing multiple past companies to be lost.
+2. **??fixed Multiple Past Companies Bug** — Tried to resolve race condition in `contact-form.tsx` where `autoSave` (triggered by typing) would overwrite the `handleSubmit` payload, causing multiple past companies to be lost.
 
-3. **Fixed New Company Creation Bug** — Preventing "disappearing company" issue by modifying `autoSave` to **omit** the company list payload if it detects any new (unsaved) companies. This prevents specific partial data from overwriting the server state.
+3. **??Fixed New Company Creation Bug** — Preventing "disappearing company" issue by modifying `autoSave` to **omit** the company list payload if it detects any new (unsaved) companies. This prevents specific partial data from overwriting the server state.
 
----
+**Unclear if these fixed worked because didn't deploy in vercel." Vercel build error was: src/pages/contacts/contact-form.tsx(310,22): error TS2339: Property 'companyId' does not exist on type '{ name: string; title: string | null; roleDescription: string | null; companyEntries: { id: number; isCurrent: boolean; }[]; ecosystem: string; status: string; emails: string[]; phone: string | null; ... 11 more ...; personalDetails: string | null; }'.
+src/pages/contacts/contact-form.tsx(311,22): error TS2339: Property 'additionalCompanyIds' does not exist on type '{ name: string; title: string | null; roleDescription: string | null; companyEntries: { id: number; isCurrent: boolean; }[]; ecosystem: string; status: string; emails: string[]; phone: string | null; ... 11 more ...; personalDetails: string | null; }'.
+Error: Command "npm run build:vercel" exited with 2
 
-## What Was Completed Last Session
-
-### User Feedback Features (2 items)
-
-1. **Quick Status/Ecosystem Changes** — Implemented inline editing for Status and Ecosystem in Contact/Company lists, and interactive dropdown badges in detail headers.
-
-2. **Add Action Enhancements** — "New Action" form now supports auto-creation of Contacts and Companies. Users can type a new name and select "Add [Name]" to create the entity on the fly.
-
-### Build Fix
-- Fixed navigation bug where clicking status/ecosystem dropdowns in list view triggered row navigation.
-
----
 
 ## Running Locally
 ```bash

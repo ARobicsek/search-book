@@ -1032,10 +1032,10 @@ function ConversationsTab({
   const [localCompanyOptions, setLocalCompanyOptions] = useState(companyOptions)
 
   // Keep local options in sync with parent
-  useState(() => {
+  useEffect(() => {
     setLocalContactOptions(contactOptions)
     setLocalCompanyOptions(companyOptions)
-  })
+  }, [contactOptions, companyOptions])
 
   type ConversationForm = {
     date: string

@@ -306,9 +306,11 @@ export function ContactFormPage() {
     // If we have new companies that aren't created yet, DO NOT save the company list.
     // Saving a partial list would overwrite the server state and cause the new company to be lost
     // when the UI syncs back with the server response.
+    // If we have new companies that aren't created yet, DO NOT save the company list.
+    // Saving a partial list would overwrite the server state and cause the new company to be lost
+    // when the UI syncs back with the server response.
     if (hasNewCompanies) {
-      delete payload.companyId
-      delete payload.additionalCompanyIds
+      delete (payload as any).companyEntries
     }
 
     // Remove referredByName for auto-save (don't auto-create)

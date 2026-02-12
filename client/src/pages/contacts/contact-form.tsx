@@ -472,11 +472,12 @@ export function ContactFormPage() {
                 </Button>
               )}
               <Button
-                type="button"
-                onClick={() => navigate(`/contacts/${id}`)}
+                type="submit"
+                form="contact-form"
+                disabled={saving}
                 className="flex-1 sm:flex-initial"
               >
-                Done
+                {saving ? 'Saving...' : 'Done'}
               </Button>
             </>
           ) : (

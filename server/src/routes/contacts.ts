@@ -204,8 +204,22 @@ function processCompanies(data: Record<string, unknown>): Record<string, unknown
     const { companyEntries: _, ...rest } = data;
 
     // First entry is the primary companyId
-    const primaryEntry = validEntries[0];
-    const additionalEntries = validEntries.slice(1);
+    // Logic fix: Find the first "Current" company to be the primary companyId.
+    // If all are "Past", then companyId should be null.
+    const primaryEntryIndex = validEntries.findIndex((e) => e.isCurrent !== false);
+
+    let primaryEntry: { id: number; isCurrent: boolean } | undefined;
+    let additionalEntries: { id: number; isCurrent: boolean }[] = [];
+
+    if (primaryEntryIndex >= 0) {
+      primaryEntry = validEntries[primaryEntryIndex];
+      // All others are additional
+      additionalEntries = validEntries.filter((_, idx) => idx !== primaryEntryIndex);
+    } else {
+      // No current company found (all are past)
+      primaryEntry = undefined;
+      additionalEntries = validEntries;
+    }
 
     return {
       ...rest,

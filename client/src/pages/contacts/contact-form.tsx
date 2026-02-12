@@ -433,8 +433,53 @@ export function ContactFormPage() {
     }
   }
 
-// ... inside render ...
-// inside <div className="flex items-center gap-2">
+  function set(field: keyof FormData, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: '' }))
+  }
+
+  // Company combobox options: search existing + type new
+  const companyOptions: ComboboxOption[] = companies.map((c) => ({
+    value: c.id.toString(),
+    label: c.name,
+  }))
+
+  // Filter out self from referredBy options
+  const currentId = id ? parseInt(id) : null
+  const referredByOptions: ComboboxOption[] = allContacts
+    .filter((c) => c.id !== currentId)
+    .map((c) => ({ value: c.id.toString(), label: c.name }))
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isEdit ? 'Edit Contact' : 'New Contact'}
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {isEdit ? (
+            <>
+              <SaveStatusIndicator status={autoSave.status} />
+              {autoSave.isDirty && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={autoSave.revert}
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Revert
+                </Button>
+              )}
               <Button
                 type="button"
                 onClick={() => handleSubmit()}
@@ -443,6 +488,19 @@ export function ContactFormPage() {
               >
                 {saving ? 'Saving...' : 'Done'}
               </Button>
+            </>
+          ) : (
+            <>
+              <Button type="submit" form="contact-form" disabled={saving} className="flex-1 sm:flex-initial">
+                {saving ? 'Saving...' : 'Create Contact'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
+                Cancel
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
       <form id="contact-form" onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Info */}

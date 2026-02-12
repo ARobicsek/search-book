@@ -197,7 +197,7 @@ export function ContactFormPage() {
 
   function loadLinks() {
     if (id) {
-      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
+      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
     }
   }
 
@@ -250,7 +250,7 @@ export function ContactFormPage() {
     api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
     api.get<{ id: number; name: string }[]>('/contacts/names').then(
       (data) => setAllContacts(data)
-    ).catch(() => {})
+    ).catch(() => { })
 
     if (isEdit && id) {
       api
@@ -271,7 +271,7 @@ export function ContactFormPage() {
         })
         .finally(() => setLoading(false))
       // Load links for this contact
-      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => {})
+      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
     }
   }, [id, isEdit, navigate])
 
@@ -288,6 +288,9 @@ export function ContactFormPage() {
 
   // Auto-save handler for edit mode - only saves existing company IDs, not new names
   const handleAutoSave = useCallback(async (data: FormData) => {
+    // Prevent auto-save if manual save is in progress
+    if (saving) return
+
     // Only include company entries that are existing IDs (not new company names)
     const existingCompanyEntries = data.companyEntries
       .filter(entry => companies.some(c => c.id.toString() === entry.value))
@@ -298,7 +301,7 @@ export function ContactFormPage() {
     delete (payload as { referredByName?: string | null }).referredByName
 
     await api.put(`/contacts/${id}`, payload)
-  }, [id, companies])
+  }, [id, companies, saving])
 
   // Use auto-save hook (only in edit mode)
   const autoSave = useAutoSave({
@@ -306,12 +309,13 @@ export function ContactFormPage() {
     originalData: originalForm,
     onSave: handleAutoSave,
     validate: (data) => validate(data),
-    enabled: isEdit,
+    enabled: isEdit && !saving,
     onRevert: setForm,
   })
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (saving) return // Prevent double submission
     if (!validate()) return
 
     setSaving(true)

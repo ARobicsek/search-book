@@ -244,7 +244,7 @@ function processCompanies(data: Record<string, unknown>): Record<string, unknown
 }
 
 // Combined helper
-function processFormData(data: Record<string, unknown>): Record<string, unknown> {
+export function processFormData(data: Record<string, unknown>): Record<string, unknown> {
   return processCompanies(processEmails(data));
 }
 

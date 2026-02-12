@@ -1,0 +1,36 @@
+{
+  "test1_input": [
+    {
+      "id": 101,
+      "isCurrent": false
+    },
+    {
+      "id": 102,
+      "isCurrent": false
+    },
+    {
+      "id": 103,
+      "isCurrent": true
+    }
+  ],
+  "test1_output": {
+    "name": "Test Multi Past",
+    "companyId": 103,
+    "additionalCompanyIds": "[{\"id\":101,\"isCurrent\":false},{\"id\":102,\"isCurrent\":false}]"
+  },
+  "test2_input": [
+    {
+      "id": 201,
+      "isCurrent": false
+    },
+    {
+      "id": 202,
+      "isCurrent": false
+    }
+  ],
+  "test2_output": {
+    "name": "Test All Past",
+    "companyId": null,
+    "additionalCompanyIds": "[{\"id\":201,\"isCurrent\":false},{\"id\":202,\"isCurrent\":false}]"
+  }
+}

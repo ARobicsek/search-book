@@ -286,17 +286,31 @@ export function ContactFormPage() {
     return Object.keys(errs).length === 0
   }
 
-  // Auto-save handler for edit mode - only saves existing company IDs, not new names
+  // Auto-save handler for edit mode
   const handleAutoSave = useCallback(async (data: FormData) => {
     // Prevent auto-save if manual save is in progress
     if (saving) return
 
-    // Only include company entries that are existing IDs (not new company names)
+    // Check if there are any new company entries (not IDs)
+    const hasNewCompanies = data.companyEntries.some(entry =>
+      !companies.some(c => c.id.toString() === entry.value)
+    )
+
+    // Only include company entries that are existing IDs
     const existingCompanyEntries = data.companyEntries
       .filter(entry => companies.some(c => c.id.toString() === entry.value))
       .map(entry => ({ id: parseInt(entry.value), isCurrent: entry.isCurrent }))
 
     const payload = formToPayload(data, existingCompanyEntries)
+
+    // If we have new companies that aren't created yet, DO NOT save the company list.
+    // Saving a partial list would overwrite the server state and cause the new company to be lost
+    // when the UI syncs back with the server response.
+    if (hasNewCompanies) {
+      delete payload.companyId
+      delete payload.additionalCompanyIds
+    }
+
     // Remove referredByName for auto-save (don't auto-create)
     delete (payload as { referredByName?: string | null }).referredByName
 
@@ -329,9 +343,7 @@ export function ContactFormPage() {
         } else if (entry.value.trim()) {
           // Create new company
           try {
-            console.log('Creating new company:', entry.value)
             const newCompany = await api.post<Company>('/companies', { name: entry.value.trim(), status: 'CONNECTED' })
-            console.log('Created company:', newCompany)
             companyEntries.push({ id: newCompany.id, isCurrent: entry.isCurrent })
             setCompanies((prev) => [...prev, newCompany])
           } catch (err) {
@@ -342,7 +354,6 @@ export function ContactFormPage() {
       }
 
       const payload = formToPayload(form, companyEntries)
-      console.log('Submitting payload:', payload)
 
       // If user typed a new referrer name (not from dropdown), auto-create the contact
       if (!payload.referredById && (payload as { referredByName?: string | null }).referredByName) {

@@ -74,6 +74,15 @@ import {
   Loader2,
   RotateCcw,
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 
@@ -290,6 +299,24 @@ export function ContactDetailPage() {
     }
   }
 
+  async function handleUpdate(field: 'ecosystem' | 'status', value: string) {
+    if (!contact) return
+    const originalValue = contact[field]
+
+    // Optimistic update
+    setContact((prev) => (prev ? { ...prev, [field]: value as any } : null))
+
+    try {
+      await api.put(`/contacts/${id}`, { [field]: value })
+      toast.success('Updated')
+    } catch (err: unknown) {
+      // Revert on failure
+      setContact((prev) => (prev ? { ...prev, [field]: originalValue } : null))
+      const message = err instanceof Error ? err.message : 'Failed to update'
+      toast.error(message)
+    }
+  }
+
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   if (!contact) return <div className="text-muted-foreground">Contact not found.</div>
 
@@ -429,12 +456,53 @@ export function ContactDetailPage() {
               </div>
             </div>
             <div className="mt-2 flex gap-2">
-              <Badge variant="outline" className={ecosystemColors[contact.ecosystem]}>
-                {getLabel(contact.ecosystem, ECOSYSTEM_OPTIONS)}
-              </Badge>
-              <Badge variant="outline" className={statusColors[contact.status]}>
-                {getLabel(contact.status, CONTACT_STATUS_OPTIONS)}
-              </Badge>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="focus:outline-none">
+                  <Badge variant="outline" className={`${ecosystemColors[contact.ecosystem]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                    {getLabel(contact.ecosystem, ECOSYSTEM_OPTIONS)}
+                  </Badge>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>Change Ecosystem</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup
+                    value={contact.ecosystem}
+                    onValueChange={(val) => handleUpdate('ecosystem', val)}
+                  >
+                    {ECOSYSTEM_OPTIONS.map((option) => (
+                      <DropdownMenuRadioItem key={option.value} value={option.value}>
+                        <Badge variant="outline" className={`mr-2 ${ecosystemColors[option.value]}`}>
+                          {option.label}
+                        </Badge>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger className="focus:outline-none">
+                  <Badge variant="outline" className={`${statusColors[contact.status]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                    {getLabel(contact.status, CONTACT_STATUS_OPTIONS)}
+                  </Badge>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup
+                    value={contact.status}
+                    onValueChange={(val) => handleUpdate('status', val)}
+                  >
+                    {CONTACT_STATUS_OPTIONS.map((option) => (
+                      <DropdownMenuRadioItem key={option.value} value={option.value}>
+                        <Badge variant="outline" className={`mr-2 ${statusColors[option.value]}`}>
+                          {option.label}
+                        </Badge>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -725,8 +793,8 @@ export function ContactDetailPage() {
                         <button
                           onClick={() => toggleActionComplete(action)}
                           className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${action.completed
-                              ? 'border-green-500 bg-green-500 text-white'
-                              : 'border-muted-foreground/30 hover:border-green-500'
+                            ? 'border-green-500 bg-green-500 text-white'
+                            : 'border-muted-foreground/30 hover:border-green-500'
                             }`}
                         >
                           {action.completed && <Check className="h-2.5 w-2.5" />}
@@ -753,8 +821,8 @@ export function ContactDetailPage() {
                         {action.dueDate && (
                           <span
                             className={`text-xs ${overdue
-                                ? 'font-semibold text-red-600'
-                                : 'text-muted-foreground'
+                              ? 'font-semibold text-red-600'
+                              : 'text-muted-foreground'
                               }`}
                           >
                             {new Date(action.dueDate + 'T00:00:00').toLocaleDateString(
@@ -913,7 +981,7 @@ export function ContactDetailPage() {
         <span>Created {formatDate(contact.createdAt)}</span>
         <span>Updated {formatDate(contact.updatedAt)}</span>
       </div>
-    </div>
+    </div >
   )
 }
 

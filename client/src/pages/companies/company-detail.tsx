@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company, Action, LinkRecord } from '@/lib/types'
+import type { Company, Action, LinkRecord, CompanyStatus } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
@@ -108,7 +117,7 @@ export function CompanyDetailPage() {
 
   function loadLinks() {
     if (id) {
-      api.get<LinkRecord[]>(`/links?companyId=${id}`).then(setLinks).catch(() => {})
+      api.get<LinkRecord[]>(`/links?companyId=${id}`).then(setLinks).catch(() => { })
     }
   }
 
@@ -123,7 +132,7 @@ export function CompanyDetailPage() {
       })
       .finally(() => setLoading(false))
 
-    api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => {})
+    api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => { })
     loadLinks()
   }, [id, navigate])
 
@@ -152,6 +161,24 @@ export function CompanyDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to delete')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleUpdate(value: string) {
+    if (!company) return
+    const originalStatus = company.status
+
+    // Optimistic update
+    setCompany((prev) => (prev ? { ...prev, status: value as CompanyStatus } : null))
+
+    try {
+      await api.put(`/companies/${id}`, { status: value })
+      toast.success('Updated')
+    } catch (err: unknown) {
+      // Revert on failure
+      setCompany((prev) => (prev ? { ...prev, status: originalStatus } : null))
+      const message = err instanceof Error ? err.message : 'Failed to update'
+      toast.error(message)
     }
   }
 
@@ -204,9 +231,29 @@ export function CompanyDetailPage() {
               <p className="text-sm text-muted-foreground">{company.industry}</p>
             )}
             <div className="mt-2">
-              <Badge variant="outline" className={companyStatusColors[company.status]}>
-                {getLabel(company.status, COMPANY_STATUS_OPTIONS)}
-              </Badge>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="focus:outline-none">
+                  <Badge variant="outline" className={`${companyStatusColors[company.status]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                    {getLabel(company.status, COMPANY_STATUS_OPTIONS)}
+                  </Badge>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup
+                    value={company.status}
+                    onValueChange={(val) => handleUpdate(val)}
+                  >
+                    {COMPANY_STATUS_OPTIONS.map((option) => (
+                      <DropdownMenuRadioItem key={option.value} value={option.value}>
+                        <Badge variant="outline" className={`mr-2 ${companyStatusColors[option.value]}`}>
+                          {option.label}
+                        </Badge>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -405,11 +452,10 @@ export function CompanyDetailPage() {
                   <div key={action.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
                     <button
                       onClick={() => toggleActionComplete(action)}
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                        action.completed
-                          ? 'border-green-500 bg-green-500 text-white'
-                          : 'border-muted-foreground/30 hover:border-green-500'
-                      }`}
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${action.completed
+                        ? 'border-green-500 bg-green-500 text-white'
+                        : 'border-muted-foreground/30 hover:border-green-500'
+                        }`}
                     >
                       {action.completed && <Check className="h-2.5 w-2.5" />}
                     </button>

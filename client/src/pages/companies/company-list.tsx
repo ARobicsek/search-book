@@ -27,6 +27,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
+import {
   Table,
   TableBody,
   TableCell,
@@ -57,114 +66,139 @@ function formatDate(dateStr: string) {
   })
 }
 
-const columns: ColumnDef<Company>[] = [
-  {
-    accessorKey: 'name',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Name
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => (
-      <Link
-        to={`/companies/${row.original.id}`}
-        className="font-medium text-foreground hover:underline"
-      >
-        {row.original.name}
-      </Link>
-    ),
-  },
-  {
-    accessorKey: 'industry',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Industry
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
-    ),
-  },
-  {
-    accessorKey: 'size',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Size
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
-    ),
-  },
-  {
-    accessorKey: 'hqLocation',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        HQ Location
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
-    ),
-  },
-  {
-    accessorKey: 'status',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Status
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => {
-      const value = getValue() as CompanyStatus
-      return (
-        <Badge variant="outline" className={statusColors[value]}>
-          {getLabel(value, COMPANY_STATUS_OPTIONS)}
-        </Badge>
-      )
+function buildColumns(
+  onUpdate: (company: Company, value: string) => void
+): ColumnDef<Company>[] {
+  return [
+    {
+      accessorKey: 'name',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Name
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <Link
+          to={`/companies/${row.original.id}`}
+          className="font-medium text-foreground hover:underline"
+        >
+          {row.original.name}
+        </Link>
+      ),
     },
-  },
-  {
-    accessorKey: 'updatedAt',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Updated
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
-    ),
-  },
-]
+    {
+      accessorKey: 'industry',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Industry
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+      ),
+    },
+    {
+      accessorKey: 'size',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Size
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+      ),
+    },
+    {
+      accessorKey: 'hqLocation',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          HQ Location
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+      ),
+    },
+    {
+      accessorKey: 'status',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Status
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const company = row.original
+        const value = company.status as CompanyStatus
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger className="focus:outline-none">
+              <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                {getLabel(value, COMPANY_STATUS_OPTIONS)}
+              </Badge>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup
+                value={value}
+                onValueChange={(val) => onUpdate(company, val)}
+              >
+                {COMPANY_STATUS_OPTIONS.map((option) => (
+                  <DropdownMenuRadioItem key={option.value} value={option.value}>
+                    <Badge variant="outline" className={`mr-2 ${statusColors[option.value as CompanyStatus]}`}>
+                      {option.label}
+                    </Badge>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
+    },
+    {
+      accessorKey: 'updatedAt',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Updated
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
+      ),
+    },
+  ]
+}
 
 export function CompanyListPage() {
   const navigate = useNavigate()
@@ -201,6 +235,27 @@ export function CompanyListPage() {
     })
   }, [isMobile])
 
+  async function handleUpdate(company: Company, value: string) {
+    // Optimistic update
+    setCompanies((prev) =>
+      prev.map((c) => (c.id === company.id ? { ...c, status: value as CompanyStatus } : c))
+    )
+
+    try {
+      await api.put(`/companies/${company.id}`, { status: value })
+      toast.success('Updated')
+    } catch (err: unknown) {
+      // Revert on failure
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === company.id ? { ...c, status: company.status } : c))
+      )
+      const message = err instanceof Error ? err.message : 'Failed to update'
+      toast.error(message)
+    }
+  }
+
+  const columns = useMemo(() => buildColumns(handleUpdate), [companies])
+
   const table = useReactTable({
     data: filteredData,
     columns,
@@ -231,6 +286,8 @@ export function CompanyListPage() {
     setGlobalFilter('')
     setStatusFilter('all')
   }
+
+
 
   return (
     <div className="space-y-4">

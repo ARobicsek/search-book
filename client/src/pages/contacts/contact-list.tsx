@@ -21,6 +21,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -129,193 +138,237 @@ function getAllCompanyIds(contact: Contact): number[] {
   return ids
 }
 
-function buildColumns(onToggleFlag: (contact: Contact) => void): ColumnDef<Contact>[] {
+function buildColumns(
+  onToggleFlag: (contact: Contact) => void,
+  onUpdate: (contact: Contact, field: 'ecosystem' | 'status', value: string) => void
+): ColumnDef<Contact>[] {
   return [
-  {
-    id: 'flag',
-    header: () => <Flag className="h-4 w-4 text-muted-foreground" />,
-    cell: ({ row }) => (
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onToggleFlag(row.original)
-        }}
-        className="flex items-center justify-center"
-      >
-        <Flag
-          className={`h-4 w-4 ${
-            row.original.flagged
+    {
+      id: 'flag',
+      header: () => <Flag className="h-4 w-4 text-muted-foreground" />,
+      cell: ({ row }) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleFlag(row.original)
+          }}
+          className="flex items-center justify-center"
+        >
+          <Flag
+            className={`h-4 w-4 ${row.original.flagged
               ? 'fill-amber-500 text-amber-500'
               : 'text-muted-foreground/30 hover:text-amber-400'
-          }`}
-        />
-      </button>
-    ),
-    size: 40,
-  },
-  {
-    accessorKey: 'name',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Name
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => (
-      <Link
-        to={`/contacts/${row.original.id}`}
-        className="font-medium text-foreground hover:underline"
-      >
-        {row.original.name}
-      </Link>
-    ),
-  },
-  {
-    accessorKey: 'title',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Title
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
-    ),
-  },
-  {
-    id: 'company',
-    accessorFn: (row) => getCompanyDisplay(row),
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Company
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => {
-      const contact = row.original
-      if (contact.company) {
+              }`}
+          />
+        </button>
+      ),
+      size: 40,
+    },
+    {
+      accessorKey: 'name',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Name
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <Link
+          to={`/contacts/${row.original.id}`}
+          className="font-medium text-foreground hover:underline"
+        >
+          {row.original.name}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: 'title',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Title
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+      ),
+    },
+    {
+      id: 'company',
+      accessorFn: (row) => getCompanyDisplay(row),
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Company
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const contact = row.original
+        if (contact.company) {
+          return (
+            <Link
+              to={`/companies/${contact.company.id}`}
+              className="hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {contact.company.name}
+            </Link>
+          )
+        }
+        return <span className="text-muted-foreground">{contact.companyName ?? '—'}</span>
+      },
+    },
+    {
+      accessorKey: 'ecosystem',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Ecosystem
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const contact = row.original
+        const value = contact.ecosystem as Ecosystem
         return (
-          <Link
-            to={`/companies/${contact.company.id}`}
-            className="hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {contact.company.name}
-          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="focus:outline-none">
+              <Badge variant="outline" className={`${ecosystemColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                {getLabel(value, ECOSYSTEM_OPTIONS)}
+              </Badge>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>Change Ecosystem</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup
+                value={value}
+                onValueChange={(val) => onUpdate(contact, 'ecosystem', val)}
+              >
+                {ECOSYSTEM_OPTIONS.map((option) => (
+                  <DropdownMenuRadioItem key={option.value} value={option.value}>
+                    <Badge variant="outline" className={`mr-2 ${ecosystemColors[option.value as Ecosystem]}`}>
+                      {option.label}
+                    </Badge>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )
-      }
-      return <span className="text-muted-foreground">{contact.companyName ?? '—'}</span>
+      },
     },
-  },
-  {
-    accessorKey: 'ecosystem',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Ecosystem
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => {
-      const value = getValue() as Ecosystem
-      return (
-        <Badge variant="outline" className={ecosystemColors[value]}>
-          {getLabel(value, ECOSYSTEM_OPTIONS)}
-        </Badge>
-      )
+    {
+      accessorKey: 'status',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Status
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const contact = row.original
+        const value = contact.status as ContactStatus
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger className="focus:outline-none">
+              <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                {getLabel(value, CONTACT_STATUS_OPTIONS)}
+              </Badge>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup
+                value={value}
+                onValueChange={(val) => onUpdate(contact, 'status', val)}
+              >
+                {CONTACT_STATUS_OPTIONS.map((option) => (
+                  <DropdownMenuRadioItem key={option.value} value={option.value}>
+                    <Badge variant="outline" className={`mr-2 ${statusColors[option.value as ContactStatus]}`}>
+                      {option.label}
+                    </Badge>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
     },
-  },
-  {
-    accessorKey: 'status',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Status
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => {
-      const value = getValue() as ContactStatus
-      return (
-        <Badge variant="outline" className={statusColors[value]}>
-          {getLabel(value, CONTACT_STATUS_OPTIONS)}
-        </Badge>
-      )
+    {
+      accessorKey: 'location',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Location
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+      ),
     },
-  },
-  {
-    accessorKey: 'location',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Location
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
-    ),
-  },
-  {
-    accessorKey: 'updatedAt',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Updated
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
-    ),
-  },
-  {
-    accessorKey: 'lastOutreachDate',
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="-ml-4"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      >
-        Last Outreach
-        <ArrowUpDown className="ml-1 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => {
-      const date = row.original.lastOutreachDate
-      const precision = row.original.lastOutreachDatePrecision
-      return (
-        <span className="text-muted-foreground">
-          {date ? formatDateWithPrecision(date, precision) : '—'}
-        </span>
-      )
+    {
+      accessorKey: 'updatedAt',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Updated
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground">{formatDate(getValue() as string)}</span>
+      ),
     },
-  },
-]
+    {
+      accessorKey: 'lastOutreachDate',
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-4"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        >
+          Last Outreach
+          <ArrowUpDown className="ml-1 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const date = row.original.lastOutreachDate
+        const precision = row.original.lastOutreachDatePrecision
+        return (
+          <span className="text-muted-foreground">
+            {date ? formatDateWithPrecision(date, precision) : '—'}
+          </span>
+        )
+      },
+    },
+  ]
 }
 
 export function ContactListPage() {
@@ -360,7 +413,7 @@ export function ContactListPage() {
   useEffect(() => {
     api.get<{ id: number; name: string }[]>('/companies')
       .then(setAllCompanies)
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   async function toggleFlag(contact: Contact) {
@@ -409,7 +462,26 @@ export function ContactListPage() {
     }
   }
 
-  const columns = useMemo(() => buildColumns(toggleFlag), [contacts])
+  async function handleUpdate(contact: Contact, field: 'ecosystem' | 'status', value: string) {
+    // Optimistic update
+    setContacts((prev) =>
+      prev.map((c) => (c.id === contact.id ? { ...c, [field]: value as any } : c))
+    )
+
+    try {
+      await api.put(`/contacts/${contact.id}`, { [field]: value })
+      toast.success('Updated')
+    } catch (err: unknown) {
+      // Revert on failure
+      setContacts((prev) =>
+        prev.map((c) => (c.id === contact.id ? { ...c, [field]: contact[field] } : c))
+      )
+      const message = err instanceof Error ? err.message : 'Failed to update'
+      toast.error(message)
+    }
+  }
+
+  const columns = useMemo(() => buildColumns(toggleFlag, handleUpdate), [contacts])
 
   async function loadContacts(page = currentPage) {
     setLoading(true)
@@ -695,51 +767,51 @@ export function ContactListPage() {
                 </span>
               </Button>
             </PopoverTrigger>
-          <PopoverContent className="w-80" align="start">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="from-date">From</Label>
-                <Input
-                  id="from-date"
-                  type="date"
-                  value={lastOutreachFrom}
-                  onChange={(e) => setLastOutreachFrom(e.target.value)}
-                />
+            <PopoverContent className="w-80" align="start">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="from-date">From</Label>
+                  <Input
+                    id="from-date"
+                    type="date"
+                    value={lastOutreachFrom}
+                    onChange={(e) => setLastOutreachFrom(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="to-date">To</Label>
+                  <Input
+                    id="to-date"
+                    type="date"
+                    value={lastOutreachTo}
+                    onChange={(e) => setLastOutreachTo(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="include-no-outreach"
+                    checked={includeNoOutreach}
+                    onCheckedChange={(checked) => setIncludeNoOutreach(checked === true)}
+                  />
+                  <Label htmlFor="include-no-outreach" className="text-sm font-normal">
+                    Include never contacted
+                  </Label>
+                </div>
+                {hasDateFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      setLastOutreachFrom('')
+                      setLastOutreachTo('')
+                    }}
+                  >
+                    Clear dates
+                  </Button>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="to-date">To</Label>
-                <Input
-                  id="to-date"
-                  type="date"
-                  value={lastOutreachTo}
-                  onChange={(e) => setLastOutreachTo(e.target.value)}
-                />
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="include-no-outreach"
-                  checked={includeNoOutreach}
-                  onCheckedChange={(checked) => setIncludeNoOutreach(checked === true)}
-                />
-                <Label htmlFor="include-no-outreach" className="text-sm font-normal">
-                  Include never contacted
-                </Label>
-              </div>
-              {hasDateFilter && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => {
-                    setLastOutreachFrom('')
-                    setLastOutreachTo('')
-                  }}
-                >
-                  Clear dates
-                </Button>
-              )}
-            </div>
-          </PopoverContent>
+            </PopoverContent>
           </Popover>
           <Button
             variant={showFlaggedOnly ? 'default' : 'outline'}

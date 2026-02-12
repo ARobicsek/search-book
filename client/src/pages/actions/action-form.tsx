@@ -219,7 +219,70 @@ export function ActionFormPage() {
 
     setSaving(true)
     try {
-      const payload = formToPayload(form)
+      // Process Contacts: Create new ones if they don't exist
+      const finalContactIds: number[] = []
+      for (const idOrName of form.contactIds) {
+        if (contacts.some((c) => c.id.toString() === idOrName)) {
+          finalContactIds.push(parseInt(idOrName))
+        } else {
+          // Create new contact
+          try {
+            const newContact = await api.post<Contact>('/contacts', {
+              name: idOrName,
+              status: 'CONNECTED',
+              ecosystem: 'ROLODEX',
+            })
+            finalContactIds.push(newContact.id)
+            // Update local state to prevent re-creation if staying on page
+            setContacts((prev) => [...prev, newContact])
+          } catch (err) {
+            console.error('Failed to create contact:', idOrName, err)
+            toast.error(`Failed to create contact: ${idOrName}`)
+            setSaving(false)
+            return
+          }
+        }
+      }
+
+      // Process Companies: Create new ones if they don't exist
+      const finalCompanyIds: number[] = []
+      for (const idOrName of form.companyIds) {
+        if (companies.some((c) => c.id.toString() === idOrName)) {
+          finalCompanyIds.push(parseInt(idOrName))
+        } else {
+          // Create new company
+          try {
+            const newCompany = await api.post<Company>('/companies', {
+              name: idOrName,
+              status: 'CONNECTED',
+            })
+            finalCompanyIds.push(newCompany.id)
+            setCompanies((prev) => [...prev, newCompany])
+          } catch (err) {
+            console.error('Failed to create company:', idOrName, err)
+            toast.error(`Failed to create company: ${idOrName}`)
+            setSaving(false)
+            return
+          }
+        }
+      }
+
+      const payload = {
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        type: form.type,
+        priority: form.priority,
+        dueDate: form.dueDate || null,
+        contactIds: finalContactIds,
+        companyIds: finalCompanyIds,
+        recurring: form.recurring,
+        recurringIntervalDays: form.recurring && form.recurringIntervalDays
+          ? parseInt(form.recurringIntervalDays)
+          : null,
+        recurringEndDate: form.recurring && form.recurringEndDate
+          ? form.recurringEndDate
+          : null,
+      }
 
       let actionId: number
 
@@ -438,6 +501,7 @@ export function ActionFormPage() {
                 onChange={(vals) => setForm((prev) => ({ ...prev, contactIds: vals }))}
                 placeholder="Search contacts..."
                 searchPlaceholder="Search contacts..."
+                allowFreeText
               />
             </div>
 
@@ -449,6 +513,7 @@ export function ActionFormPage() {
                 onChange={(vals) => setForm((prev) => ({ ...prev, companyIds: vals }))}
                 placeholder="Search companies..."
                 searchPlaceholder="Search companies..."
+                allowFreeText
               />
             </div>
           </CardContent>

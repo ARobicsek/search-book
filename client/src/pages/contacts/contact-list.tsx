@@ -247,7 +247,7 @@ function buildColumns(
         const value = contact.ecosystem as Ecosystem
         return (
           <DropdownMenu>
-            <DropdownMenuTrigger className="focus:outline-none">
+            <DropdownMenuTrigger className="focus:outline-none" onClick={(e) => e.stopPropagation()}>
               <Badge variant="outline" className={`${ecosystemColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
                 {getLabel(value, ECOSYSTEM_OPTIONS)}
               </Badge>
@@ -289,7 +289,7 @@ function buildColumns(
         const value = contact.status as ContactStatus
         return (
           <DropdownMenu>
-            <DropdownMenuTrigger className="focus:outline-none">
+            <DropdownMenuTrigger className="focus:outline-none" onClick={(e) => e.stopPropagation()}>
               <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
                 {getLabel(value, CONTACT_STATUS_OPTIONS)}
               </Badge>

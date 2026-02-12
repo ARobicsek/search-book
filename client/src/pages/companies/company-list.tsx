@@ -156,7 +156,7 @@ function buildColumns(
         const value = company.status as CompanyStatus
         return (
           <DropdownMenu>
-            <DropdownMenuTrigger className="focus:outline-none">
+            <DropdownMenuTrigger className="focus:outline-none" onClick={(e) => e.stopPropagation()}>
               <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
                 {getLabel(value, COMPANY_STATUS_OPTIONS)}
               </Badge>

@@ -31,14 +31,31 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 **All user feedback features are deployed and working.** Ready for Phase 8 or new feedback items.
 
-Possible next directions:
-- **Phase 8: Document Search** — Full-text search across linked Google Drive documents (see ROADMAP.md)
+
 - **User feedback** — Any new items from testing
+-When I add a new contact or company in the 'Add action' activity, I should be able to both search and add (i.e. we should use the identical search/add logic as we use in various other forms in the tool, such as in the add contacts page for the 'company' and 'referred by' fields)
+-I should be able to change the ecosystem and status of a contact or company from the contact/company detail page (without opening add/edit) and from the contact or company list view (ideally buy clicking on the ecosystem/status pills) - see attached screenshots
+
+
 - **Schema migrations** — If adding new tables, remember to run DDL against Turso directly (see Technical Notes #19)
 
 ---
 
 ## What Was Completed This Session
+
+### User Feedback Features (2 items)
+
+1. **Quick Status/Ecosystem Changes** — Implemented inline editing for Status and Ecosystem in Contact/Company lists, and interactive dropdown badges in detail headers (replacing static badges).
+
+2. **Add Action Enhancements** — "New Action" form now supports auto-creation of Contacts and Companies. Users can type a new name and select "Add [Name]" to create the entity on the fly (defaults: Status=CONNECTED, Ecosystem=ROLODEX).
+
+### Build Fix
+- Fixed unused variable imports and type assertion errors in list/detail views.
+- Fixed navigation bug where clicking status/ecosystem dropdowns in list view triggered row navigation (added `e.stopPropagation()`).
+
+---
+
+## What Was Completed Last Session
 
 ### User Feedback Features (3 items)
 
@@ -57,16 +74,6 @@ Possible next directions:
 
 ### Build Fix
 - Removed unused `openPalette` import in `layout.tsx` that caused Vercel build failure (strict unused variable check)
-
----
-
-## What Was Completed Last Session
-
-### Backup Bug Fixes
-1. **Date parsing** — `transformRecords()` handles all three Turso date formats via `toDate()` helper
-2. **Save-local path** — Robust project root detection
-3. **Backups folder** — `backups/` with `.gitkeep`
-4. **Save reminder UI** — Amber banner on Settings page
 
 ---
 

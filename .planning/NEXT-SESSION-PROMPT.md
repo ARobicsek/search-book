@@ -31,6 +31,8 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 **All user feedback features are deployed and working.** Ready for Phase 8 or new feedback items.
 
+- **Phase 8: Document Search Integration** — Begin planning and implementing Google Drive integration for document search.
+
 
 - **User feedback** — Any new items from testing
 -When I add a new contact or company in the 'Add action' activity, I should be able to both search and add (i.e. we should use the identical search/add logic as we use in various other forms in the tool, such as in the add contacts page for the 'company' and 'referred by' fields)

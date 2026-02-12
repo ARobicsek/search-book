@@ -331,44 +331,30 @@ export function ContactFormPage() {
 
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault()
-    console.log('handleSubmit called')
 
-    if (saving) {
-      console.log('handleSubmit aborted: already saving')
-      return
-    }
+    if (saving) return
+    if (!validate()) return
 
-    if (!validate()) {
-      console.log('handleSubmit aborted: validation failed', errors)
-      return
-    }
-
-    console.log('handleSubmit processing', { form })
     setSaving(true)
     try {
       // Resolve company entries to IDs (creating new companies for new names)
       const companyEntries: { id: number; isCurrent: boolean }[] = []
       for (const entry of form.companyEntries) {
-        console.log('Processing company entry:', entry)
         const existingCompany = companies.find((c) => c.id.toString() === entry.value)
         if (existingCompany) {
           companyEntries.push({ id: existingCompany.id, isCurrent: entry.isCurrent })
         } else if (entry.value.trim()) {
           // Create new company
           try {
-            console.log('Creating new company:', entry.value)
             const newCompany = await api.post<Company>('/companies', { name: entry.value.trim(), status: 'CONNECTED' })
-            console.log('New company created:', newCompany)
             companyEntries.push({ id: newCompany.id, isCurrent: entry.isCurrent })
             setCompanies((prev) => [...prev, newCompany])
           } catch (err) {
-            console.error('Failed to create company:', err)
             toast.error(`Failed to create company "${entry.value}".`)
           }
         }
       }
 
-      console.log('Resolved companyEntries:', companyEntries)
       const payload = formToPayload(form, companyEntries)
 
       // If user typed a new referrer name (not from dropdown), auto-create the contact
@@ -408,8 +394,6 @@ export function ContactFormPage() {
         }
       }
 
-      console.log('Sending payload to server:', payload)
-
       if (isEdit) {
         await api.put(`/contacts/${id}`, payload)
         toast.success('Contact updated')
@@ -426,7 +410,6 @@ export function ContactFormPage() {
         navigate(`/contacts/${created.id}`)
       }
     } catch (err) {
-      console.error('handleSubmit error:', err)
       toast.error(err instanceof Error ? err.message : 'Failed to save contact')
     } finally {
       setSaving(false)

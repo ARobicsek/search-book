@@ -246,29 +246,31 @@ function buildColumns(
         const contact = row.original
         const value = contact.ecosystem as Ecosystem
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger className="focus:outline-none" onClick={(e) => e.stopPropagation()}>
-              <Badge variant="outline" className={`${ecosystemColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
-                {getLabel(value, ECOSYSTEM_OPTIONS)}
-              </Badge>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Change Ecosystem</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={value}
-                onValueChange={(val) => onUpdate(contact, 'ecosystem', val)}
-              >
-                {ECOSYSTEM_OPTIONS.map((option) => (
-                  <DropdownMenuRadioItem key={option.value} value={option.value}>
-                    <Badge variant="outline" className={`mr-2 ${ecosystemColors[option.value as Ecosystem]}`}>
-                      {option.label}
-                    </Badge>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="focus:outline-none">
+                <Badge variant="outline" className={`${ecosystemColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                  {getLabel(value, ECOSYSTEM_OPTIONS)}
+                </Badge>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Change Ecosystem</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={value}
+                  onValueChange={(val) => onUpdate(contact, 'ecosystem', val)}
+                >
+                  {ECOSYSTEM_OPTIONS.map((option) => (
+                    <DropdownMenuRadioItem key={option.value} value={option.value}>
+                      <Badge variant="outline" className={`mr-2 ${ecosystemColors[option.value as Ecosystem]}`}>
+                        {option.label}
+                      </Badge>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )
       },
     },
@@ -288,29 +290,31 @@ function buildColumns(
         const contact = row.original
         const value = contact.status as ContactStatus
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger className="focus:outline-none" onClick={(e) => e.stopPropagation()}>
-              <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
-                {getLabel(value, CONTACT_STATUS_OPTIONS)}
-              </Badge>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={value}
-                onValueChange={(val) => onUpdate(contact, 'status', val)}
-              >
-                {CONTACT_STATUS_OPTIONS.map((option) => (
-                  <DropdownMenuRadioItem key={option.value} value={option.value}>
-                    <Badge variant="outline" className={`mr-2 ${statusColors[option.value as ContactStatus]}`}>
-                      {option.label}
-                    </Badge>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="focus:outline-none">
+                <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                  {getLabel(value, CONTACT_STATUS_OPTIONS)}
+                </Badge>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={value}
+                  onValueChange={(val) => onUpdate(contact, 'status', val)}
+                >
+                  {CONTACT_STATUS_OPTIONS.map((option) => (
+                    <DropdownMenuRadioItem key={option.value} value={option.value}>
+                      <Badge variant="outline" className={`mr-2 ${statusColors[option.value as ContactStatus]}`}>
+                        {option.label}
+                      </Badge>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )
       },
     },

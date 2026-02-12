@@ -155,29 +155,31 @@ function buildColumns(
         const company = row.original
         const value = company.status as CompanyStatus
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger className="focus:outline-none" onClick={(e) => e.stopPropagation()}>
-              <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
-                {getLabel(value, COMPANY_STATUS_OPTIONS)}
-              </Badge>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={value}
-                onValueChange={(val) => onUpdate(company, val)}
-              >
-                {COMPANY_STATUS_OPTIONS.map((option) => (
-                  <DropdownMenuRadioItem key={option.value} value={option.value}>
-                    <Badge variant="outline" className={`mr-2 ${statusColors[option.value as CompanyStatus]}`}>
-                      {option.label}
-                    </Badge>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="focus:outline-none">
+                <Badge variant="outline" className={`${statusColors[value]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+                  {getLabel(value, COMPANY_STATUS_OPTIONS)}
+                </Badge>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={value}
+                  onValueChange={(val) => onUpdate(company, val)}
+                >
+                  {COMPANY_STATUS_OPTIONS.map((option) => (
+                    <DropdownMenuRadioItem key={option.value} value={option.value}>
+                      <Badge variant="outline" className={`mr-2 ${statusColors[option.value as CompanyStatus]}`}>
+                        {option.label}
+                      </Badge>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )
       },
     },

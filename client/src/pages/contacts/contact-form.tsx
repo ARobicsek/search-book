@@ -329,16 +329,20 @@ export function ContactFormPage() {
         } else if (entry.value.trim()) {
           // Create new company
           try {
+            console.log('Creating new company:', entry.value)
             const newCompany = await api.post<Company>('/companies', { name: entry.value.trim(), status: 'CONNECTED' })
+            console.log('Created company:', newCompany)
             companyEntries.push({ id: newCompany.id, isCurrent: entry.isCurrent })
             setCompanies((prev) => [...prev, newCompany])
-          } catch {
-            // Skip if creation fails
+          } catch (err) {
+            console.error('Failed to create company:', err)
+            toast.error(`Failed to create company "${entry.value}".`)
           }
         }
       }
 
       const payload = formToPayload(form, companyEntries)
+      console.log('Submitting payload:', payload)
 
       // If user typed a new referrer name (not from dropdown), auto-create the contact
       if (!payload.referredById && (payload as { referredByName?: string | null }).referredByName) {

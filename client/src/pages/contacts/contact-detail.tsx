@@ -1125,13 +1125,11 @@ function ConversationsTab({
 
   // Draft auto-save for NEW conversations
   const draftKey = `draft_conversation_${contactId}`
+
+  // Save immediately on any change (synchronous)
   useEffect(() => {
-    // intricate logic: only save if NOT editing (editId is null), dialog is OPEN, and form is dirty (not emptyForm)
     if (editId === null && dialogOpen) {
-      const timer = setTimeout(() => {
-        localStorage.setItem(draftKey, JSON.stringify(form))
-      }, 1000)
-      return () => clearTimeout(timer)
+      localStorage.setItem(draftKey, JSON.stringify(form))
     }
   }, [form, editId, dialogOpen, draftKey])
 
@@ -1409,7 +1407,14 @@ function ConversationsTab({
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
-              {editId && <SaveStatusIndicator status={autoSave.status} />}
+              <div className="flex items-center gap-2">
+                {!editId && form !== emptyForm && (
+                  <span className="text-xs text-muted-foreground animate-in fade-in duration-500">
+                    Draft saved
+                  </span>
+                )}
+                {editId && <SaveStatusIndicator status={autoSave.status} />}
+              </div>
             </div>
           </DialogHeader>
           <div className={cn(!editId && prepNotes.length > 0 ? 'grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-6' : '')}>

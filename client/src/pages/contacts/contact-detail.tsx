@@ -1050,6 +1050,9 @@ function ConversationsTab({
     links: LinkEntry[]
   }
 
+  // Draft auto-save for NEW conversations
+  const draftKey = `draft_conversation_${contactId}`
+
   const emptyForm: ConversationForm = {
     date: new Date().toLocaleDateString('en-CA'),
     datePrecision: 'DAY',
@@ -1068,7 +1071,19 @@ function ConversationsTab({
 
   function openNew() {
     setEditId(null)
-    setForm(emptyForm)
+
+    // Restore draft immediately to prevent "save empty" race condition
+    const saved = localStorage.getItem(draftKey)
+    if (saved) {
+      try {
+        setForm(JSON.parse(saved))
+      } catch {
+        setForm(emptyForm)
+      }
+    } else {
+      setForm(emptyForm)
+    }
+
     setOriginalForm(null)
     setLocalContactOptions(contactOptions)
     setLocalCompanyOptions(companyOptions)
@@ -1123,8 +1138,6 @@ function ConversationsTab({
     await api.put(`/conversations/${editId}`, payload)
   }, [editId, contactId])
 
-  // Draft auto-save for NEW conversations
-  const draftKey = `draft_conversation_${contactId}`
 
   // Save immediately on any change (synchronous)
   useEffect(() => {
@@ -1132,21 +1145,6 @@ function ConversationsTab({
       localStorage.setItem(draftKey, JSON.stringify(form))
     }
   }, [form, editId, dialogOpen, draftKey])
-
-  // Restore draft when opening new conversation
-  useEffect(() => {
-    if (dialogOpen && editId === null) {
-      const saved = localStorage.getItem(draftKey)
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          setForm(parsed)
-        } catch (e) {
-          console.error('Failed to parse draft', e)
-        }
-      }
-    }
-  }, [dialogOpen, editId, draftKey])
 
   // Clear draft on successful submit (handled in handleSubmit)
 
@@ -1408,7 +1406,7 @@ function ConversationsTab({
             <div className="flex items-center justify-between">
               <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
               <div className="flex items-center gap-2">
-                {!editId && form !== emptyForm && (
+                {!editId && (form.summary || form.notes || form.nextSteps) && (
                   <span className="text-xs text-muted-foreground animate-in fade-in duration-500">
                     Draft saved
                   </span>

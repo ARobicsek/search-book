@@ -1669,7 +1669,12 @@ function ConversationsTab({
               </>
             ) : (
               <>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button variant="outline" onClick={() => {
+                  setDialogOpen(false)
+                  localStorage.removeItem(draftKey)
+                  setHasDraft(false)
+                  setForm(emptyForm)
+                }}>Cancel</Button>
                 <Button onClick={handleSubmit} disabled={saving}>
                   {saving ? 'Saving...' : 'Log Conversation'}
                 </Button>

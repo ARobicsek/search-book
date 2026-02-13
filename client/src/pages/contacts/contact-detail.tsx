@@ -1068,6 +1068,28 @@ function ConversationsTab({
 
   const [form, setForm] = useState<ConversationForm>(emptyForm)
   const [originalForm, setOriginalForm] = useState<ConversationForm | null>(null)
+  const [hasDraft, setHasDraft] = useState(false)
+
+  // Check for existing draft on mount and when dialog closes
+  useEffect(() => {
+    if (!dialogOpen) {
+      const saved = localStorage.getItem(draftKey)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          // Check if it has any meaningful content
+          const hasContent = parsed.summary || parsed.notes || parsed.nextSteps ||
+            parsed.contactsDiscussed.length > 0 || parsed.companiesDiscussed.length > 0 ||
+            parsed.actions.some((a: any) => a.title) || parsed.links.length > 0
+          setHasDraft(!!hasContent)
+        } catch {
+          setHasDraft(false)
+        }
+      } else {
+        setHasDraft(false)
+      }
+    }
+  }, [dialogOpen, draftKey])
 
   function openNew() {
     setEditId(null)
@@ -1318,9 +1340,18 @@ function ConversationsTab({
     <>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Conversations</h2>
-        <Button size="sm" onClick={openNew}>
-          <Plus className="mr-1 h-3 w-3" />
-          Log Conversation
+        <Button size="sm" onClick={openNew} className={hasDraft ? "bg-amber-100 text-amber-900 hover:bg-amber-200 border-amber-200 border" : ""}>
+          {hasDraft ? (
+            <>
+              <Pencil className="mr-1 h-3 w-3" />
+              Resume Draft
+            </>
+          ) : (
+            <>
+              <Plus className="mr-1 h-3 w-3" />
+              Log Conversation
+            </>
+          )}
         </Button>
       </div>
 

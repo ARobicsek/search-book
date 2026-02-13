@@ -21,22 +21,25 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-- [USER FEEDBACK TO BE ADDED HERE]
+- [ ] (Fill in next session)
 
 ---
 
 ## What Was Completed Last Session
 
-### Bug Fixes (3 items)
+### Core Features (Auto-save & Drafts)
 
-1. **Fixed Vercel Deployment Error** — Resolved TypeScript errors in `contact-form.tsx` regarding `companyId` properties that were blocking the build.
+1. **Auto-save Conversation Drafts** — Implemented `useLocalStorage` hook and logic in `contact-detail.tsx` to automatically save conversation forms as you type. Drafts persist across page reloads and browser restarts.
 
-2. **Fixed New Company Creation in Edit Mode** — The "Done" button in Edit mode was incorrectly navigating away before the form could submit. Changed it to trigger a proper form submission (with explicit `onClick` handling), ensuring new company entries are validated, created, and linked before navigation.
+2. **Resume Draft Indicator** — Added a visual "Resume Draft" button (amber style) to the Conversations tab when a saved draft is detected, ensuring users don't miss unfinished work.
 
-3. **Fixed "People Discussed" Bug** — Updated `contact-detail.tsx` to correctly handle new contact creation from the "People Discussed" field in the Conversation Log. The `MultiCombobox` selection now correctly triggers the backend to create a new contact when a new name is entered.
+3. **Draft Control** — Updated the **Cancel** button to explicitly **discard** the draft, while closing the dialog (via 'X' or outside click) **preserves** it.
 
-### Cleanup
-- Removed temporary debug logs from `contact-form.tsx` after verifying the fix.
+4. **Default Sort** — Contacts and Companies lists now sort by `updatedAt` (most recent activity) by default, keeping active connections at the top.
+
+### Bug Fixes
+
+1. **Race Condition Fix** — Resolved a critical issue where opening the "Log Conversation" dialog would immediately overwrite a saved draft with an empty form state. Draft restoration is now synchronous.
 
 
 ## Running Locally

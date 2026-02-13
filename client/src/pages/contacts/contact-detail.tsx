@@ -1123,6 +1123,35 @@ function ConversationsTab({
     await api.put(`/conversations/${editId}`, payload)
   }, [editId, contactId])
 
+  // Draft auto-save for NEW conversations
+  const draftKey = `draft_conversation_${contactId}`
+  useEffect(() => {
+    // intricate logic: only save if NOT editing (editId is null), dialog is OPEN, and form is dirty (not emptyForm)
+    if (editId === null && dialogOpen) {
+      const timer = setTimeout(() => {
+        localStorage.setItem(draftKey, JSON.stringify(form))
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [form, editId, dialogOpen, draftKey])
+
+  // Restore draft when opening new conversation
+  useEffect(() => {
+    if (dialogOpen && editId === null) {
+      const saved = localStorage.getItem(draftKey)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          setForm(parsed)
+        } catch (e) {
+          console.error('Failed to parse draft', e)
+        }
+      }
+    }
+  }, [dialogOpen, editId, draftKey])
+
+  // Clear draft on successful submit (handled in handleSubmit)
+
   const autoSave = useAutoSave({
     data: form,
     originalData: originalForm,
@@ -1220,6 +1249,10 @@ function ConversationsTab({
         toast.success('Conversation logged')
       }
       setDialogOpen(false)
+      // Clear draft on success
+      if (!editId) {
+        localStorage.removeItem(`draft_conversation_${contactId}`)
+      }
       onRefresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save conversation')

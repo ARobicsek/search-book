@@ -21,10 +21,7 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## Next Session Tasks
 
-- **Verify Deployment Error** — User reported a `vercel build` error after the "Fix New Company Creation" push. Need to verify if the build failed and fix if necessary.
-- **Verify New Company Creation Fix** — Once deployed, confirm that adding a NEW company (not in list) to a contact works and doesn't disappear (fix involved omitting partial auto-save).
-- **Fix "People Discussed" Bug** — User reported that adding a new name in "People Discussed" (Conversation Log) does NOT auto-create a contact. Needs investigation (likely `MultiCombobox` sending name string vs API expecting `contactId` array).
-- **Schema migrations** — If adding new tables, remember to run DDL against Turso directly (see Technical Notes #19).
+- [USER FEEDBACK TO BE ADDED HERE]
 
 ---
 
@@ -32,15 +29,14 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ### Bug Fixes (3 items)
 
-1. **??Fixed Single Past Company Bug** — Resolved issue where a contact's only company was treated as "Current" even if marked "Past". Server logic updated (`server/src/routes/contacts.ts`) to correctly unset `companyId` if all entries are past.
+1. **Fixed Vercel Deployment Error** — Resolved TypeScript errors in `contact-form.tsx` regarding `companyId` properties that were blocking the build.
 
-2. **??fixed Multiple Past Companies Bug** — Tried to resolve race condition in `contact-form.tsx` where `autoSave` (triggered by typing) would overwrite the `handleSubmit` payload, causing multiple past companies to be lost.
+2. **Fixed New Company Creation in Edit Mode** — The "Done" button in Edit mode was incorrectly navigating away before the form could submit. Changed it to trigger a proper form submission (with explicit `onClick` handling), ensuring new company entries are validated, created, and linked before navigation.
 
-3. **??Fixed New Company Creation Bug** — Preventing "disappearing company" issue by modifying `autoSave` to **omit** the company list payload if it detects any new (unsaved) companies. This prevents specific partial data from overwriting the server state.
+3. **Fixed "People Discussed" Bug** — Updated `contact-detail.tsx` to correctly handle new contact creation from the "People Discussed" field in the Conversation Log. The `MultiCombobox` selection now correctly triggers the backend to create a new contact when a new name is entered.
 
-**Unclear if these fixed worked because didn't deploy in vercel." Vercel build error was: src/pages/contacts/contact-form.tsx(310,22): error TS2339: Property 'companyId' does not exist on type '{ name: string; title: string | null; roleDescription: string | null; companyEntries: { id: number; isCurrent: boolean; }[]; ecosystem: string; status: string; emails: string[]; phone: string | null; ... 11 more ...; personalDetails: string | null; }'.
-src/pages/contacts/contact-form.tsx(311,22): error TS2339: Property 'additionalCompanyIds' does not exist on type '{ name: string; title: string | null; roleDescription: string | null; companyEntries: { id: number; isCurrent: boolean; }[]; ecosystem: string; status: string; emails: string[]; phone: string | null; ... 11 more ...; personalDetails: string | null; }'.
-Error: Command "npm run build:vercel" exited with 2
+### Cleanup
+- Removed temporary debug logs from `contact-form.tsx` after verifying the fix.
 
 
 ## Running Locally

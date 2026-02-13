@@ -87,17 +87,17 @@ router.post('/', async (req: Request, res: Response) => {
         photoFile: photoFile || null,
         contactsDiscussed: contactsDiscussed?.length
           ? {
-              create: (contactsDiscussed as number[]).map((cId) => ({
-                contactId: cId,
-              })),
-            }
+            create: (contactsDiscussed as number[]).map((cId) => ({
+              contactId: cId,
+            })),
+          }
           : undefined,
         companiesDiscussed: companiesDiscussed?.length
           ? {
-              create: (companiesDiscussed as number[]).map((cId) => ({
-                companyId: cId,
-              })),
-            }
+            create: (companiesDiscussed as number[]).map((cId) => ({
+              companyId: cId,
+            })),
+          }
           : undefined,
       },
       include: conversationIncludes,
@@ -144,6 +144,12 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
+    // Update Contact.updatedAt to bubble up in "Recent Activity" sort
+    await prisma.contact.update({
+      where: { id: contactId },
+      data: { updatedAt: new Date() },
+    });
+
     // Re-fetch to include the actions
     const result = await prisma.conversation.findUnique({
       where: { id: conversation.id },
@@ -189,17 +195,17 @@ router.put('/:id', async (req: Request, res: Response) => {
           ...data,
           contactsDiscussed: contactsDiscussed?.length
             ? {
-                create: (contactsDiscussed as number[]).map((cId: number) => ({
-                  contactId: cId,
-                })),
-              }
+              create: (contactsDiscussed as number[]).map((cId: number) => ({
+                contactId: cId,
+              })),
+            }
             : undefined,
           companiesDiscussed: companiesDiscussed?.length
             ? {
-                create: (companiesDiscussed as number[]).map((cId: number) => ({
-                  companyId: cId,
-                })),
-              }
+              create: (companiesDiscussed as number[]).map((cId: number) => ({
+                companyId: cId,
+              })),
+            }
             : undefined,
         },
       });
@@ -224,6 +230,12 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // Update Contact.updatedAt
+    await prisma.contact.update({
+      where: { id: existing.contactId },
+      data: { updatedAt: new Date() },
+    });
+
     const result = await prisma.conversation.findUnique({
       where: { id },
       include: conversationIncludes,
@@ -245,6 +257,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return;
     }
     await prisma.conversation.delete({ where: { id } });
+
+    // Update Contact.updatedAt
+    await prisma.contact.update({
+      where: { id: existing.contactId },
+      data: { updatedAt: new Date() },
+    });
+
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting conversation:', error);

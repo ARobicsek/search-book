@@ -8,20 +8,27 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-## Phase 7: iPhone PWA Access — COMPLETE
+# Failed Session: Prep Note Editing
 
-**App is live:** https://searchbook-three.vercel.app
+## Context
+During the session on 2026-02-15, we attempted to enable editing, reordering, and markdown formatting for Prep Notes.
 
-### Deployment details:
-- **Database:** Turso cloud (libsql://searchbook-arobicsek.aws-us-east-2.turso.io)
-- **Photo storage:** Vercel Blob (configured)
-- **Environment variables:** Set in Vercel dashboard
+## What We Did
+1.  **Frontend**: Added `react-markdown`, created inline editor, reorder buttons.
+2.  **Backend**: Added `/api/prepnotes/reorder` endpoint.
+3.  **Database**: Added `ordering` column to `PrepNote` table.
 
----
+## What Happened
+-   After deployment, the user reported that "saving became impossible" and "previously stored prep notes were not visible".
+-   We reverted the code changes to restore functionality.
+-   The database schema still has the `ordering` column, but it is unused by the reverted code.
 
-## Next Session Tasks
-
-- [ ] (Fill in next session)
+## Next Steps
+-   Investigate why saving failed. It's possible the new frontend code had a regression in state management or form submission.
+-   Investigate why notes were hidden. Potential causes:
+    -   Sorting by `ordering` where existing notes had `NULL` or `0` caused issues?
+    -   Frontend rendering error with `react-markdown`?
+-   Re-attempt implementation carefully, perhaps starting with *just* editing, then *just* reordering, incrementally.
 
 ---
 

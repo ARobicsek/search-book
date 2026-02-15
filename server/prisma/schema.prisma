@@ -267,7 +267,6 @@ model PrepNote {
   contactId Int
   contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  ordering  Int      @default(0)
 }
 
 // ─── Relationships ───────────────────────────────────────────

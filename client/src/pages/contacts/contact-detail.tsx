@@ -58,6 +58,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { toast } from 'sonner'
+// Add missing import
+import ReactMarkdown from 'react-markdown'
 import {
   ArrowLeft,
   Pencil,
@@ -73,6 +75,8 @@ import {
   Tag as TagIcon,
   Loader2,
   RotateCcw,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -1998,6 +2002,80 @@ function PrepSheetTab({
   const [newPrepUrl, setNewPrepUrl] = useState('')
   const [newPrepUrlTitle, setNewPrepUrlTitle] = useState('')
 
+  // Edit state
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
+  const [editDate, setEditDate] = useState('')
+  const [editContent, setEditContent] = useState('')
+  const [editUrl, setEditUrl] = useState('')
+  const [editUrlTitle, setEditUrlTitle] = useState('')
+
+  function startEditing(note: PrepNote) {
+    setEditingNoteId(note.id)
+    setEditDate(note.date)
+    setEditContent(note.content)
+    setEditUrl(note.url || '')
+    setEditUrlTitle(note.urlTitle || '')
+  }
+
+  function cancelEditing() {
+    setEditingNoteId(null)
+    setEditDate('')
+    setEditContent('')
+    setEditUrl('')
+    setEditUrlTitle('')
+  }
+
+  async function saveEdit(noteId: number) {
+    if (!editContent.trim()) return
+    try {
+      await api.put(`/prepnotes/${noteId}`, {
+        content: editContent.trim(),
+        url: editUrl.trim() || null,
+        urlTitle: editUrlTitle.trim() || null,
+        date: editDate,
+      })
+      cancelEditing()
+      onRefresh()
+      toast.success('Prep note updated')
+    } catch {
+      toast.error('Failed to update prep note')
+    }
+  }
+
+  async function handleReorder(index: number, direction: 'up' | 'down') {
+    if (
+      (direction === 'up' && index === 0) ||
+      (direction === 'down' && index === prepNotes.length - 1)
+    ) {
+      return
+    }
+
+    const newPrepNotes = [...prepNotes]
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+
+    // Swap order
+    const temp = newPrepNotes[index]
+    newPrepNotes[index] = newPrepNotes[targetIndex]
+    newPrepNotes[targetIndex] = temp
+
+    // Update ordering numbers to match array index (0-based)
+    // We update ALL notes to ensure clean 0,1,2... sequence
+    const updates = newPrepNotes.map((note, idx) => ({
+      id: note.id,
+      ordering: idx,
+    }))
+
+    // Optimistic update isn't strictly necessary since onRefresh is called,
+    // but we could do it if we passed setPrepNotes down. For now rely on refresh.
+
+    try {
+      await api.put('/prepnotes/reorder', { updates })
+      onRefresh()
+    } catch {
+      toast.error('Failed to reorder notes')
+    }
+  }
+
   async function addLink() {
     if (!newLinkUrl.trim()) return
     try {
@@ -2113,31 +2191,105 @@ function PrepSheetTab({
           {/* Existing prep notes */}
           {prepNotes.length > 0 && (
             <div className="space-y-3">
-              {prepNotes.map((note) => (
+              {prepNotes.map((note, index) => (
                 <div key={note.id} className="rounded-md border p-3 space-y-2 bg-yellow-50">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </Badge>
+                  {editingNoteId === note.id ? (
+                    // Edit Mode
+                    <div className="space-y-3">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Date</Label>
+                          <Input
+                            type="date"
+                            value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                          />
+                        </div>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                      {note.url && (
-                        <a
-                          href={note.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          {note.urlTitle || note.url}
-                        </a>
-                      )}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Notes / Thoughts</Label>
+                        <Textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          placeholder="Ideas for conversation..."
+                          rows={3}
+                        />
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Link URL</Label>
+                          <Input
+                            value={editUrl}
+                            onChange={(e) => setEditUrl(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Link Label</Label>
+                          <Input
+                            value={editUrlTitle}
+                            onChange={(e) => setEditUrlTitle(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => saveEdit(note.id)}>Save</Button>
+                        <Button size="sm" variant="ghost" onClick={cancelEditing}>Cancel</Button>
+                      </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deletePrepNote(note.id)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  ) : (
+                    // View Mode
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col gap-1 pr-2 border-r border-yellow-200/50">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleReorder(index, 'up')}
+                          disabled={index === 0}
+                        >
+                          <ChevronUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleReorder(index, 'down')}
+                          disabled={index === prepNotes.length - 1}
+                        >
+                          <ChevronDown className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="flex-1 space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs bg-white/50">
+                            {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </Badge>
+                        </div>
+                        <div className="text-sm prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+                          <ReactMarkdown>{note.content}</ReactMarkdown>
+                        </div>
+                        {note.url && (
+                          <a
+                            href={note.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            {note.urlTitle || note.url}
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => startEditing(note)}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deletePrepNote(note.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

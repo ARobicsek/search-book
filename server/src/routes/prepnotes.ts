@@ -14,7 +14,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const prepNotes = await prisma.prepNote.findMany({
       where: { contactId: parseInt(contactId as string) },
-      orderBy: { date: 'desc' },
+      orderBy: [{ ordering: 'asc' }, { createdAt: 'desc' }],
     });
     res.json(prepNotes);
   } catch (error) {
@@ -95,6 +95,31 @@ router.delete('/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting prep note:', error);
     res.status(500).json({ error: 'Failed to delete prep note' });
+  }
+});
+
+// PUT /api/prepnotes/reorder — update ordering for multiple notes
+router.put('/reorder', async (req: Request, res: Response) => {
+  try {
+    const { updates } = req.body; // Array of { id: number, ordering: number }
+    if (!Array.isArray(updates)) {
+      res.status(400).json({ error: 'updates must be an array' });
+      return;
+    }
+
+    await prisma.$transaction(
+      updates.map((u: { id: number; ordering: number }) =>
+        prisma.prepNote.update({
+          where: { id: u.id },
+          data: { ordering: u.ordering },
+        })
+      )
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error reordering prep notes:', error);
+    res.status(500).json({ error: 'Failed to reorder prep notes' });
   }
 });
 

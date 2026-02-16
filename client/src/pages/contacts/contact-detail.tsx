@@ -2192,7 +2192,7 @@ function PrepSheetTab({
                           </div>
                         </div>
                       ) : (
-                        <div className="text-sm prose prose-sm max-w-none">
+                        <div className="text-sm prep-note-markdown">
                           <ReactMarkdown>{note.content}</ReactMarkdown>
                         </div>
                       )}

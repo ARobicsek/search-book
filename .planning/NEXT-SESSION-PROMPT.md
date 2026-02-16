@@ -8,46 +8,32 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ---
 
-# Failed Session: Prep Note Editing
+## What Was Completed Last Session
 
-## Context
-During the session on 2026-02-15, we attempted to enable editing, reordering, and markdown formatting (user wants to be able to use bold, italics and bullet points)for Prep Notes.
+### Prep Notes Fix
+1. **Bullet point CSS fix** — Prep Sheet tab was using `prose prose-sm max-w-none` class (Tailwind Typography not installed). Replaced with custom `prep-note-markdown` CSS class that was already working in the conversation dialog.
 
-## What We Did
-1.  **Frontend**: Added `react-markdown`, created inline editor, reorder buttons. 
-2.  **Backend**: Added `/api/prepnotes/reorder` endpoint.
-3.  **Database**: Added `ordering` column to `PrepNote` table.
+### Markdown Rendering Expansion
+2. **6 additional locations** — Added `ReactMarkdown` rendering to: contact research notes (Overview tab + bottom card), conversation notes (list view + Prep Sheet "Last Conversation"), action description (action detail page), company notes (company detail page).
 
-## What Happened
--   After deployment, the user reported that "saving became impossible" and "previously stored prep notes were not visible".
--   We reverted the code changes to restore functionality.
--   The database schema still has the `ordering` column, but it is unused by the reverted code.
+### Company Activity Log (New Feature)
+3. **Full-stack implementation** — New `CompanyActivity` model for logging company-specific activities (e.g., applied to a role, submitted resume). Includes:
+   - Prisma model: `id`, `companyId`, `date`, `type`, `title`, `notes`
+   - Activity types: Applied, Email, Call, Meeting, Research, Follow Up, Other
+   - Backend: Full CRUD at `/api/company-activities`
+   - Frontend: "Activity Log" card on company detail page with expandable form (date picker, type selector, title, optional markdown notes) and badge-styled list with delete on hover
+   - Turso production: `CompanyActivity` table created via direct libsql client
 
-## Next Steps
--   Investigate why saving failed. It's possible the new frontend code had a regression in state management or form submission.
--   Investigate why notes were hidden. Potential causes:
-    -   Sorting by `ordering` where existing notes had `NULL` or `0` caused issues?
-    -   Frontend rendering error with `react-markdown`?
--   Re-attempt implementation carefully, perhaps starting with *just* editing, then *just* reordering, incrementally.
+### Technical Notes Added
+- **#21** — `CompanyActivity` model for company-level action log. Types: APPLIED, EMAIL, CALL, MEETING, RESEARCH, FOLLOW_UP, OTHER. CRUD at `/api/company-activities`. Turso table created via direct libsql.
 
 ---
 
-## What Was Completed Last Session
+## Work for Next Session
 
-### Core Features (Auto-save & Drafts)
+_(Leave blank — user will fill in.)_
 
-1. **Auto-save Conversation Drafts** — Implemented `useLocalStorage` hook and logic in `contact-detail.tsx` to automatically save conversation forms as you type. Drafts persist across page reloads and browser restarts.
-
-2. **Resume Draft Indicator** — Added a visual "Resume Draft" button (amber style) to the Conversations tab when a saved draft is detected, ensuring users don't miss unfinished work.
-
-3. **Draft Control** — Updated the **Cancel** button to explicitly **discard** the draft, while closing the dialog (via 'X' or outside click) **preserves** it.
-
-4. **Default Sort** — Contacts and Companies lists now sort by `updatedAt` (most recent activity) by default, keeping active connections at the top.
-
-### Bug Fixes
-
-1. **Race Condition Fix** — Resolved a critical issue where opening the "Log Conversation" dialog would immediately overwrite a saved draft with an empty form state. Draft restoration is now synchronous.
-
+---
 
 ## Running Locally
 ```bash
@@ -111,3 +97,4 @@ printf 'value' | vercel env add VAR_NAME production
 18. **Production backup workflow** — JSON downloads to browser; user manually copies to `SearchBook/backups/` (amber UI reminder). Save-local endpoint only works in local dev (Vercel has read-only filesystem).
 19. **Turso schema migrations** — Prisma `db push` only works against local SQLite. For Turso production, run DDL directly: temporarily uncomment Turso creds in `server/.env`, use `node -e "require('dotenv').config(); const { createClient } = require('@libsql/client'); ..."` to execute CREATE TABLE statements, then re-comment creds.
 20. **Multi-select actions** — Actions support 0-N contacts and companies via `ActionContact`/`ActionCompany` junction tables. Legacy single `contactId`/`companyId` fields preserved for backward compatibility. All views (form, detail, list) fall back to legacy fields when junction tables are empty.
+21. **Company Activity Log** — `CompanyActivity` model for company-level action log. Types: APPLIED, EMAIL, CALL, MEETING, RESEARCH, FOLLOW_UP, OTHER. CRUD at `/api/company-activities`. Turso table created via direct libsql client.

@@ -34,7 +34,7 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check, Loader2, ChevronUp } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import {
   Select,

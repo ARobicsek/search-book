@@ -1,11 +1,19 @@
 import { useState } from 'react'
 import { CalendarDays, ChevronDown, X } from 'lucide-react'
 import { api } from '@/lib/api'
-import { toast } from 'react-hot-toast'
+import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import type { Action } from '@/lib/types'
+
+interface ActionDateSelectProps {
+  action: Action
+  onUpdate?: () => void
+  showLabel?: boolean
+  className?: string
+}
 
 export function ActionDateSelect({ action, onUpdate, showLabel = true, className }: ActionDateSelectProps) {
   const [open, setOpen] = useState(false)

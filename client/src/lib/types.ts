@@ -248,6 +248,30 @@ export interface PrepNote {
   createdAt: string;
 }
 
+// ─── Company Activities ─────────────────────────────────────
+
+export type CompanyActivityType = 'APPLIED' | 'EMAIL' | 'CALL' | 'MEETING' | 'RESEARCH' | 'FOLLOW_UP' | 'OTHER';
+
+export interface CompanyActivity {
+  id: number;
+  companyId: number;
+  date: string;
+  type: CompanyActivityType;
+  title: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export const COMPANY_ACTIVITY_TYPE_OPTIONS: { value: CompanyActivityType; label: string }[] = [
+  { value: 'APPLIED', label: 'Applied' },
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'CALL', label: 'Call' },
+  { value: 'MEETING', label: 'Meeting' },
+  { value: 'RESEARCH', label: 'Research' },
+  { value: 'FOLLOW_UP', label: 'Follow Up' },
+  { value: 'OTHER', label: 'Other' },
+];
+
 // ─── Employment History ─────────────────────────────────────
 
 export interface EmploymentHistory {

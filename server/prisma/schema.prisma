@@ -76,6 +76,20 @@ model Company {
   employmentHistory        EmploymentHistory[]
   ideaCompanies            IdeaCompany[]
   actionCompanies          ActionCompany[] @relation("ActionCompanies")
+  activities               CompanyActivity[]
+}
+
+// ─── Company Activities (company-level action log) ──────────
+
+model CompanyActivity {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  date      String   // YYYY-MM-DD
+  type      String   @default("OTHER") // APPLIED, EMAIL, CALL, MEETING, RESEARCH, FOLLOW_UP, OTHER
+  title     String   // Brief summary, e.g. "Applied to Senior PM role"
+  notes     String?  // Optional detailed notes (supports markdown)
+  createdAt DateTime @default(now())
 }
 
 // ─── Employment History ─────────────────────────────────────

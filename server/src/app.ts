@@ -19,6 +19,7 @@ import analyticsRouter from './routes/analytics';
 import backupRouter from './routes/backup';
 import duplicatesRouter from './routes/duplicates';
 import searchRouter from './routes/search';
+import companyActivitiesRouter from './routes/company-activities';
 
 const app = express();
 
@@ -103,5 +104,6 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/duplicates', duplicatesRouter);
 app.use('/api/search', searchRouter);
+app.use('/api/company-activities', companyActivitiesRouter);
 
 export default app;

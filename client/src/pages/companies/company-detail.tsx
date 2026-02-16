@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company, Action, LinkRecord, CompanyStatus } from '@/lib/types'
-import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
+import type { Company, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType } from '@/lib/types'
+import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, COMPANY_ACTIVITY_TYPE_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,7 +32,17 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check, Loader2 } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { ArrowLeft, Pencil, Trash2, ExternalLink, Plus, Check, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const actionTypeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -43,6 +53,7 @@ const actionTypeColors: Record<string, string> = {
   RESEARCH: 'bg-amber-100 text-amber-800',
   FOLLOW_UP: 'bg-orange-100 text-orange-800',
   INTRO: 'bg-cyan-100 text-cyan-800',
+  APPLIED: 'bg-emerald-100 text-emerald-800',
   OTHER: 'bg-slate-100 text-slate-700',
 }
 
@@ -109,11 +120,15 @@ export function CompanyDetailPage() {
   const [company, setCompany] = useState<Company | null>(null)
   const [actions, setActions] = useState<Action[]>([])
   const [links, setLinks] = useState<LinkRecord[]>([])
+  const [activities, setActivities] = useState<CompanyActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [newLinkTitle, setNewLinkTitle] = useState('')
+  const [showActivityForm, setShowActivityForm] = useState(false)
+  const [activityForm, setActivityForm] = useState({ date: new Date().toLocaleDateString('en-CA'), type: 'OTHER' as CompanyActivityType, title: '', notes: '' })
+  const [savingActivity, setSavingActivity] = useState(false)
 
   function loadLinks() {
     if (id) {
@@ -133,6 +148,7 @@ export function CompanyDetailPage() {
       .finally(() => setLoading(false))
 
     api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => { })
+    api.get<CompanyActivity[]>(`/company-activities?companyId=${id}`).then(setActivities).catch(() => { })
     loadLinks()
   }, [id, navigate])
 
@@ -196,6 +212,39 @@ export function CompanyDetailPage() {
       toast.success('Link added')
     } catch {
       toast.error('Failed to add link')
+    }
+  }
+
+  async function saveActivity() {
+    if (!activityForm.title.trim()) return
+    setSavingActivity(true)
+    try {
+      await api.post('/company-activities', {
+        companyId: parseInt(id!),
+        date: activityForm.date,
+        type: activityForm.type,
+        title: activityForm.title.trim(),
+        notes: activityForm.notes.trim() || null,
+      })
+      const updated = await api.get<CompanyActivity[]>(`/company-activities?companyId=${id}`)
+      setActivities(updated)
+      setActivityForm({ date: new Date().toLocaleDateString('en-CA'), type: 'OTHER', title: '', notes: '' })
+      setShowActivityForm(false)
+      toast.success('Activity logged')
+    } catch {
+      toast.error('Failed to log activity')
+    } finally {
+      setSavingActivity(false)
+    }
+  }
+
+  async function deleteActivity(activityId: number) {
+    try {
+      await api.delete(`/company-activities/${activityId}`)
+      setActivities((prev) => prev.filter((a) => a.id !== activityId))
+      toast.success('Activity removed')
+    } catch {
+      toast.error('Failed to remove activity')
     }
   }
 
@@ -331,10 +380,127 @@ export function CompanyDetailPage() {
             <CardTitle>Notes</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="whitespace-pre-wrap text-sm">{company.notes}</p>
+            <div className="text-sm prep-note-markdown"><ReactMarkdown>{company.notes}</ReactMarkdown></div>
           </CardContent>
         </Card>
       )}
+
+      {/* Activity Log */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>
+            Activity Log{' '}
+            {activities.length > 0 && (
+              <span className="text-sm font-normal text-muted-foreground">
+                ({activities.length})
+              </span>
+            )}
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowActivityForm(!showActivityForm)}
+          >
+            {showActivityForm ? (
+              <><ChevronUp className="mr-1 h-3 w-3" /> Cancel</>
+            ) : (
+              <><Plus className="mr-1 h-3 w-3" /> Log Activity</>
+            )}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {showActivityForm && (
+            <div className="rounded-md border p-4 space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="activity-date">Date</Label>
+                  <Input
+                    id="activity-date"
+                    type="date"
+                    value={activityForm.date}
+                    onChange={(e) => setActivityForm((f) => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="activity-type">Type</Label>
+                  <Select
+                    value={activityForm.type}
+                    onValueChange={(val) => setActivityForm((f) => ({ ...f, type: val as CompanyActivityType }))}
+                  >
+                    <SelectTrigger id="activity-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COMPANY_ACTIVITY_TYPE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="activity-title">Title</Label>
+                <Input
+                  id="activity-title"
+                  value={activityForm.title}
+                  onChange={(e) => setActivityForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder='e.g. "Applied to Senior PM role"'
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="activity-notes">Notes (optional, supports markdown)</Label>
+                <Textarea
+                  id="activity-notes"
+                  value={activityForm.notes}
+                  onChange={(e) => setActivityForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Additional details..."
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" onClick={saveActivity} disabled={!activityForm.title.trim() || savingActivity}>
+                  {savingActivity ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {activities.length === 0 && !showActivityForm ? (
+            <p className="text-sm text-muted-foreground">No activities logged yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {activities.map((activity) => (
+                <div key={activity.id} className="group flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className={`text-xs ${actionTypeColors[activity.type] || 'bg-slate-100 text-slate-700'}`}>
+                        {COMPANY_ACTIVITY_TYPE_OPTIONS.find((o) => o.value === activity.type)?.label ?? activity.type}
+                      </Badge>
+                      <span className="text-sm font-medium">{activity.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(activity.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
+                    {activity.notes && (
+                      <div className="mt-1 text-sm text-muted-foreground prep-note-markdown">
+                        <ReactMarkdown>{activity.notes}</ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => deleteActivity(activity.id)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Links */}
       <Card>

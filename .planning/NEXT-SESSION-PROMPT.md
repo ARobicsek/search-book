@@ -11,10 +11,10 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 # Failed Session: Prep Note Editing
 
 ## Context
-During the session on 2026-02-15, we attempted to enable editing, reordering, and markdown formatting for Prep Notes.
+During the session on 2026-02-15, we attempted to enable editing, reordering, and markdown formatting (user wants to be able to use bold, italics and bullet points)for Prep Notes.
 
 ## What We Did
-1.  **Frontend**: Added `react-markdown`, created inline editor, reorder buttons.
+1.  **Frontend**: Added `react-markdown`, created inline editor, reorder buttons. 
 2.  **Backend**: Added `/api/prepnotes/reorder` endpoint.
 3.  **Database**: Added `ordering` column to `PrepNote` table.
 

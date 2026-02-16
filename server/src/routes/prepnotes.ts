@@ -14,7 +14,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const prepNotes = await prisma.prepNote.findMany({
       where: { contactId: parseInt(contactId as string) },
-      orderBy: { date: 'desc' },
+      orderBy: [{ ordering: 'asc' }, { date: 'desc' }],
     });
     res.json(prepNotes);
   } catch (error) {
@@ -39,12 +39,21 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Date is required' });
       return;
     }
+
+    // Auto-assign ordering: put new note at the end
+    const maxOrdering = await prisma.prepNote.aggregate({
+      where: { contactId: contactId },
+      _max: { ordering: true },
+    });
+    const nextOrdering = (maxOrdering._max.ordering ?? -1) + 1;
+
     const prepNote = await prisma.prepNote.create({
       data: {
         content: content.trim(),
         url: url?.trim() || null,
         urlTitle: urlTitle?.trim() || null,
         date: date,
+        ordering: nextOrdering,
         contactId: contactId,
       },
     });
@@ -52,6 +61,32 @@ router.post('/', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error creating prep note:', error);
     res.status(500).json({ error: 'Failed to create prep note' });
+  }
+});
+
+// POST /api/prepnotes/reorder — reorder notes
+router.post('/reorder', async (req: Request, res: Response) => {
+  try {
+    const { noteIds } = req.body;
+    if (!Array.isArray(noteIds) || noteIds.length === 0) {
+      res.status(400).json({ error: 'noteIds array is required' });
+      return;
+    }
+
+    // Update ordering for each note based on array position
+    await Promise.all(
+      noteIds.map((id: number, index: number) =>
+        prisma.prepNote.update({
+          where: { id },
+          data: { ordering: index },
+        })
+      )
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error reordering prep notes:', error);
+    res.status(500).json({ error: 'Failed to reorder prep notes' });
   }
 });
 

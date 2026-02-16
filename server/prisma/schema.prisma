@@ -264,6 +264,7 @@ model PrepNote {
   url       String?  // Optional URL for document/web links
   urlTitle  String?  // Optional title for the URL
   date      String   // Target date for this prep (YYYY-MM-DD)
+  ordering  Int      @default(0)
   contactId Int
   contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

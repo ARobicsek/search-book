@@ -73,6 +73,8 @@ import {
   Tag as TagIcon,
   Loader2,
   RotateCcw,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -85,6 +87,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
+import ReactMarkdown from 'react-markdown'
 
 // ─── Color maps ─────────────────────────────────────────────
 
@@ -1457,7 +1460,9 @@ function ConversationsTab({
                       <p className="text-xs text-muted-foreground">
                         {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </p>
-                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                      <div className="text-sm prep-note-markdown">
+                        <ReactMarkdown>{note.content}</ReactMarkdown>
+                      </div>
                       {note.url && (
                         <a href={note.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
                           {note.urlTitle || note.url}
@@ -1998,6 +2003,50 @@ function PrepSheetTab({
   const [newPrepUrl, setNewPrepUrl] = useState('')
   const [newPrepUrlTitle, setNewPrepUrlTitle] = useState('')
 
+  // Inline edit state
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+
+  function startEditNote(note: PrepNote) {
+    setEditingNoteId(note.id)
+    setEditContent(note.content)
+  }
+
+  function cancelEditNote() {
+    setEditingNoteId(null)
+    setEditContent('')
+  }
+
+  async function saveEditNote(noteId: number) {
+    if (!editContent.trim()) return
+    setEditSaving(true)
+    try {
+      await api.put(`/prepnotes/${noteId}`, { content: editContent.trim() })
+      setEditingNoteId(null)
+      setEditContent('')
+      onRefresh()
+      toast.success('Prep note updated')
+    } catch {
+      toast.error('Failed to update prep note')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  async function movePrepNote(index: number, direction: 'up' | 'down') {
+    const newNotes = [...prepNotes]
+    const swapIndex = direction === 'up' ? index - 1 : index + 1
+    if (swapIndex < 0 || swapIndex >= newNotes.length) return
+      ;[newNotes[index], newNotes[swapIndex]] = [newNotes[swapIndex], newNotes[index]]
+    try {
+      await api.post('/prepnotes/reorder', { noteIds: newNotes.map(n => n.id) })
+      onRefresh()
+    } catch {
+      toast.error('Failed to reorder prep notes')
+    }
+  }
+
   async function addLink() {
     if (!newLinkUrl.trim()) return
     try {
@@ -2113,7 +2162,7 @@ function PrepSheetTab({
           {/* Existing prep notes */}
           {prepNotes.length > 0 && (
             <div className="space-y-3">
-              {prepNotes.map((note) => (
+              {prepNotes.map((note, idx) => (
                 <div key={note.id} className="rounded-md border p-3 space-y-2 bg-yellow-50">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 space-y-1">
@@ -2122,8 +2171,32 @@ function PrepSheetTab({
                           {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </Badge>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                      {note.url && (
+                      {editingNoteId === note.id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            rows={5}
+                            className="text-sm"
+                            placeholder="Use **bold**, *italic*, and - bullet points"
+                          />
+                          <p className="text-xs text-muted-foreground">Supports **bold**, *italic*, and - bullet points</p>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="default" onClick={() => saveEditNote(note.id)} disabled={editSaving || !editContent.trim()}>
+                              <Check className="mr-1 h-3 w-3" />
+                              {editSaving ? 'Saving...' : 'Save'}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={cancelEditNote}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm prose prose-sm max-w-none">
+                          <ReactMarkdown>{note.content}</ReactMarkdown>
+                        </div>
+                      )}
+                      {note.url && editingNoteId !== note.id && (
                         <a
                           href={note.url}
                           target="_blank"
@@ -2134,9 +2207,22 @@ function PrepSheetTab({
                         </a>
                       )}
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deletePrepNote(note.id)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    {editingNoteId !== note.id && (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => movePrepNote(idx, 'up')} disabled={idx === 0}>
+                          <ArrowUp className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => movePrepNote(idx, 'down')} disabled={idx === prepNotes.length - 1}>
+                          <ArrowDown className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => startEditNote(note)}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deletePrepNote(note.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

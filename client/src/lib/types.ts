@@ -243,6 +243,7 @@ export interface PrepNote {
   url: string | null;
   urlTitle: string | null;
   date: string;
+  ordering: number;
   contactId: number;
   createdAt: string;
 }

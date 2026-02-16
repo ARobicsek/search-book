@@ -38,14 +38,6 @@ function getLabel(value: string, options: { value: string; label: string }[]) {
   return options.find((o) => o.value === value)?.label ?? value
 }
 
-function formatDateShort(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
-}
-
 const priorityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
 
 function sortByPriority(a: Action, b: Action) {

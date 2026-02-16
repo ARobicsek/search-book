@@ -1,28 +1,14 @@
 import { useState } from 'react'
 import { CalendarDays, ChevronDown, X } from 'lucide-react'
-import { format, addDays } from 'date-fns'
 import { api } from '@/lib/api'
-import type { Action } from '@/lib/types'
+import { toast } from 'react-hot-toast'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-
-interface ActionDateSelectProps {
-  action: Action
-  onUpdate?: () => void
-  showLabel?: boolean
-  className?: string
-}
 
 export function ActionDateSelect({ action, onUpdate, showLabel = true, className }: ActionDateSelectProps) {
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
 
   // Format the current date for display
   const today = new Date().toLocaleDateString('en-CA')
@@ -34,7 +20,6 @@ export function ActionDateSelect({ action, onUpdate, showLabel = true, className
       return
     }
 
-    setLoading(true)
     try {
       await api.put(`/actions/${action.id}`, { dueDate: newDate })
       toast.success('Due date updated')
@@ -42,8 +27,6 @@ export function ActionDateSelect({ action, onUpdate, showLabel = true, className
       setOpen(false)
     } catch (err) {
       toast.error('Failed to update due date')
-    } finally {
-      setLoading(false)
     }
   }
 

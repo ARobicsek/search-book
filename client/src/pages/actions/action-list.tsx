@@ -63,12 +63,6 @@ function formatDate(dateStr: string | null) {
   })
 }
 
-function isOverdue(action: Action): boolean {
-  if (action.completed || !action.dueDate) return false
-  const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local timezone
-  return action.dueDate < today
-}
-
 // Global filter function for searching across multiple fields
 const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) => {
   const search = filterValue.toLowerCase()

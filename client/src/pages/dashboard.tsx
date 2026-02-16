@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Check, Plus, AlertTriangle, CalendarDays, Loader2 } from 'lucide-react'
+import { ActionDateSelect } from '@/components/action-date-select'
 
 const typeColors: Record<ActionType, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -54,17 +55,18 @@ function sortByPriority(a: Action, b: Action) {
 interface ActionRowProps {
   action: Action
   onToggle: (action: Action) => void
+  onUpdate: () => void
   showDate?: boolean
 }
 
-function ActionRow({ action, onToggle, showDate }: ActionRowProps) {
+function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
   return (
-    <div className="flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50 sm:items-center">
+    <div className="flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50 sm:items-center group">
       <button
         onClick={() => onToggle(action)}
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg sm:h-5 sm:w-5 sm:rounded transition-colors ${action.completed
-            ? 'border-green-500 bg-green-500 text-white'
-            : 'border border-muted-foreground/30 hover:border-green-500 sm:border'
+          ? 'border-green-500 bg-green-500 text-white'
+          : 'border border-muted-foreground/30 hover:border-green-500 sm:border'
           }`}
       >
         {action.completed && <Check className="h-5 w-5 sm:h-3 sm:w-3" />}
@@ -92,9 +94,14 @@ function ActionRow({ action, onToggle, showDate }: ActionRowProps) {
               {action.contact.name}
             </Link>
           )}
-          {showDate && action.dueDate && (
-            <span className="text-xs text-muted-foreground">{formatDateShort(action.dueDate)}</span>
-          )}
+          <div onClick={(e) => e.stopPropagation()}>
+            <ActionDateSelect
+              action={action}
+              onUpdate={onUpdate}
+              showLabel={!!showDate}
+              className={showDate ? "" : "opacity-0 group-hover:opacity-100 transition-opacity px-0 h-auto py-0"}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -205,6 +212,7 @@ export function DashboardPage() {
                 key={action.id}
                 action={action}
                 onToggle={toggleComplete}
+                onUpdate={fetchData}
                 showDate
               />
             ))}
@@ -232,7 +240,7 @@ export function DashboardPage() {
           ) : (
             <div className="space-y-1">
               {todayActions.map((action) => (
-                <ActionRow key={action.id} action={action} onToggle={toggleComplete} />
+                <ActionRow key={action.id} action={action} onToggle={toggleComplete} onUpdate={fetchData} />
               ))}
             </div>
           )}
@@ -252,6 +260,7 @@ export function DashboardPage() {
                 key={action.id}
                 action={action}
                 onToggle={toggleComplete}
+                onUpdate={fetchData}
                 showDate
               />
             ))}
@@ -268,7 +277,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-1">
             {noDueDateActions.map((action) => (
-              <ActionRow key={action.id} action={action} onToggle={toggleComplete} />
+              <ActionRow key={action.id} action={action} onToggle={toggleComplete} onUpdate={fetchData} />
             ))}
           </CardContent>
         </Card>

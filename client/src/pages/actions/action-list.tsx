@@ -12,6 +12,7 @@ import {
   flexRender,
 } from '@tanstack/react-table'
 import { ArrowUpDown, Plus, Check, Search } from 'lucide-react'
+import { ActionDateSelect } from '@/components/action-date-select'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api } from '@/lib/api'
 import type { Action, ActionType, ActionPriority } from '@/lib/types'
@@ -139,8 +140,8 @@ export function ActionListPage() {
         <button
           onClick={(e) => toggleComplete(e, row.original)}
           className={`flex h-11 w-11 sm:h-5 sm:w-5 items-center justify-center rounded-lg sm:rounded border transition-colors ${row.original.completed
-              ? 'border-green-500 bg-green-500 text-white'
-              : 'border-muted-foreground/30 hover:border-green-500'
+            ? 'border-green-500 bg-green-500 text-white'
+            : 'border-muted-foreground/30 hover:border-green-500'
             }`}
         >
           {row.original.completed && <Check className="h-5 w-5 sm:h-3 sm:w-3" />}
@@ -203,14 +204,15 @@ export function ActionListPage() {
           <ArrowUpDown className="ml-1 h-4 w-4" />
         </Button>
       ),
-      cell: ({ row }) => {
-        const overdue = isOverdue(row.original)
-        return (
-          <span className={overdue ? 'font-semibold text-red-600' : 'text-muted-foreground'}>
-            {formatDate(row.original.dueDate)}
-          </span>
-        )
-      },
+      cell: ({ row }) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ActionDateSelect
+            action={row.original}
+            onUpdate={fetchActions}
+            className="-ml-2 h-8"
+          />
+        </div>
+      ),
     },
     {
       accessorKey: 'priority',

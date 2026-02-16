@@ -10,28 +10,17 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## What Was Completed Last Session
 
-### Prep Notes Fix
-1. **Bullet point CSS fix** — Prep Sheet tab was using `prose prose-sm max-w-none` class (Tailwind Typography not installed). Replaced with custom `prep-note-markdown` CSS class that was already working in the conversation dialog.
-
-### Markdown Rendering Expansion
-2. **6 additional locations** — Added `ReactMarkdown` rendering to: contact research notes (Overview tab + bottom card), conversation notes (list view + Prep Sheet "Last Conversation"), action description (action detail page), company notes (company detail page).
-
-### Company Activity Log (New Feature)
-3. **Full-stack implementation** — New `CompanyActivity` model for logging company-specific activities (e.g., applied to a role, submitted resume). Includes:
-   - Prisma model: `id`, `companyId`, `date`, `type`, `title`, `notes`
-   - Activity types: Applied, Email, Call, Meeting, Research, Follow Up, Other
-   - Backend: Full CRUD at `/api/company-activities`
-   - Frontend: "Activity Log" card on company detail page with expandable form (date picker, type selector, title, optional markdown notes) and badge-styled list with delete on hover
-   - Turso production: `CompanyActivity` table created via direct libsql client
-
-### Technical Notes Added
-- **#21** — `CompanyActivity` model for company-level action log. Types: APPLIED, EMAIL, CALL, MEETING, RESEARCH, FOLLOW_UP, OTHER. CRUD at `/api/company-activities`. Turso table created via direct libsql.
+### Quick Change Due Date
+1. **Action Date Select** — implemented a new popover component `ActionDateSelect` allowing users to change due dates directly from the Dashboard and Action List.
+2. **Presets** — "Today", "Tomorrow", "Next Week" (+7 days), and "Custom Date" (native picker).
+3. **Integration** — Replaced static date displays in `ActionRow` (Dashboard) and Action List table with the interactive component.
+4. **Build Fixes** — Resolved Vercel build issues (strict unused variable checks, missing types) and switched from `react-hot-toast` to `sonner`.
 
 ---
 
 ## Work for Next Session
 
-_(Leave blank — user will fill in.)_
+Please propose a solution that would allow me to easily, from the Dashboard or Actions list screen, change the due date of an action..
 
 ---
 

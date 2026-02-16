@@ -23,6 +23,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { ArrowLeft, Pencil, Trash2, Check, Circle, Loader2, ExternalLink } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 
 const typeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -247,7 +248,7 @@ export function ActionDetailPage() {
           <dl className="grid gap-4 sm:grid-cols-2">
             <Field label="Description">
               {action.description && (
-                <p className="whitespace-pre-wrap">{action.description}</p>
+                <div className="prep-note-markdown"><ReactMarkdown>{action.description}</ReactMarkdown></div>
               )}
             </Field>
             <Field label="Due Date">

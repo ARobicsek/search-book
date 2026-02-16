@@ -668,7 +668,7 @@ export function ContactDetailPage() {
                 <Field label="Where Found">{contact.whereFound}</Field>
                 <Field label="Notes">
                   {contact.notes && (
-                    <p className="whitespace-pre-wrap">{contact.notes}</p>
+                    <div className="prep-note-markdown"><ReactMarkdown>{contact.notes}</ReactMarkdown></div>
                   )}
                 </Field>
               </dl>
@@ -1379,7 +1379,7 @@ function ConversationsTab({
                       <p className="text-sm font-medium">{conv.summary}</p>
                     )}
                     {conv.notes && (
-                      <p className="text-sm text-muted-foreground line-clamp-2">{conv.notes}</p>
+                      <div className="text-sm text-muted-foreground line-clamp-2 prep-note-markdown"><ReactMarkdown>{conv.notes}</ReactMarkdown></div>
                     )}
                     {conv.nextSteps && (
                       <p className="text-xs text-muted-foreground">
@@ -2133,7 +2133,7 @@ function PrepSheetTab({
                 <p className="text-sm font-medium">{lastConversation.summary}</p>
               )}
               {lastConversation.notes && (
-                <p className="text-sm whitespace-pre-wrap">{lastConversation.notes}</p>
+                <div className="text-sm prep-note-markdown"><ReactMarkdown>{lastConversation.notes}</ReactMarkdown></div>
               )}
               {lastConversation.nextSteps && (
                 <div className="rounded-md bg-muted/50 p-2">
@@ -2434,7 +2434,7 @@ function PrepSheetTab({
             )}
             {contact.notes && (
               <Field label="Notes">
-                <p className="whitespace-pre-wrap">{contact.notes}</p>
+                <div className="prep-note-markdown"><ReactMarkdown>{contact.notes}</ReactMarkdown></div>
               </Field>
             )}
           </dl>

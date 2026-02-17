@@ -1379,7 +1379,7 @@ function ConversationsTab({
                       <p className="text-sm font-medium">{conv.summary}</p>
                     )}
                     {conv.notes && (
-                      <div className="text-sm text-muted-foreground line-clamp-2 prep-note-markdown"><ReactMarkdown>{conv.notes}</ReactMarkdown></div>
+                      <div className="text-sm text-muted-foreground prep-note-markdown"><ReactMarkdown>{conv.notes}</ReactMarkdown></div>
                     )}
                     {conv.nextSteps && (
                       <p className="text-xs text-muted-foreground">

@@ -11,7 +11,7 @@ const conversationIncludes = {
   companiesDiscussed: {
     include: { company: { select: { id: true, name: true } } },
   },
-  actions: { select: { id: true, title: true, completed: true } },
+  actions: { select: { id: true, title: true, completed: true, dueDate: true } },
 };
 
 // GET /api/conversations — list with optional contactId filter

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { SearchResult, ContactSearchResult, CompanySearchResult, Ecosystem, ContactStatus, CompanyStatus } from '@/lib/types'
@@ -360,21 +360,34 @@ export function SearchPage() {
 
   const debouncedQuery = useDebounce(query, 300)
 
+  // Track the latest search term to discard stale responses
+  const currentSearchRef = React.useRef('')
+
   const doSearch = useCallback(async (searchTerm: string) => {
     if (searchTerm.length < 2) {
+      currentSearchRef.current = ''
       setResults(null)
+      setLoading(false)
       return
     }
+    currentSearchRef.current = searchTerm
     setLoading(true)
     try {
       const data = await api.get<SearchResult>(
         `/search?q=${encodeURIComponent(searchTerm)}&limit=20&includeRelated=true`
       )
-      setResults(data)
+      // Discard response if a newer search has since been started
+      if (currentSearchRef.current === searchTerm) {
+        setResults(data)
+      }
     } catch {
-      setResults(null)
+      if (currentSearchRef.current === searchTerm) {
+        setResults(null)
+      }
     } finally {
-      setLoading(false)
+      if (currentSearchRef.current === searchTerm) {
+        setLoading(false)
+      }
     }
   }, [])
 

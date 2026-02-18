@@ -1470,8 +1470,13 @@ function ConversationsTab({
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         if (!open && editId !== null) {
           // 'x' or Escape closed the dialog in edit mode — save as draft
+          autoSave.cancel()
           localStorage.setItem(`draft_edit_conversation_${editId}`, JSON.stringify(form))
           setEditDrafts((prev) => new Set([...prev, editId]))
+          // Refresh conversations so the card shows the latest auto-saved content.
+          // The conversations prop change also re-triggers the editDrafts useEffect,
+          // reliably showing the Resume Edit indicator even on the first render.
+          onRefresh()
         }
         setDialogOpen(open)
       }}>

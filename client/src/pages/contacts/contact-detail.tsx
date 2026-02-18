@@ -72,7 +72,6 @@ import {
   X,
   Tag as TagIcon,
   Loader2,
-  RotateCcw,
   ArrowUp,
   ArrowDown,
 } from 'lucide-react'
@@ -1040,6 +1039,18 @@ function ConversationsTab({
     setLocalCompanyOptions(companyOptions)
   }, [contactOptions, companyOptions])
 
+  // Track which conversation IDs have pending edit drafts in localStorage
+  const [editDrafts, setEditDrafts] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    const drafts = new Set<number>()
+    for (const conv of conversations) {
+      if (localStorage.getItem(`draft_edit_conversation_${conv.id}`)) {
+        drafts.add(conv.id)
+      }
+    }
+    setEditDrafts(drafts)
+  }, [conversations])
+
   type ConversationForm = {
     date: string
     datePrecision: DatePrecision
@@ -1119,7 +1130,8 @@ function ConversationsTab({
     setEditId(conv.id)
     setLocalContactOptions(contactOptions)
     setLocalCompanyOptions(companyOptions)
-    const loadedForm: ConversationForm = {
+    // Server version — always used as originalForm for dirty detection and Cancel revert
+    const serverForm: ConversationForm = {
       date: conv.date,
       datePrecision: conv.datePrecision as DatePrecision,
       type: conv.type as ConversationType,
@@ -1131,8 +1143,18 @@ function ConversationsTab({
       actions: [{ ...emptyAction }],
       links: [],
     }
-    setForm(loadedForm)
-    setOriginalForm(loadedForm)
+    // Restore edit draft from localStorage if one exists
+    const savedDraft = localStorage.getItem(`draft_edit_conversation_${conv.id}`)
+    if (savedDraft) {
+      try {
+        setForm(JSON.parse(savedDraft))
+      } catch {
+        setForm(serverForm)
+      }
+    } else {
+      setForm(serverForm)
+    }
+    setOriginalForm(serverForm)
     setDialogOpen(true)
   }
 
@@ -1275,6 +1297,9 @@ function ConversationsTab({
       // Clear draft on success
       if (!editId) {
         localStorage.removeItem(`draft_conversation_${contactId}`)
+      } else {
+        localStorage.removeItem(`draft_edit_conversation_${editId}`)
+        setEditDrafts((prev) => { const s = new Set(prev); s.delete(editId); return s })
       }
       onRefresh()
     } catch (err) {
@@ -1365,7 +1390,7 @@ function ConversationsTab({
       ) : (
         <div className="space-y-3">
           {conversations.map((conv) => (
-            <Card key={conv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => openEdit(conv)}>
+            <Card key={conv.id} className={`cursor-pointer hover:bg-muted/30 ${editDrafts.has(conv.id) ? 'border-amber-300' : ''}`} onClick={() => openEdit(conv)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 space-y-1">
@@ -1376,6 +1401,12 @@ function ConversationsTab({
                       <span className="text-sm text-muted-foreground">
                         {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
                       </span>
+                      {editDrafts.has(conv.id) && (
+                        <span className="text-xs text-amber-600 flex items-center gap-1">
+                          <Pencil className="h-3 w-3" />
+                          Resume Edit
+                        </span>
+                      )}
                     </div>
                     {conv.summary && (
                       <p className="text-sm font-medium">{conv.summary}</p>
@@ -1436,7 +1467,14 @@ function ConversationsTab({
       )}
 
       {/* Conversation form dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open && editId !== null) {
+          // 'x' or Escape closed the dialog in edit mode — save as draft
+          localStorage.setItem(`draft_edit_conversation_${editId}`, JSON.stringify(form))
+          setEditDrafts((prev) => new Set([...prev, editId]))
+        }
+        setDialogOpen(open)
+      }}>
         <DialogContent className={cn('max-h-[85vh] overflow-y-auto', !editId && prepNotes.length > 0 ? 'sm:max-w-5xl' : 'sm:max-w-xl')} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <div className="flex items-center justify-between">
@@ -1666,12 +1704,13 @@ function ConversationsTab({
           <DialogFooter>
             {editId ? (
               <>
-                {autoSave.isDirty && (
-                  <Button variant="outline" onClick={autoSave.revert}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Revert
-                  </Button>
-                )}
+                <Button variant="outline" onClick={() => {
+                  autoSave.cancel()
+                  localStorage.removeItem(`draft_edit_conversation_${editId}`)
+                  setEditDrafts((prev) => { const s = new Set(prev); s.delete(editId!); return s })
+                  if (originalForm) setForm(originalForm)
+                  setDialogOpen(false)
+                }}>Cancel</Button>
                 <Button onClick={handleSubmit} disabled={saving}>
                   {saving ? 'Saving...' : 'Done'}
                 </Button>

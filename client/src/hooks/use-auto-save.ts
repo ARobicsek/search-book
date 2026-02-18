@@ -29,6 +29,8 @@ interface UseAutoSaveReturn<T> {
   revert: () => void
   /** Manually trigger a save */
   save: () => Promise<void>
+  /** Cancel any pending debounced save without saving */
+  cancel: () => void
   /** Original data reference */
   originalData: T | null
 }
@@ -154,11 +156,19 @@ export function useAutoSave<T>({
     await performSave()
   }, [performSave])
 
+  const cancel = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }, [])
+
   return {
     status,
     isDirty,
     revert,
     save,
+    cancel,
     originalData,
   }
 }

@@ -1229,6 +1229,8 @@ function ConversationsTab({
       toast.error('Date is required')
       return
     }
+    // Cancel any pending auto-save debounce to avoid a race between it and this submit
+    autoSave.cancel()
     setSaving(true)
     try {
       const { resolvedContacts, resolvedCompanies } = await resolveNewEntries()
@@ -1670,7 +1672,9 @@ function ConversationsTab({
                     Revert
                   </Button>
                 )}
-                <Button onClick={() => setDialogOpen(false)}>Done</Button>
+                <Button onClick={handleSubmit} disabled={saving}>
+                  {saving ? 'Saving...' : 'Done'}
+                </Button>
               </>
             ) : (
               <>

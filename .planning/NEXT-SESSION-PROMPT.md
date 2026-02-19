@@ -10,64 +10,29 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## What Was Completed Last Session
 
-### Bug Fixes
+### Bug Fix: "Resume Edit" badge + card refresh not working after closing edit dialog with 'x'
 
-1. **Bug: Actions not saved in Log Conversation edit mode** — "Done" button was calling `setDialogOpen(false)` directly, bypassing `handleSubmit()`. Fixed by wiring Done to `handleSubmit()`. Server `PUT /api/conversations/:id` already supported `createActions[]`.
+**Symptom (now resolved):**
+- After clicking 'x' to close the edit conversation dialog, the conversation card did not refresh to show auto-saved content and the amber "Resume Edit" badge did not appear.
 
-2. **Bug: Stale UI after clicking Done in edit mode** — Same root cause as above. `handleSubmit()` now calls `onRefresh()` after a successful PUT, which re-fetches from the server and updates conversation cards. Added `autoSave.cancel()` at the top of `handleSubmit()` to stop any in-flight debounce before the final PUT fires.
+**Root cause:**
+`onOpenChange` was an inline arrow function that captured `editId` and `form` from the React render closure. If Radix UI fired the callback during a window where React had a pending-but-not-yet-committed render, the handler read stale values. Specifically, `editId` could appear as `null`, silently failing the `editId !== null` guard and skipping the entire draft-save + `onRefresh()` block.
 
-3. **Bug: Mobile search showing irrelevant results (stale API responses)** — Slow mobile typing triggered multiple debounced fetches ("V", "Vi", "Vig"). The response for "V" (many results) could arrive after the "Vig" response, overwriting it. Fixed with a `currentSearchRef` in `search.tsx`: responses whose query string doesn't match the current ref are silently discarded.
-
-4. **Bonus fix: Due dates missing from conversation action cards** — Added `dueDate: true` to `conversationIncludes.actions` select in `server/src/routes/conversations.ts`.
-
-### Partially Implemented: Edit Mode Draft / Resume Edit UX
-
-- Dialog footer changed from "Revert + Done" to **"Cancel + Done"**
-  - Cancel: clears localStorage draft, reverts form to `originalForm`, closes dialog
-  - Done: calls `handleSubmit()` → saves to server → clears draft → calls `onRefresh()`
-- Clicking **'x'** (or Escape) to close the dialog now:
-  - Calls `autoSave.cancel()` to stop any pending debounce
-  - Saves current `form` state to `localStorage` under key `draft_edit_conversation_${editId}`
-  - Adds `editId` to `editDrafts` state (a `Set<number>`)
-  - Calls `onRefresh()` to refresh the conversations list
-- `editDrafts` is a `useState<Set<number>>` that syncs from localStorage via `useEffect([conversations])`
-- Conversation cards with a pending draft show an amber border and a "Resume Edit" badge with a pencil icon
-- Opening a conversation card that has a draft restores the draft into the form; `originalForm` stays as the server version (for auto-save diffing)
+**Fix applied** in [client/src/pages/contacts/contact-detail.tsx](client/src/pages/contacts/contact-detail.tsx):
+- Added `editIdRef = useRef<number | null>(null)` and `formRef = useRef<ConversationForm>(emptyForm)`
+- A no-dependency `useEffect` keeps both refs in sync after every committed render
+- `onOpenChange` now reads `editIdRef.current` and `formRef.current` instead of closure variables
+- Result: both symptoms resolved — amber badge appears immediately on close, card refreshes to show server content
 
 ---
 
-## REMAINING BUG — Work for Next Session
+## Edit Mode Draft UX — Full Behavior (for reference)
 
-### Symptom
-After clicking **'x'** to close the edit conversation dialog:
-1. The conversation card does **not** show the auto-saved (latest) content
-2. The amber **"Resume Edit"** indicator does **not** appear on the card
-
-### Expected behavior
-- The card should immediately show whatever was auto-saved (the PUT already happened via `useAutoSave`)
-- The card should have an amber border and "Resume Edit" label
-
-### What was tried
-- Added `onRefresh()` call inside `Dialog onOpenChange` handler (when `!open && editId !== null`)
-- Added `setEditDrafts((prev) => new Set([...prev, editId]))` inside the same handler
-- The `useEffect([conversations])` that reads localStorage and populates `editDrafts` depends on the `conversations` prop changing — `onRefresh()` should trigger this
-
-### Hypothesis / Possible Root Causes
-1. **Closure staleness in `onOpenChange`**: The `onOpenChange` callback may be capturing a stale `editId` or `form` snapshot from when the dialog first opened. By the time 'x' is clicked, `editId` could be the current value but `form` might be from an earlier render.
-2. **`onRefresh()` timing**: `onRefresh()` initiates an async fetch; the result won't arrive synchronously, so `conversations` prop may not update before the component re-renders for the closed state.
-3. **`useEffect([conversations])` not running when expected**: If React batches the `setDialogOpen(false)` + the `onRefresh()` state update, the effect may not re-run as expected.
-4. **`editDrafts` state update lost**: The `setEditDrafts` call inside `onOpenChange` may be overridden by the subsequent `useEffect([conversations])` if it runs before `onRefresh()` completes (it would see localStorage correctly, but the draft key has just been written — should be fine).
-5. **The `onOpenChange` is not firing**: Verify it's actually being called by adding a `console.log` — Radix UI's `onOpenChange` fires for 'x' and Escape but NOT for programmatic `setDialogOpen(false)`.
-
-### Files to Inspect
-- [client/src/pages/contacts/contact-detail.tsx](client/src/pages/contacts/contact-detail.tsx) — `ConversationsTab` component; look at `onOpenChange`, `openEdit`, `handleSubmit`, `editDrafts` state and its `useEffect`
-- [client/src/hooks/use-auto-save.ts](client/src/hooks/use-auto-save.ts) — `cancel()` method and `useAutoSave` hook
-
-### Suggested Debug Approach
-1. Add `console.log` inside `onOpenChange` to confirm it fires and check the values of `editId`, `form`, and `open`
-2. Add `console.log` inside the `useEffect([conversations])` to confirm it re-runs after `onRefresh()` completes
-3. Add `console.log` inside the `openEdit` function to confirm draft is being read from localStorage when card is tapped
-4. Check whether `onRefresh()` actually changes the `conversations` reference (it should, since it's a new array from the server)
+- Dialog footer: **"Cancel"** reverts form to server state + clears draft + closes. **"Done"** saves to server + clears draft + refreshes.
+- Clicking **'x'** or Escape: saves `form` to `localStorage` as `draft_edit_conversation_${editId}`, updates `editDrafts` state, calls `onRefresh()`.
+- `editDrafts: Set<number>` state syncs from localStorage on `conversations` prop change.
+- Cards with a pending draft show amber border + "Resume Edit" pencil badge.
+- Opening a card with a draft restores the draft into the form; `originalForm` stays as server version.
 
 ---
 
@@ -134,5 +99,6 @@ printf 'value' | vercel env add VAR_NAME production
 19. **Turso schema migrations** — Prisma `db push` only works against local SQLite. For Turso production, run DDL directly: temporarily uncomment Turso creds in `server/.env`, use `node -e "require('dotenv').config(); const { createClient } = require('@libsql/client'); ..."` to execute CREATE TABLE statements, then re-comment creds.
 20. **Multi-select actions** — Actions support 0-N contacts and companies via `ActionContact`/`ActionCompany` junction tables. Legacy single `contactId`/`companyId` fields preserved for backward compatibility. All views (form, detail, list) fall back to legacy fields when junction tables are empty.
 21. **Company Activity Log** — `CompanyActivity` model for company-level action log. Types: APPLIED, EMAIL, CALL, MEETING, RESEARCH, FOLLOW_UP, OTHER. CRUD at `/api/company-activities`. Turso table created via direct libsql client.
-22. **Edit mode drafts** — localStorage key: `draft_edit_conversation_${conversationId}`. New conversation drafts use `draft_conversation_${contactId}`. `editDrafts: Set<number>` state in `ConversationsTab` tracks which conversations have a pending edit draft; syncs from localStorage inside `useEffect([conversations])`.
+22. **Edit mode drafts** — localStorage key: `draft_edit_conversation_${conversationId}`. New conversation drafts use `draft_conversation_${contactId}`. `editDrafts: Set<number>` state in `ConversationsTab` tracks which conversations have a pending edit draft; syncs from localStorage inside `useEffect([conversations])`. `editIdRef` and `formRef` refs prevent stale closures in `onOpenChange`.
 23. **Radix UI onOpenChange** — fires for 'x' button and Escape key, but NOT for programmatic `setDialogOpen(false)`. This is critical for the edit draft save-on-close logic.
+24. **Stale closure pattern** — When Radix UI (or any library) fires callbacks that need current React state, use `useRef` + a no-dep `useEffect` to sync refs after every render, then read from refs inside the callback. Never rely solely on closure-captured state in event handlers that Radix controls.

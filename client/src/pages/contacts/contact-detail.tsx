@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -1026,6 +1026,7 @@ function ConversationsTab({
   const [dialogOpen, setDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const editIdRef = useRef<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -1081,6 +1082,7 @@ function ConversationsTab({
   }
 
   const [form, setForm] = useState<ConversationForm>(emptyForm)
+  const formRef = useRef<ConversationForm>(emptyForm)
   const [originalForm, setOriginalForm] = useState<ConversationForm | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
 
@@ -1193,7 +1195,11 @@ function ConversationsTab({
     }
   }, [form, editId, dialogOpen, draftKey])
 
-  // Clear draft on successful submit (handled in handleSubmit)
+  // Keep refs in sync after every render so onOpenChange never reads stale values
+  useEffect(() => {
+    editIdRef.current = editId
+    formRef.current = form
+  })
 
   const autoSave = useAutoSave({
     data: form,
@@ -1468,14 +1474,15 @@ function ConversationsTab({
 
       {/* Conversation form dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
-        if (!open && editId !== null) {
+        // Read from refs — never from the closure — to guarantee we always
+        // have the value that was committed in the most recent render.
+        const currentEditId = editIdRef.current
+        if (!open && currentEditId !== null) {
           // 'x' or Escape closed the dialog in edit mode — save as draft
           autoSave.cancel()
-          localStorage.setItem(`draft_edit_conversation_${editId}`, JSON.stringify(form))
-          setEditDrafts((prev) => new Set([...prev, editId]))
-          // Refresh conversations so the card shows the latest auto-saved content.
-          // The conversations prop change also re-triggers the editDrafts useEffect,
-          // reliably showing the Resume Edit indicator even on the first render.
+          localStorage.setItem(`draft_edit_conversation_${currentEditId}`, JSON.stringify(formRef.current))
+          setEditDrafts((prev) => new Set([...prev, currentEditId]))
+          // Refresh so the card shows the latest auto-saved server content.
           onRefresh()
         }
         setDialogOpen(open)

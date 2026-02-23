@@ -52,6 +52,10 @@ If these are uncommented, the app will try to connect to Turso cloud DB and hang
 
 If Prisma errors: `cd server && npx prisma generate`
 
+## Work for Next Session
+
+In our next session I'd like to fix a bug we seem to have just created. When I finish logging a conversation and click "Done" in the log conversation modal, the "Resume Draft" button displays. It should not, since the conversation is done.
+
 ---
 
 ## Production Deployment

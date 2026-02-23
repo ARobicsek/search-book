@@ -10,14 +10,10 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## What Was Completed Last Session
 
-### Conversation Notes Display
-1. **Removed Truncation** — Removed the `line-clamp-2` CSS class from the conversation notes display in `contact-detail.tsx` so that full conversation notes are now visible on the contact card instead of being truncated.
-
-### Inline Action Saving in Conversation Dialog
-1. **Inline Action API Integration** — Implemented the ability to post follow-up actions to the `/api/actions` endpoint immediately from within the conversation modal, prior to submitting the conversation itself.
-2. **Relational Linking** — Extended `POST /api/conversations` and `PUT /api/conversations/:id` endpoints to accept `linkActionIds`. This allows tying the pre-saved background actions back to the primary conversation.
-3. **UI Enhancements** — Re-structured the action items within conversations to individually support "Save Action" buttons, handling "✅ Saved" badge states, and dealing with form modification regressions.
-4. **Validation** — `npm run prepush` checks are fully resolved with typing in shape.
+### Mobile Action Due Dates
+1. **Interactive Mobile Components** — Replaced hidden components or static text with `ActionDateSelect` across the Dashboard, Action List, Contact Detail, Company Detail, and Global Search pages, allowing PWA users to change action due dates natively without hover states.
+2. **Desktop Synchronization** — Brought the Contact and Company Detail "Pending Actions" sections up to par by replacing their static text rendering with the full interactive `ActionDateSelect` drop-down on desktop as well.
+3. **TypeScript Build Fixes** — Resolved Vercel deployment errors concerning unused variables and typecasting incompatibilities between `Action` and `ActionSearchResult`.
 
 ---
 
@@ -39,7 +35,7 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-In our next session I'd like to do the following: in the desktop version of the app there are a number of places where I can update the due date of an action. I'd like to add this feature in all the relevant locations in the mobile experience (PWA).
+In our next session I'd like to do the following: [Add next tasks here]
 
 ---
 

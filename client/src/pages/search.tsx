@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { SearchResult, ContactSearchResult, CompanySearchResult, Ecosystem, ContactStatus, CompanyStatus } from '@/lib/types'
+import type { SearchResult, ContactSearchResult, CompanySearchResult, Ecosystem, ContactStatus, CompanyStatus, Action } from '@/lib/types'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ActionDateSelect } from '@/components/action-date-select'

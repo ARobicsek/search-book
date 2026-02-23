@@ -39,7 +39,7 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-(None specified yet)
+In our next session I'd like to do the following: in the desktop version of the app there are a number of places where I can update the due date of an action. I'd like to add this feature in all the relevant locations in the mobile experience (PWA).
 
 ---
 

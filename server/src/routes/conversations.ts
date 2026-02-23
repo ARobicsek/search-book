@@ -68,6 +68,7 @@ router.post('/', async (req: Request, res: Response) => {
       companiesDiscussed,  // number[] of company IDs
       createAction,        // optional single action (legacy): { title, type, dueDate, priority }
       createActions,       // optional array of actions: { title, type, dueDate, priority }[]
+      linkActionIds,       // optional array of existing action IDs to link to this conversation
     } = req.body;
 
     if (!contactId || !date) {
@@ -120,6 +121,13 @@ router.post('/', async (req: Request, res: Response) => {
           contactId,
           conversationId: conversation.id,
         },
+      });
+    }
+
+    if (linkActionIds?.length) {
+      await prisma.action.updateMany({
+        where: { id: { in: linkActionIds as number[] } },
+        data: { conversationId: conversation.id },
       });
     }
 
@@ -178,6 +186,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       companiesDiscussed,
       createAction,
       createActions,
+      linkActionIds,
       links,
       ...data
     } = req.body;
@@ -227,6 +236,13 @@ router.put('/:id', async (req: Request, res: Response) => {
           contactId: existing.contactId,
           conversationId: id,
         },
+      });
+    }
+
+    if (linkActionIds?.length) {
+      await prisma.action.updateMany({
+        where: { id: { in: linkActionIds as number[] } },
+        data: { conversationId: id },
       });
     }
 

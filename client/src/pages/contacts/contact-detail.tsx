@@ -990,6 +990,8 @@ export function ContactDetailPage() {
 // ─── Conversations Tab component ────────────────────────────
 
 interface ActionFormEntry {
+  id?: number
+  isSaved?: boolean
   title: string
   type: ActionType
   dueDate: string
@@ -1276,14 +1278,20 @@ function ConversationsTab({
       }
 
       // Multiple actions support (works for both create and edit)
-      const validActions = form.actions.filter((a) => a.title.trim())
-      if (validActions.length > 0) {
-        payload.createActions = validActions.map((a) => ({
+      const validActionsToCreate = form.actions.filter((a) => !a.id && a.title.trim())
+      const linkActionIds = form.actions.filter((a) => a.id).map((a) => a.id)
+
+      if (validActionsToCreate.length > 0) {
+        payload.createActions = validActionsToCreate.map((a) => ({
           title: a.title.trim(),
           type: a.type,
           dueDate: a.dueDate || null,
           priority: a.priority,
         }))
+      }
+
+      if (linkActionIds.length > 0) {
+        payload.linkActionIds = linkActionIds
       }
 
       // Links
@@ -1337,9 +1345,61 @@ function ConversationsTab({
   function updateAction(index: number, field: keyof ActionFormEntry, value: string) {
     setForm((prev) => {
       const actions = [...prev.actions]
-      actions[index] = { ...actions[index], [field]: value }
+      actions[index] = { ...actions[index], [field]: value, isSaved: false }
       return { ...prev, actions }
     })
+  }
+
+  async function saveActionInline(index: number, e: React.MouseEvent) {
+    e.preventDefault()
+    const action = form.actions[index]
+    if (!action.title.trim()) {
+      toast.error('Action title is required')
+      return
+    }
+    setSaving(true)
+    try {
+      if (action.id) {
+        // Update existing inline action
+        await api.put(`/actions/${action.id}`, {
+          title: action.title.trim(),
+          type: action.type,
+          dueDate: action.dueDate || null,
+          priority: action.priority,
+        })
+        setForm((prev) => {
+          const actions = [...prev.actions]
+          actions[index] = { ...actions[index], isSaved: true }
+          return { ...prev, actions }
+        })
+        toast.success('Action updated')
+      } else {
+        // Create new inline action
+        const payload: any = {
+          title: action.title.trim(),
+          type: action.type,
+          dueDate: action.dueDate || null,
+          priority: action.priority,
+          contactId,
+          contactIds: [contactId],
+        }
+        if (editId) {
+          payload.conversationId = editId
+        }
+        const created = await api.post<{ id: number }>('/actions', payload)
+
+        setForm((prev) => {
+          const actions = [...prev.actions]
+          actions[index] = { ...actions[index], id: created.id, isSaved: true }
+          return { ...prev, actions }
+        })
+        toast.success('Action saved')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save action')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function addAction() {
@@ -1672,12 +1732,26 @@ function ConversationsTab({
               {form.actions.map((action, i) => (
                 <div key={i} className="space-y-2 rounded-md border p-3">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs text-muted-foreground">Action {i + 1}</Label>
-                    {form.actions.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
+                    <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                      Action {i + 1}
+                      {action.id && action.isSaved && (
+                        <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100 text-[10px] h-4 py-0 px-1 border-transparent">
+                          <Check className="mr-1 h-3 w-3" /> Saved
+                        </Badge>
+                      )}
+                    </Label>
+                    <div className="flex items-center gap-1">
+                      {action.title.trim() && !action.isSaved && (
+                        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs text-primary" onClick={(e) => saveActionInline(i, e)}>
+                          Save Action
+                        </Button>
+                      )}
+                      {form.actions.length > 1 && (
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <Input
                     value={action.title}

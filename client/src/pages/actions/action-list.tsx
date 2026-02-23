@@ -156,13 +156,22 @@ export function ActionListPage() {
         </Button>
       ),
       cell: ({ row }) => (
-        <Link
-          to={`/actions/${row.original.id}`}
-          className={`font-medium hover:underline ${row.original.completed ? 'text-muted-foreground line-through' : 'text-foreground'
-            }`}
-        >
-          {row.original.title}
-        </Link>
+        <div className="flex flex-col">
+          <Link
+            to={`/actions/${row.original.id}`}
+            className={`font-medium hover:underline ${row.original.completed ? 'text-muted-foreground line-through' : 'text-foreground'
+              }`}
+          >
+            {row.original.title}
+          </Link>
+          <div className="sm:hidden mt-1" onClick={(e) => e.stopPropagation()}>
+            <ActionDateSelect
+              action={row.original}
+              onUpdate={fetchActions}
+              className="-ml-2 h-8"
+            />
+          </div>
+        </div>
       ),
     },
     {

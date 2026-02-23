@@ -29,6 +29,7 @@ import {
 } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ActionDateSelect } from '@/components/action-date-select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -820,19 +821,13 @@ export function ContactDetailPage() {
                         >
                           {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
                         </Badge>
-                        {action.dueDate && (
-                          <span
-                            className={`text-xs ${overdue
-                              ? 'font-semibold text-red-600'
-                              : 'text-muted-foreground'
-                              }`}
-                          >
-                            {new Date(action.dueDate + 'T00:00:00').toLocaleDateString(
-                              'en-US',
-                              { month: 'short', day: 'numeric' }
-                            )}
-                          </span>
-                        )}
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ActionDateSelect
+                            action={action}
+                            onUpdate={loadData}
+                            className="-ml-2 h-8"
+                          />
+                        </div>
                       </div>
                     )
                   })}
@@ -2487,9 +2482,13 @@ function PrepSheetTab({
                     {action.title}
                   </Link>
                   {action.dueDate && (
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(action.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <ActionDateSelect
+                        action={action}
+                        onUpdate={onRefresh}
+                        className="-ml-2 h-8"
+                      />
+                    </div>
                   )}
                 </li>
               ))}

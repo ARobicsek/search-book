@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import type { SearchResult, ContactSearchResult, CompanySearchResult, Ecosystem, ContactStatus, CompanyStatus } from '@/lib/types'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { ActionDateSelect } from '@/components/action-date-select'
 
 const ecosystemColors: Record<Ecosystem, string> = {
   RECRUITER: 'bg-blue-100 text-blue-800',
@@ -562,7 +563,15 @@ export function SearchPage() {
                         {action.type}
                         {action.contact && ` | ${action.contact.name}`}
                         {action.company && ` | ${action.company.name}`}
-                        {action.dueDate && ` | Due: ${action.dueDate}`}
+                        {action.dueDate && (
+                          <div className="inline-block align-middle ml-2" onClick={(e) => e.stopPropagation()}>
+                            <ActionDateSelect
+                              action={action}
+                              onUpdate={() => doSearch(currentSearchRef.current)}
+                              className="-ml-2 h-8"
+                            />
+                          </div>
+                        )}
                       </p>
                     </CardContent>
                   </Card>
@@ -644,7 +653,15 @@ export function SearchPage() {
                     {action.type}
                     {action.contact && ` | ${action.contact.name}`}
                     {action.company && ` | ${action.company.name}`}
-                    {action.dueDate && ` | Due: ${action.dueDate}`}
+                    {action.dueDate && (
+                      <div className="inline-block align-middle ml-2" onClick={(e) => e.stopPropagation()}>
+                        <ActionDateSelect
+                          action={action}
+                          onUpdate={() => doSearch(currentSearchRef.current)}
+                          className="-ml-2 h-8"
+                        />
+                      </div>
+                    )}
                   </p>
                 </CardContent>
               </Card>

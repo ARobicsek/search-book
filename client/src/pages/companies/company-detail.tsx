@@ -5,6 +5,7 @@ import type { Company, Action, LinkRecord, CompanyStatus, CompanyActivity, Compa
 import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, COMPANY_ACTIVITY_TYPE_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ActionDateSelect } from '@/components/action-date-select'
 import {
   Card,
   CardContent,
@@ -637,11 +638,15 @@ export function CompanyDetailPage() {
                     <Badge variant="outline" className={`text-xs ${actionPriorityColors[action.priority]}`}>
                       {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
                     </Badge>
-                    {action.dueDate && (
-                      <span className={`text-xs ${overdue ? 'font-semibold text-red-600' : 'text-muted-foreground'}`}>
-                        {new Date(action.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    )}
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <ActionDateSelect
+                        action={action}
+                        onUpdate={() => {
+                          api.get(`/actions?companyId=${action.companyId || ''}`).then(setActions).catch(() => { })
+                        }}
+                        className="-ml-2 h-8"
+                      />
+                    </div>
                   </div>
                 )
               })}

@@ -91,7 +91,7 @@ function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
               action={action}
               onUpdate={onUpdate}
               showLabel={!!showDate}
-              className={showDate ? "" : "opacity-0 group-hover:opacity-100 transition-opacity px-0 h-auto py-0"}
+              className={showDate ? "" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity px-0 h-auto py-0"}
             />
           </div>
         </div>

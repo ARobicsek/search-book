@@ -1310,7 +1310,9 @@ function ConversationsTab({
       setDialogOpen(false)
       // Clear draft on success
       if (!editId) {
-        localStorage.removeItem(`draft_conversation_${contactId}`)
+        localStorage.removeItem(draftKey)
+        setHasDraft(false)
+        setForm(emptyForm)
       } else {
         localStorage.removeItem(`draft_edit_conversation_${editId}`)
         setEditDrafts((prev) => { const s = new Set(prev); s.delete(editId); return s })

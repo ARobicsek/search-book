@@ -784,10 +784,6 @@ export function ContactDetailPage() {
               ) : (
                 <div className="space-y-2">
                   {actions.map((action) => {
-                    const overdue =
-                      !action.completed &&
-                      action.dueDate &&
-                      action.dueDate < new Date().toLocaleDateString('en-CA')
                     return (
                       <div
                         key={action.id}

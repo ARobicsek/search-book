@@ -614,7 +614,6 @@ export function CompanyDetailPage() {
           ) : (
             <div className="space-y-2">
               {actions.map((action) => {
-                const overdue = !action.completed && action.dueDate && action.dueDate < new Date().toLocaleDateString('en-CA')
                 return (
                   <div key={action.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
                     <button
@@ -642,7 +641,7 @@ export function CompanyDetailPage() {
                       <ActionDateSelect
                         action={action}
                         onUpdate={() => {
-                          api.get(`/actions?companyId=${action.companyId || ''}`).then(setActions).catch(() => { })
+                          api.get<Action[]>(`/actions?companyId=${action.companyId || ''}`).then((res) => setActions(res)).catch(() => { })
                         }}
                         className="-ml-2 h-8"
                       />

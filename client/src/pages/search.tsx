@@ -566,7 +566,7 @@ export function SearchPage() {
                         {action.dueDate && (
                           <div className="inline-block align-middle ml-2" onClick={(e) => e.stopPropagation()}>
                             <ActionDateSelect
-                              action={action}
+                              action={action as unknown as Action}
                               onUpdate={() => doSearch(currentSearchRef.current)}
                               className="-ml-2 h-8"
                             />
@@ -656,7 +656,7 @@ export function SearchPage() {
                     {action.dueDate && (
                       <div className="inline-block align-middle ml-2" onClick={(e) => e.stopPropagation()}>
                         <ActionDateSelect
-                          action={action}
+                          action={action as unknown as Action}
                           onUpdate={() => doSearch(currentSearchRef.current)}
                           className="-ml-2 h-8"
                         />

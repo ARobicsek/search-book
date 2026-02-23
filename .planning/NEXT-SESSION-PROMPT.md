@@ -10,29 +10,14 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## What Was Completed Last Session
 
-### Bug Fix: "Resume Edit" badge + card refresh not working after closing edit dialog with 'x'
+### Conversation Notes Display
+1. **Removed Truncation** — Removed the `line-clamp-2` CSS class from the conversation notes display in `contact-detail.tsx` so that full conversation notes are now visible on the contact card instead of being truncated.
 
-**Symptom (now resolved):**
-- After clicking 'x' to close the edit conversation dialog, the conversation card did not refresh to show auto-saved content and the amber "Resume Edit" badge did not appear.
-
-**Root cause:**
-`onOpenChange` was an inline arrow function that captured `editId` and `form` from the React render closure. If Radix UI fired the callback during a window where React had a pending-but-not-yet-committed render, the handler read stale values. Specifically, `editId` could appear as `null`, silently failing the `editId !== null` guard and skipping the entire draft-save + `onRefresh()` block.
-
-**Fix applied** in [client/src/pages/contacts/contact-detail.tsx](client/src/pages/contacts/contact-detail.tsx):
-- Added `editIdRef = useRef<number | null>(null)` and `formRef = useRef<ConversationForm>(emptyForm)`
-- A no-dependency `useEffect` keeps both refs in sync after every committed render
-- `onOpenChange` now reads `editIdRef.current` and `formRef.current` instead of closure variables
-- Result: both symptoms resolved — amber badge appears immediately on close, card refreshes to show server content
-
----
-
-## Edit Mode Draft UX — Full Behavior (for reference)
-
-- Dialog footer: **"Cancel"** reverts form to server state + clears draft + closes. **"Done"** saves to server + clears draft + refreshes.
-- Clicking **'x'** or Escape: saves `form` to `localStorage` as `draft_edit_conversation_${editId}`, updates `editDrafts` state, calls `onRefresh()`.
-- `editDrafts: Set<number>` state syncs from localStorage on `conversations` prop change.
-- Cards with a pending draft show amber border + "Resume Edit" pencil badge.
-- Opening a card with a draft restores the draft into the form; `originalForm` stays as server version.
+### Inline Action Saving in Conversation Dialog
+1. **Inline Action API Integration** — Implemented the ability to post follow-up actions to the `/api/actions` endpoint immediately from within the conversation modal, prior to submitting the conversation itself.
+2. **Relational Linking** — Extended `POST /api/conversations` and `PUT /api/conversations/:id` endpoints to accept `linkActionIds`. This allows tying the pre-saved background actions back to the primary conversation.
+3. **UI Enhancements** — Re-structured the action items within conversations to individually support "Save Action" buttons, handling "✅ Saved" badge states, and dealing with form modification regressions.
+4. **Validation** — `npm run prepush` checks are fully resolved with typing in shape.
 
 ---
 

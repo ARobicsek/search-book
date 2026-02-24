@@ -447,37 +447,42 @@ export function ContactListPage() {
         const draftId = key.replace('draft_new_contact_', '')
         try {
           const parsed = JSON.parse(localStorage.getItem(key) || '{}')
-          if (parsed.name) {
-            // Reconstruct enough of the dummy contact for displaying rows
-            loadedDrafts.push({
-              id: -parseInt(draftId) || Math.random() * -1000000,
-              isDraft: true,
-              draftId,
-              name: parsed.name,
-              title: parsed.title || null,
-              companyName: parsed.companyEntries?.length > 0 ? (parsed.companyEntries[0].value || null) : null,
-              ecosystem: parsed.ecosystem || 'ROLODEX',
-              status: parsed.status || 'NEW',
-              location: parsed.location || null,
-              updatedAt: new Date().toISOString(),
-              createdAt: new Date().toISOString(),
-              // Default missing props
-              companyId: null,
-              email: parsed.emails?.[0] || null,
-              phone: parsed.phone || null,
-              linkedinUrl: parsed.linkedinUrl || null,
-              photoUrl: parsed.photoUrl || null,
-              photoFile: parsed.photoFile || null,
-              howConnected: parsed.howConnected || null,
-              referredById: parsed.referredById ? parseInt(parsed.referredById) : null,
-              mutualConnections: parsed.mutualConnections?.join(',') || null,
-              whereFound: parsed.whereFound || null,
-              openQuestions: parsed.openQuestions || null,
-              notes: parsed.notes || null,
-              personalDetails: parsed.personalDetails || null,
-              flagged: false
-            } as unknown as Contact & { isDraft: boolean; draftId: string })
-          }
+          loadedDrafts.push({
+            id: -parseInt(draftId) || (Math.random() * -1000000),
+            isDraft: true,
+            draftId,
+            name: parsed.name,
+            title: parsed.title || null,
+            roleDescription: parsed.roleDescription || null,
+            companyId: null,
+            company: null,
+            companyName: parsed.companyEntries?.length > 0 ? (parsed.companyEntries[0].value || null) : null,
+            additionalCompanyIds: parsed.additionalCompanyIds || null,
+            ecosystem: parsed.ecosystem || 'ROLODEX',
+            email: parsed.emails?.[0] || null,
+            additionalEmails: parsed.additionalEmails || null,
+            phone: parsed.phone || null,
+            linkedinUrl: parsed.linkedinUrl || null,
+            location: parsed.location || null,
+            photoUrl: parsed.photoUrl || null,
+            photoFile: parsed.photoFile || null,
+            status: parsed.status || 'NEW',
+            howConnected: parsed.howConnected || null,
+            referredById: parsed.referredById ? parseInt(parsed.referredById) : null,
+            referredBy: null,
+            referrals: [],
+            mutualConnections: parsed.mutualConnections?.join(',') || null,
+            whereFound: parsed.whereFound || null,
+            openQuestions: parsed.openQuestions || null,
+            notes: parsed.notes || null,
+            personalDetails: parsed.personalDetails || null,
+            flagged: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastOutreachDate: null,
+            lastOutreachDatePrecision: null,
+            employmentHistory: [],
+          } as Contact & { isDraft: boolean; draftId: string })
         } catch {
           // Ignore parse errors on drafts
         }
@@ -984,7 +989,13 @@ export function ContactListPage() {
                 <TableRow
                   key={row.id}
                   className="cursor-pointer"
-                  onClick={() => navigate(`/contacts/${row.original.id}`)}
+                  onClick={() => {
+                    if (row.original.isDraft) {
+                      navigate(`/contacts/new?draftId=${row.original.draftId}`)
+                    } else {
+                      navigate(`/contacts/${row.original.id}`)
+                    }
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>

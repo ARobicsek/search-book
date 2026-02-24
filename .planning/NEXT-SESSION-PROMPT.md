@@ -35,7 +35,18 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-In our next session I'd like to do the following: [Add next tasks here]
+In our next session, we need to fix the following issues with the Multiple Contact Drafts feature on the Contact List page:
+
+1. **TypeScript Build Error in Vercel:**
+`contact-list.tsx(452,31): error TS2345: Argument of type ... is not assignable to parameter of type 'Contact & { isDraft: boolean; draftId: string; }'`
+The `unknown as Contact` type assertion added to the dummy draft row is still causing TS to complain about missing properties (`roleDescription`, `company`, `additionalCompanyIds`, `additionalEmails`, etc). The dummy draft object needs to satisfy the exact shape expected, or the column definitions need to be more permissive.
+
+2. **Runtime 404 Error:**
+```
+api/contacts/-1771954038738:1  Failed to load resource: the server responded with a status of 404 ()
+GET https://searchbook-three.vercel.app/api/contacts/-1771954050672 404 (Not Found)
+```
+The dummy draft objects are generating negative IDs, and the row or a cell component is attempting to fetch data from the API `/api/contacts/:id` using these negative dummy IDs, causing a 404 error. The components rendering the row need to bypass any API calls for `isDraft` rows.
 
 ---
 

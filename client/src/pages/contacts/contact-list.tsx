@@ -141,27 +141,30 @@ function getAllCompanyIds(contact: Contact): number[] {
 function buildColumns(
   onToggleFlag: (contact: Contact) => void,
   onUpdate: (contact: Contact, field: 'ecosystem' | 'status', value: string) => void
-): ColumnDef<Contact>[] {
+): ColumnDef<Contact & { isDraft?: boolean; draftId?: string }>[] {
   return [
     {
       id: 'flag',
       header: () => <Flag className="h-4 w-4 text-muted-foreground" />,
-      cell: ({ row }) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleFlag(row.original)
-          }}
-          className="flex items-center justify-center"
-        >
-          <Flag
-            className={`h-4 w-4 ${row.original.flagged
-              ? 'fill-amber-500 text-amber-500'
-              : 'text-muted-foreground/30 hover:text-amber-400'
-              }`}
-          />
-        </button>
-      ),
+      cell: ({ row }) => {
+        if (row.original.isDraft) return null;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleFlag(row.original)
+            }}
+            className="flex items-center justify-center"
+          >
+            <Flag
+              className={`h-4 w-4 ${row.original.flagged
+                ? 'fill-amber-500 text-amber-500'
+                : 'text-muted-foreground/30 hover:text-amber-400'
+                }`}
+            />
+          </button>
+        )
+      },
       size: 40,
     },
     {
@@ -176,14 +179,32 @@ function buildColumns(
           <ArrowUpDown className="ml-1 h-4 w-4" />
         </Button>
       ),
-      cell: ({ row }) => (
-        <Link
-          to={`/contacts/${row.original.id}`}
-          className="font-medium text-foreground hover:underline"
-        >
-          {row.original.name}
-        </Link>
-      ),
+      cell: ({ row }) => {
+        if (row.original.isDraft) {
+          return (
+            <div className="flex items-center gap-2">
+              <Badge className="bg-amber-100 text-amber-900 border-amber-200 hover:bg-amber-200 inline-flex items-center">
+                <Pencil className="mr-1 h-3 w-3" />
+                Resume Draft
+              </Badge>
+              <Link
+                to={`/contacts/new?draftId=${row.original.draftId}`}
+                className="font-medium text-amber-900 hover:underline"
+              >
+                {row.original.name || 'Unnamed Draft'}
+              </Link>
+            </div>
+          )
+        }
+        return (
+          <Link
+            to={`/contacts/${row.original.id}`}
+            className="font-medium text-foreground hover:underline"
+          >
+            {row.original.name}
+          </Link>
+        )
+      },
     },
     {
       accessorKey: 'title',
@@ -245,6 +266,13 @@ function buildColumns(
       cell: ({ row }) => {
         const contact = row.original
         const value = contact.ecosystem as Ecosystem
+        if (contact.isDraft) {
+          return (
+            <Badge variant="outline" className={`${ecosystemColors[value]}`}>
+              {getLabel(value, ECOSYSTEM_OPTIONS)}
+            </Badge>
+          )
+        }
         return (
           <div onClick={(e) => e.stopPropagation()}>
             <DropdownMenu>
@@ -289,6 +317,13 @@ function buildColumns(
       cell: ({ row }) => {
         const contact = row.original
         const value = contact.status as ContactStatus
+        if (contact.isDraft) {
+          return (
+            <Badge variant="outline" className={`${statusColors[value]}`}>
+              {getLabel(value, CONTACT_STATUS_OPTIONS)}
+            </Badge>
+          )
+        }
         return (
           <div onClick={(e) => e.stopPropagation()}>
             <DropdownMenu>
@@ -401,12 +436,54 @@ export function ContactListPage() {
   })
   const [batchSaving, setBatchSaving] = useState(false)
 
-  const [hasDraft, setHasDraft] = useState(false)
+  const [drafts, setDrafts] = useState<(Contact & { isDraft?: boolean; draftId?: string })[]>([])
 
-  // Check for new contact draft on mount
+  // Load all drafts from localStorage on mount
   useEffect(() => {
-    const draft = localStorage.getItem('draft_new_contact')
-    setHasDraft(!!draft)
+    const loadedDrafts: (Contact & { isDraft: boolean; draftId: string })[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('draft_new_contact_')) {
+        const draftId = key.replace('draft_new_contact_', '')
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || '{}')
+          if (parsed.name) {
+            // Reconstruct enough of the dummy contact for displaying rows
+            loadedDrafts.push({
+              id: -parseInt(draftId) || Math.random() * -1000000,
+              isDraft: true,
+              draftId,
+              name: parsed.name,
+              title: parsed.title || null,
+              companyName: parsed.companyEntries?.length > 0 ? (parsed.companyEntries[0].value || null) : null,
+              ecosystem: parsed.ecosystem || 'ROLODEX',
+              status: parsed.status || 'NEW',
+              location: parsed.location || null,
+              updatedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              // Default missing props
+              companyId: null,
+              email: parsed.emails?.[0] || null,
+              phone: parsed.phone || null,
+              linkedinUrl: parsed.linkedinUrl || null,
+              photoUrl: parsed.photoUrl || null,
+              photoFile: parsed.photoFile || null,
+              howConnected: parsed.howConnected || null,
+              referredById: parsed.referredById ? parseInt(parsed.referredById) : null,
+              mutualConnections: parsed.mutualConnections?.join(',') || null,
+              whereFound: parsed.whereFound || null,
+              openQuestions: parsed.openQuestions || null,
+              notes: parsed.notes || null,
+              personalDetails: parsed.personalDetails || null,
+              flagged: false
+            })
+          }
+        } catch {
+          // Ignore parse errors on drafts
+        }
+      }
+    }
+    setDrafts(loadedDrafts.sort((a, b) => b.draftId.localeCompare(a.draftId)))
   }, [])
 
   // Pagination state
@@ -548,8 +625,16 @@ export function ContactListPage() {
 
   // Data is already filtered server-side, just pass through
   const filteredData = useMemo(() => {
+    // Only inject drafts if we're on the first page and matching basic searches
+    if (currentPage === 0) {
+      // Filter drafts using globalSearch
+      const matchingDrafts = globalFilter
+        ? drafts.filter(d => d.name.toLowerCase().includes(globalFilter.toLowerCase()) || d.title?.toLowerCase().includes(globalFilter.toLowerCase()) || d.companyName?.toLowerCase().includes(globalFilter.toLowerCase()))
+        : drafts;
+      return [...matchingDrafts, ...contacts]
+    }
     return contacts
-  }, [contacts, ecosystemFilter, statusFilter, showFlaggedOnly])
+  }, [contacts, drafts, currentPage, globalFilter, ecosystemFilter, statusFilter, showFlaggedOnly])
 
   const flaggedCount = contacts.filter((c) => c.flagged).length
 
@@ -725,21 +810,12 @@ export function ContactListPage() {
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          {hasDraft ? (
-            <Button asChild size="sm" className="flex-1 sm:flex-initial bg-amber-100 text-amber-900 hover:bg-amber-200 border-amber-200 border">
-              <Link to="/contacts/new">
-                <Pencil className="mr-2 h-4 w-4" />
-                Resume Draft
-              </Link>
-            </Button>
-          ) : (
-            <Button asChild size="sm" className="flex-1 sm:flex-initial">
-              <Link to="/contacts/new">
-                <Plus className="mr-2 h-4 w-4" />
-                New Contact
-              </Link>
-            </Button>
-          )}
+          <Button asChild size="sm" className="flex-1 sm:flex-initial">
+            <Link to="/contacts/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Contact
+            </Link>
+          </Button>
         </div>
       </div>
 

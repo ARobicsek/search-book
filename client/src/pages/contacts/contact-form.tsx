@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Contact, Company, LinkRecord } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
@@ -179,10 +179,15 @@ function formToPayload(form: FormData, companyEntries: { id: number; isCurrent: 
 export function ContactFormPage() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const isEdit = Boolean(id)
+  const draftId = searchParams.get('draftId')
 
   const [form, setForm] = useState<FormData>(emptyForm)
   const [originalForm, setOriginalForm] = useState<FormData | null>(null)
+
+  // Track manual changes in 'new' mode for realistic "saving..." animation
+  const [isDraftSaving, setIsDraftSaving] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(isEdit)
@@ -272,47 +277,55 @@ export function ContactFormPage() {
         .finally(() => setLoading(false))
       // Load links for this contact
       api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
-    } else {
-      // Handle draft for new contact
-      const savedDraft = localStorage.getItem('draft_new_contact')
+    } else if (draftId) {
+      // Handle explicit draft for new contact
+      const savedDraft = localStorage.getItem(`draft_new_contact_${draftId}`)
       if (savedDraft) {
         try {
           const parsed = JSON.parse(savedDraft)
-          // Only restore if it has some meaningful data
-          const hasData = parsed.name || (parsed.companyEntries && parsed.companyEntries.length > 0) || (parsed.emails && parsed.emails.length > 0 && parsed.emails[0] !== '') || parsed.phone || parsed.linkedinUrl || parsed.notes
-          if (hasData) {
-            setForm(parsed)
-            if (parsed.phone || parsed.linkedinUrl) setContactDetailsOpen(true)
-            if (parsed.howConnected || (parsed.mutualConnections && parsed.mutualConnections.length > 0)) setConnectionDetailsOpen(true)
-            if (parsed.whereFound || parsed.openQuestions || parsed.notes) setResearchOpen(true)
-            if (parsed.personalDetails) setPersonalDetailsOpen(true)
-          }
+          setForm(parsed)
+          if (parsed.phone || parsed.linkedinUrl) setContactDetailsOpen(true)
+          if (parsed.howConnected || (parsed.mutualConnections && parsed.mutualConnections.length > 0)) setConnectionDetailsOpen(true)
+          if (parsed.whereFound || parsed.openQuestions || parsed.notes) setResearchOpen(true)
+          if (parsed.personalDetails) setPersonalDetailsOpen(true)
         } catch {
           // ignore
         }
       }
       setLoading(false)
+    } else {
+      // Legacy cleanup to prevent orphaned drafts from previous logic
+      localStorage.removeItem('draft_new_contact')
+      setLoading(false)
     }
-  }, [id, isEdit, navigate])
+  }, [id, isEdit, draftId, navigate])
 
   // Save draft for new contact to localStorage synchronously
   useEffect(() => {
     if (!isEdit && !saving) {
-      const hasMeaningfulData =
-        form.name.trim() !== '' ||
-        form.title.trim() !== '' ||
-        form.companyEntries.length > 0 ||
-        (form.emails.length > 0 && form.emails[0] !== '') ||
-        form.phone.trim() !== '' ||
-        form.notes.trim() !== ''
+      // Only start a draft when name has been entered
+      const hasMeaningfulData = form.name.trim() !== ''
 
-      if (hasMeaningfulData) {
-        localStorage.setItem('draft_new_contact', JSON.stringify(form))
-      } else {
-        localStorage.removeItem('draft_new_contact')
+      if (hasMeaningfulData && !draftId) {
+        // Generate a new draft ID and replace URL quietly
+        setIsDraftSaving(true)
+        const newDraftId = Date.now().toString()
+        setSearchParams({ draftId: newDraftId }, { replace: true })
+        setTimeout(() => setIsDraftSaving(false), 500)
+        // The effect will re-run with draftId populated
+        return;
+      }
+
+      if (hasMeaningfulData && draftId) {
+        setIsDraftSaving(true)
+        localStorage.setItem(`draft_new_contact_${draftId}`, JSON.stringify(form))
+        const timer = setTimeout(() => setIsDraftSaving(false), 600)
+        return () => clearTimeout(timer)
+      } else if (!hasMeaningfulData && draftId) {
+        localStorage.removeItem(`draft_new_contact_${draftId}`)
       }
     }
-  }, [form, isEdit, saving])
+  }, [form, isEdit, saving, draftId, setSearchParams])
 
   function validate(data: FormData = form): boolean {
     const errs: Record<string, string> = {}
@@ -445,7 +458,9 @@ export function ContactFormPage() {
             await api.post('/links', { url: link.url, title: link.title, contactId: created.id })
           } catch { /* ignore individual link failures */ }
         }
-        localStorage.removeItem('draft_new_contact')
+        if (draftId) {
+          localStorage.removeItem(`draft_new_contact_${draftId}`)
+        }
         toast.success('Contact created')
         navigate(`/contacts/${created.id}`)
       }
@@ -489,6 +504,18 @@ export function ContactFormPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          {!isEdit && (form.name || form.notes) && (
+            <div className="flex items-center gap-1.5 text-sm mr-2 transition-opacity duration-300">
+              {isDraftSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <span className="text-muted-foreground">Saving...</span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">Draft saved</span>
+              )}
+            </div>
+          )}
           {isEdit ? (
             <>
               <SaveStatusIndicator status={autoSave.status} />
@@ -518,8 +545,8 @@ export function ContactFormPage() {
                 {saving ? 'Saving...' : 'Create Contact'}
               </Button>
               <Button type="button" variant="outline" onClick={() => {
-                if (!isEdit) {
-                  localStorage.removeItem('draft_new_contact')
+                if (!isEdit && draftId) {
+                  localStorage.removeItem(`draft_new_contact_${draftId}`)
                 }
                 navigate(-1)
               }} className="flex-1 sm:flex-initial">

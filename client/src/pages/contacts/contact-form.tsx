@@ -272,8 +272,47 @@ export function ContactFormPage() {
         .finally(() => setLoading(false))
       // Load links for this contact
       api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
+    } else {
+      // Handle draft for new contact
+      const savedDraft = localStorage.getItem('draft_new_contact')
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft)
+          // Only restore if it has some meaningful data
+          const hasData = parsed.name || (parsed.companyEntries && parsed.companyEntries.length > 0) || (parsed.emails && parsed.emails.length > 0 && parsed.emails[0] !== '') || parsed.phone || parsed.linkedinUrl || parsed.notes
+          if (hasData) {
+            setForm(parsed)
+            if (parsed.phone || parsed.linkedinUrl) setContactDetailsOpen(true)
+            if (parsed.howConnected || (parsed.mutualConnections && parsed.mutualConnections.length > 0)) setConnectionDetailsOpen(true)
+            if (parsed.whereFound || parsed.openQuestions || parsed.notes) setResearchOpen(true)
+            if (parsed.personalDetails) setPersonalDetailsOpen(true)
+          }
+        } catch {
+          // ignore
+        }
+      }
+      setLoading(false)
     }
   }, [id, isEdit, navigate])
+
+  // Save draft for new contact to localStorage synchronously
+  useEffect(() => {
+    if (!isEdit && !saving) {
+      const hasMeaningfulData =
+        form.name.trim() !== '' ||
+        form.title.trim() !== '' ||
+        form.companyEntries.length > 0 ||
+        (form.emails.length > 0 && form.emails[0] !== '') ||
+        form.phone.trim() !== '' ||
+        form.notes.trim() !== ''
+
+      if (hasMeaningfulData) {
+        localStorage.setItem('draft_new_contact', JSON.stringify(form))
+      } else {
+        localStorage.removeItem('draft_new_contact')
+      }
+    }
+  }, [form, isEdit, saving])
 
   function validate(data: FormData = form): boolean {
     const errs: Record<string, string> = {}
@@ -406,6 +445,7 @@ export function ContactFormPage() {
             await api.post('/links', { url: link.url, title: link.title, contactId: created.id })
           } catch { /* ignore individual link failures */ }
         }
+        localStorage.removeItem('draft_new_contact')
         toast.success('Contact created')
         navigate(`/contacts/${created.id}`)
       }
@@ -477,7 +517,12 @@ export function ContactFormPage() {
               <Button type="submit" form="contact-form" disabled={saving} className="flex-1 sm:flex-initial">
                 {saving ? 'Saving...' : 'Create Contact'}
               </Button>
-              <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 sm:flex-initial">
+              <Button type="button" variant="outline" onClick={() => {
+                if (!isEdit) {
+                  localStorage.removeItem('draft_new_contact')
+                }
+                navigate(-1)
+              }} className="flex-1 sm:flex-initial">
                 Cancel
               </Button>
             </>

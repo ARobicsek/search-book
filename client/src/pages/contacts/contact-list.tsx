@@ -12,7 +12,7 @@ import {
   flexRender,
 } from '@tanstack/react-table'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus, DatePrecision, LinkRecord } from '@/lib/types'
@@ -401,6 +401,14 @@ export function ContactListPage() {
   })
   const [batchSaving, setBatchSaving] = useState(false)
 
+  const [hasDraft, setHasDraft] = useState(false)
+
+  // Check for new contact draft on mount
+  useEffect(() => {
+    const draft = localStorage.getItem('draft_new_contact')
+    setHasDraft(!!draft)
+  }, [])
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0)
   const [totalContacts, setTotalContacts] = useState(0)
@@ -717,12 +725,21 @@ export function ContactListPage() {
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button asChild size="sm" className="flex-1 sm:flex-initial">
-            <Link to="/contacts/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New Contact
-            </Link>
-          </Button>
+          {hasDraft ? (
+            <Button asChild size="sm" className="flex-1 sm:flex-initial bg-amber-100 text-amber-900 hover:bg-amber-200 border-amber-200 border">
+              <Link to="/contacts/new">
+                <Pencil className="mr-2 h-4 w-4" />
+                Resume Draft
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild size="sm" className="flex-1 sm:flex-initial">
+              <Link to="/contacts/new">
+                <Plus className="mr-2 h-4 w-4" />
+                New Contact
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 

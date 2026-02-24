@@ -14,6 +14,7 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 1. **TS2345 Type Error Fix** — Replaced forced dummy draft mock typing `unknown as Contact` with a complete fallback representation of the `Contact` object supplying defaults up front matching the TS schema.
 2. **TS2339 Type Error Fix** — Vercel raised typescript errors for the frontend-only property `isDraft`. Wrapped iterators accessing it inside `Contact & { isDraft?: boolean, draftId?: string }` assertions.
 3. **Runtime 404 Error Fix** — Intercepted standard contact navigation rules to check `if(original.isDraft)`. The handler skips calling the database via the negative mocked ID array marker, effectively dodging a 404 response. Form pushes user directly to `/contacts/new?draftId=` instead.
+4. **Duplicate Draft Creation Bug Fix** — Squashed a React race condition that inadvertently triggered the `useEffect` auto-save logic as the `contact-form.tsx` began navigation and removed `localStorage` entries for `draft_new_contact_...` IDs. The form fields are now cleared pre-navigation (`setForm(emptyForm)`) eliminating unintended "Resume Draft" duplicates surfacing on the list index after creating a contact.
 
 ---
 

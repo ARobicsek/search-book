@@ -461,6 +461,11 @@ export function ContactFormPage() {
         if (draftId) {
           localStorage.removeItem(`draft_new_contact_${draftId}`)
         }
+
+        // Clear the form to prevent the auto-save useEffect from
+        // re-saving the draft back to localStorage during the unmount phase.
+        setForm(emptyForm)
+
         toast.success('Contact created')
         navigate(`/contacts/${created.id}`)
       }

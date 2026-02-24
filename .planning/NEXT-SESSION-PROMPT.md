@@ -11,10 +11,8 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 ## What Was Completed Last Session
 
 ### Fixing Contact Draft Bugs
-1. **TS2345 Type Error Fix** — Replaced forced dummy draft mock typing `unknown as Contact` with a complete fallback representation of the `Contact` object supplying defaults up front matching the TS schema.
-2. **TS2339 Type Error Fix** — Vercel raised typescript errors for the frontend-only property `isDraft`. Wrapped iterators accessing it inside `Contact & { isDraft?: boolean, draftId?: string }` assertions.
-3. **Runtime 404 Error Fix** — Intercepted standard contact navigation rules to check `if(original.isDraft)`. The handler skips calling the database via the negative mocked ID array marker, effectively dodging a 404 response. Form pushes user directly to `/contacts/new?draftId=` instead.
-4. **Duplicate Draft Creation Bug Fix** — Squashed a React race condition that inadvertently triggered the `useEffect` auto-save logic as the `contact-form.tsx` began navigation and removed `localStorage` entries for `draft_new_contact_...` IDs. The form fields are now cleared pre-navigation (`setForm(emptyForm)`) eliminating unintended "Resume Draft" duplicates surfacing on the list index after creating a contact.
+1. **Race Condition Fix** — Prevented multiple orphaned drafts from being created during rapid typing by introducing a `useRef` lock (`draftGeneratedRef`) on the `draftId` generation sequence.
+2. **Delete Draft Button** — Added an explicit "Delete Draft" button to the New Contact form when loaded with a `draftId` parameter, which successfully purges the corresponding `<draft_new_contact_>` entry from `localStorage`.
 
 ---
 
@@ -36,18 +34,7 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-In our next session, we need to fix the following issues with the Multiple Contact Drafts feature on the Contact List page:
-
-1. **TypeScript Build Error in Vercel:**
-`contact-list.tsx(452,31): error TS2345: Argument of type ... is not assignable to parameter of type 'Contact & { isDraft: boolean; draftId: string; }'`
-The `unknown as Contact` type assertion added to the dummy draft row is still causing TS to complain about missing properties (`roleDescription`, `company`, `additionalCompanyIds`, `additionalEmails`, etc). The dummy draft object needs to satisfy the exact shape expected, or the column definitions need to be more permissive.
-
-2. **Runtime 404 Error:**
-```
-api/contacts/-1771954038738:1  Failed to load resource: the server responded with a status of 404 ()
-GET https://searchbook-three.vercel.app/api/contacts/-1771954050672 404 (Not Found)
-```
-The dummy draft objects are generating negative IDs, and the row or a cell component is attempting to fetch data from the API `/api/contacts/:id` using these negative dummy IDs, causing a 404 error. The components rendering the row need to bypass any API calls for `isDraft` rows.
+1. [Add goals for next session here]
 
 ---
 

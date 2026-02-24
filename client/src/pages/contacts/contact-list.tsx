@@ -990,10 +990,11 @@ export function ContactListPage() {
                   key={row.id}
                   className="cursor-pointer"
                   onClick={() => {
-                    if (row.original.isDraft) {
-                      navigate(`/contacts/new?draftId=${row.original.draftId}`)
+                    const original = row.original as Contact & { isDraft?: boolean; draftId?: string }
+                    if (original.isDraft) {
+                      navigate(`/contacts/new?draftId=${original.draftId}`)
                     } else {
-                      navigate(`/contacts/${row.original.id}`)
+                      navigate(`/contacts/${original.id}`)
                     }
                   }}
                 >

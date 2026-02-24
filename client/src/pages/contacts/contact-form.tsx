@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Contact, Company, LinkRecord } from '@/lib/types'
@@ -185,6 +185,7 @@ export function ContactFormPage() {
 
   const [form, setForm] = useState<FormData>(emptyForm)
   const [originalForm, setOriginalForm] = useState<FormData | null>(null)
+  const draftGeneratedRef = useRef(false)
 
   // Track manual changes in 'new' mode for realistic "saving..." animation
   const [isDraftSaving, setIsDraftSaving] = useState(false)
@@ -307,6 +308,10 @@ export function ContactFormPage() {
       const hasMeaningfulData = form.name.trim() !== ''
 
       if (hasMeaningfulData && !draftId) {
+        // Prevent race condition where rapid typing generates multiple drafted IDs before URL updates
+        if (draftGeneratedRef.current) return;
+        draftGeneratedRef.current = true;
+
         // Generate a new draft ID and replace URL quietly
         setIsDraftSaving(true)
         const newDraftId = Date.now().toString()
@@ -549,10 +554,21 @@ export function ContactFormPage() {
               <Button type="submit" form="contact-form" disabled={saving} className="flex-1 sm:flex-initial">
                 {saving ? 'Saving...' : 'Create Contact'}
               </Button>
+              {draftId && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => {
+                    localStorage.removeItem(`draft_new_contact_${draftId}`)
+                    navigate(-1)
+                  }}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Draft
+                </Button>
+              )}
               <Button type="button" variant="outline" onClick={() => {
-                if (!isEdit && draftId) {
-                  localStorage.removeItem(`draft_new_contact_${draftId}`)
-                }
                 navigate(-1)
               }} className="flex-1 sm:flex-initial">
                 Cancel

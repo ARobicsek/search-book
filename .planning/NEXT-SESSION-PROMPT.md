@@ -10,10 +10,10 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## What Was Completed Last Session
 
-### Mobile Action Due Dates
-1. **Interactive Mobile Components** — Replaced hidden components or static text with `ActionDateSelect` across the Dashboard, Action List, Contact Detail, Company Detail, and Global Search pages, allowing PWA users to change action due dates natively without hover states.
-2. **Desktop Synchronization** — Brought the Contact and Company Detail "Pending Actions" sections up to par by replacing their static text rendering with the full interactive `ActionDateSelect` drop-down on desktop as well.
-3. **TypeScript Build Fixes** — Resolved Vercel deployment errors concerning unused variables and typecasting incompatibilities between `Action` and `ActionSearchResult`.
+### Fixing Contact Draft Bugs
+1. **TS2345 Type Error Fix** — Replaced forced dummy draft mock typing `unknown as Contact` with a complete fallback representation of the `Contact` object supplying defaults up front matching the TS schema.
+2. **TS2339 Type Error Fix** — Vercel raised typescript errors for the frontend-only property `isDraft`. Wrapped iterators accessing it inside `Contact & { isDraft?: boolean, draftId?: string }` assertions.
+3. **Runtime 404 Error Fix** — Intercepted standard contact navigation rules to check `if(original.isDraft)`. The handler skips calling the database via the negative mocked ID array marker, effectively dodging a 404 response. Form pushes user directly to `/contacts/new?draftId=` instead.
 
 ---
 

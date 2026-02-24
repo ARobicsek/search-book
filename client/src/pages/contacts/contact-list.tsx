@@ -476,7 +476,7 @@ export function ContactListPage() {
               notes: parsed.notes || null,
               personalDetails: parsed.personalDetails || null,
               flagged: false
-            })
+            } as unknown as Contact & { isDraft: boolean; draftId: string })
           }
         } catch {
           // Ignore parse errors on drafts

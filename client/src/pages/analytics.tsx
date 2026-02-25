@@ -13,7 +13,9 @@ import {
 } from 'recharts'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Building2, CheckCircle, AlertTriangle, Loader2, Calendar as CalendarIcon, Activity } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Users, Building2, CheckCircle, AlertTriangle, Loader2, Calendar as CalendarIcon, Activity, ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,6 +34,7 @@ interface Overview {
   pendingActionsCount: number
   overdueActionsCount: number
   completedActionsCount: number
+  inDiscussionsCompaniesCount: number
   sparklines: {
     contacts: SparklineData[]
     companies: SparklineData[]
@@ -107,6 +110,12 @@ export function AnalyticsPage() {
   const [actionsMetrics, setActionsMetrics] = useState<CompletedMetric[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Drilldown state
+  const [drilldownOpen, setDrilldownOpen] = useState(false)
+  const [drilldownDate, setDrilldownDate] = useState<string | null>(null)
+  const [drilldownData, setDrilldownData] = useState<any[] | null>(null)
+  const [drilldownLoading, setDrilldownLoading] = useState(false)
+
   // Toggles for conversation types to display
   const [activeConvTypes, setActiveConvTypes] = useState<Record<ConversationType, boolean>>(() => {
     const initial: Partial<Record<ConversationType, boolean>> = {}
@@ -144,6 +153,18 @@ export function AnalyticsPage() {
       .catch((err) => toast.error(err.message || 'Failed to load analytics'))
       .finally(() => setLoading(false))
   }, [dates])
+
+  useEffect(() => {
+    if (drilldownOpen && drilldownDate) {
+      setDrilldownLoading(true)
+      api.get<any[]>(`/analytics/drilldown/contact-transitions?date=${drilldownDate}&oldStatus=AWAITING_RESPONSE&newStatus=CONNECTED`)
+        .then(data => setDrilldownData(data))
+        .catch(err => toast.error('Failed to load drill-down data: ' + err.message))
+        .finally(() => setDrilldownLoading(false))
+    } else {
+      setDrilldownData(null)
+    }
+  }, [drilldownOpen, drilldownDate])
 
   // Compute totals for Contact metrics
   const contactTotals = contactsMetrics.reduce((acc, curr) => ({
@@ -219,7 +240,27 @@ export function AnalyticsPage() {
                   <div className="h-[40px] mt-3 -mx-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={overview.sparklines.contacts}>
-                        <Line type="monotone" dataKey="count" stroke={COLORS.Added} strokeWidth={2} dot={false} />
+                        <XAxis dataKey="date" hide />
+                        <Line
+                          type="monotone"
+                          dataKey="count"
+                          stroke={COLORS.Added}
+                          strokeWidth={2}
+                          dot={(props: any) => {
+                            if (props.index === 0) {
+                              return (
+                                <g key="custom-dot-first">
+                                  <circle cx={props.cx} cy={props.cy} r={3} fill={COLORS.Added} />
+                                  <text x={props.cx - 5} y={props.cy - 10} fontSize={10} fill="currentColor" className="text-muted-foreground font-medium" textAnchor="middle">
+                                    {props.value}
+                                  </text>
+                                </g>
+                              );
+                            }
+                            return <circle key={`dot-${props.index}`} cx={props.cx} cy={props.cy} r={0} />;
+                          }}
+                          isAnimationActive={false}
+                        />
                         <Tooltip labelFormatter={formatDate} contentStyle={{ fontSize: '12px', padding: '4px 8px' }} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -239,12 +280,43 @@ export function AnalyticsPage() {
                   <div className="h-[40px] mt-3 -mx-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={overview.sparklines.companies}>
-                        <Line type="monotone" dataKey="count" stroke={COLORS.AwaitingToConnected} strokeWidth={2} dot={false} />
+                        <XAxis dataKey="date" hide />
+                        <Line
+                          type="monotone"
+                          dataKey="count"
+                          stroke={COLORS.AwaitingToConnected}
+                          strokeWidth={2}
+                          dot={(props: any) => {
+                            if (props.index === 0) {
+                              return (
+                                <g key="custom-dot-first">
+                                  <circle cx={props.cx} cy={props.cy} r={3} fill={COLORS.AwaitingToConnected} />
+                                  <text x={props.cx - 5} y={props.cy - 10} fontSize={10} fill="currentColor" className="text-muted-foreground font-medium" textAnchor="middle">
+                                    {props.value}
+                                  </text>
+                                </g>
+                              );
+                            }
+                            return <circle key={`dot-${props.index}`} cx={props.cx} cy={props.cy} r={0} />;
+                          }}
+                          isAnimationActive={false}
+                        />
                         <Tooltip labelFormatter={formatDate} contentStyle={{ fontSize: '12px', padding: '4px 8px' }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card className="flex flex-col justify-between">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Companies in Discussions</CardTitle>
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{overview?.inDiscussionsCompaniesCount ?? 0}</div>
+                <div className="text-xs text-muted-foreground mt-1">Status: In Discussions</div>
               </CardContent>
             </Card>
 
@@ -283,7 +355,27 @@ export function AnalyticsPage() {
                   <div className="h-[40px] mt-3 -mx-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={overview.sparklines.completedActions}>
-                        <Line type="monotone" dataKey="count" stroke={COLORS.Completed} strokeWidth={2} dot={false} />
+                        <XAxis dataKey="date" hide />
+                        <Line
+                          type="monotone"
+                          dataKey="count"
+                          stroke={COLORS.Completed}
+                          strokeWidth={2}
+                          dot={(props: any) => {
+                            if (props.index === 0) {
+                              return (
+                                <g key="custom-dot-first">
+                                  <circle cx={props.cx} cy={props.cy} r={3} fill={COLORS.Completed} />
+                                  <text x={props.cx - 5} y={props.cy - 10} fontSize={10} fill="currentColor" className="text-muted-foreground font-medium" textAnchor="middle">
+                                    {props.value}
+                                  </text>
+                                </g>
+                              );
+                            }
+                            return <circle key={`dot-${props.index}`} cx={props.cx} cy={props.cy} r={0} />;
+                          }}
+                          isAnimationActive={false}
+                        />
                         <Tooltip labelFormatter={formatDate} contentStyle={{ fontSize: '12px', padding: '4px 8px' }} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -319,7 +411,19 @@ export function AnalyticsPage() {
                     <Tooltip labelFormatter={formatDate} contentStyle={{ backgroundColor: 'hsl(var(--background))', borderRadius: '6px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
                     <Bar name="Added" dataKey="added" fill={COLORS.Added} radius={[2, 2, 0, 0]} />
-                    <Bar name="Awaiting → Connected" dataKey="awaitingToConnected" fill={COLORS.AwaitingToConnected} radius={[2, 2, 0, 0]} />
+                    <Bar
+                      name="Awaiting → Connected"
+                      dataKey="awaitingToConnected"
+                      fill={COLORS.AwaitingToConnected}
+                      radius={[2, 2, 0, 0]}
+                      onClick={(data: any) => {
+                        if (data && data.date && data.awaitingToConnected > 0) {
+                          setDrilldownDate(data.date);
+                          setDrilldownOpen(true);
+                        }
+                      }}
+                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                    />
                     <Bar name="1st Email" dataKey="firstEmail" fill={COLORS.FirstEmail} radius={[2, 2, 0, 0]} />
                     <Bar name="1st LinkedIn" dataKey="firstLinkedIn" fill={COLORS.FirstLinkedIn} radius={[2, 2, 0, 0]} />
                     <Bar name="1st Direct (Call/Meet)" dataKey="firstCallOrMeeting" fill={COLORS.FirstCallOrMeeting} radius={[2, 2, 0, 0]} />
@@ -419,6 +523,35 @@ export function AnalyticsPage() {
             </Card>
 
           </div>
+
+          <Dialog open={drilldownOpen} onOpenChange={setDrilldownOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Awaiting → Connected ({drilldownDate ? formatDate(drilldownDate) : ''})</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                {drilldownLoading ? (
+                  <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                ) : drilldownData?.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center p-4">No contacts found for this transition on this date.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                    {drilldownData?.map((contact) => (
+                      <div key={contact.id} className="flex items-center justify-between p-3 border rounded-md">
+                        <div>
+                          <p className="font-medium text-sm">{contact.name}</p>
+                          <p className="text-xs text-muted-foreground">{contact.title}</p>
+                        </div>
+                        <Link to={`/contacts/${contact.id}`} className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs">
+                          View Profile <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

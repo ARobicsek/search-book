@@ -28,10 +28,11 @@ router.get('/overview', async (req: Request, res: Response) => {
       totalCompanies,
       pendingActionsCount,
       overdueActionsCount,
-      completedActionsInRange,
+      completedActionsCount,
       allContacts,
       allCompanies,
       allCompletedActions,
+      inDiscussionsCompaniesCount,
     ] = await Promise.all([
       prisma.contact.count(),
       prisma.company.count(),
@@ -46,6 +47,7 @@ router.get('/overview', async (req: Request, res: Response) => {
         where: { completed: true, completedDate: { gte: startDateStr, lte: endDateStr } },
         select: { completedDate: true },
       }),
+      prisma.company.count({ where: { status: 'IN_DISCUSSIONS' } }),
     ]);
 
     const dates = getDatesInRange(startDateStr, endDateStr);
@@ -94,7 +96,8 @@ router.get('/overview', async (req: Request, res: Response) => {
       companiesCount: totalCompanies,
       pendingActionsCount,
       overdueActionsCount,
-      completedActionsCount: completedActionsInRange,
+      completedActionsCount,
+      inDiscussionsCompaniesCount,
       sparklines,
     });
   } catch (error) {
@@ -283,6 +286,44 @@ router.get('/actions-metrics', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching actions metrics:', error);
     res.status(500).json({ error: 'Failed to fetch actions metrics' });
+  }
+});
+
+router.get('/drilldown/contact-transitions', async (req: Request, res: Response) => {
+  try {
+    const dateStr = req.query.date as string;
+    const oldStatus = req.query.oldStatus as string;
+    const newStatus = req.query.newStatus as string;
+
+    if (!dateStr || !oldStatus || !newStatus) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const startDate = new Date(dateStr + 'T00:00:00');
+    const endDate = new Date(dateStr + 'T23:59:59.999');
+
+    const historyRecords = await prisma.contactStatusHistory.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+        oldStatus,
+        newStatus,
+      },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            title: true,
+          }
+        }
+      }
+    });
+
+    const contacts = historyRecords.map(h => h.contact);
+    res.json(contacts);
+  } catch (error) {
+    console.error('Error fetching contact drilldown data:', error);
+    res.status(500).json({ error: 'Failed to fetch drilldown data' });
   }
 });
 

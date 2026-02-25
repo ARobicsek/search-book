@@ -3,27 +3,99 @@ import prisma from '../db';
 
 const router = Router();
 
+function getDatesInRange(start: string, end: string) {
+  const dates = [];
+  const curr = new Date(start + 'T00:00:00');
+  const last = new Date(end + 'T00:00:00');
+  while (curr <= last) {
+    dates.push(curr.toLocaleDateString('en-CA'));
+    curr.setDate(curr.getDate() + 1);
+  }
+  return dates;
+}
+
 // GET /api/analytics/overview
-// Returns summary counts
-router.get('/overview', async (_req: Request, res: Response) => {
+router.get('/overview', async (req: Request, res: Response) => {
   try {
-    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+    const today = new Date().toLocaleDateString('en-CA');
+    const startDateStr = (req.query.startDate as string) || today;
+    const endDateStr = (req.query.endDate as string) || today;
+    const startDate = new Date(startDateStr + 'T00:00:00');
+    const endDate = new Date(endDateStr + 'T23:59:59.999');
 
-    const [contactsCount, companiesCount, pendingActionsCount, overdueActionsCount] =
-      await Promise.all([
-        prisma.contact.count(),
-        prisma.company.count(),
-        prisma.action.count({ where: { completed: false } }),
-        prisma.action.count({
-          where: { completed: false, dueDate: { lt: today } },
-        }),
-      ]);
-
-    res.json({
-      contactsCount,
-      companiesCount,
+    const [
+      totalContacts,
+      totalCompanies,
       pendingActionsCount,
       overdueActionsCount,
+      completedActionsInRange,
+      allContacts,
+      allCompanies,
+      allCompletedActions,
+    ] = await Promise.all([
+      prisma.contact.count(),
+      prisma.company.count(),
+      prisma.action.count({ where: { completed: false } }),
+      prisma.action.count({ where: { completed: false, dueDate: { lt: today } } }),
+      prisma.action.count({
+        where: { completed: true, completedDate: { gte: startDateStr, lte: endDateStr } },
+      }),
+      prisma.contact.findMany({ select: { createdAt: true } }),
+      prisma.company.findMany({ select: { createdAt: true } }),
+      prisma.action.findMany({
+        where: { completed: true, completedDate: { gte: startDateStr, lte: endDateStr } },
+        select: { completedDate: true },
+      }),
+    ]);
+
+    const dates = getDatesInRange(startDateStr, endDateStr);
+
+    const sparklines = {
+      contacts: [] as { date: string; count: number }[],
+      companies: [] as { date: string; count: number }[],
+      completedActions: [] as { date: string; count: number }[],
+    };
+
+    let runningContacts = allContacts.filter((c) => c.createdAt < startDate).length;
+    let runningCompanies = allCompanies.filter((c) => c.createdAt < startDate).length;
+    let runningCompleted = 0;
+
+    const contactsByDate = new Map<string, number>();
+    for (const c of allContacts) {
+      const d = c.createdAt.toLocaleDateString('en-CA');
+      contactsByDate.set(d, (contactsByDate.get(d) || 0) + 1);
+    }
+
+    const companiesByDate = new Map<string, number>();
+    for (const c of allCompanies) {
+      const d = c.createdAt.toLocaleDateString('en-CA');
+      companiesByDate.set(d, (companiesByDate.get(d) || 0) + 1);
+    }
+
+    const completedByDate = new Map<string, number>();
+    for (const a of allCompletedActions) {
+      if (a.completedDate) {
+        completedByDate.set(a.completedDate, (completedByDate.get(a.completedDate) || 0) + 1);
+      }
+    }
+
+    for (const d of dates) {
+      runningContacts += contactsByDate.get(d) || 0;
+      runningCompanies += companiesByDate.get(d) || 0;
+      runningCompleted += completedByDate.get(d) || 0;
+
+      sparklines.contacts.push({ date: d, count: runningContacts });
+      sparklines.companies.push({ date: d, count: runningCompanies });
+      sparklines.completedActions.push({ date: d, count: runningCompleted });
+    }
+
+    res.json({
+      contactsCount: totalContacts,
+      companiesCount: totalCompanies,
+      pendingActionsCount,
+      overdueActionsCount,
+      completedActionsCount: completedActionsInRange,
+      sparklines,
     });
   } catch (error) {
     console.error('Error fetching analytics overview:', error);
@@ -31,164 +103,186 @@ router.get('/overview', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/analytics/contacts-over-time?period=week|month
-// Returns contacts created by day
-router.get('/contacts-over-time', async (req: Request, res: Response) => {
+router.get('/contacts-metrics', async (req: Request, res: Response) => {
   try {
-    const period = (req.query.period as string) || 'month';
-    const daysBack = period === 'week' ? 7 : 30;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - daysBack);
+    const startDateStr = (req.query.startDate as string);
+    const endDateStr = (req.query.endDate as string);
+    const startDate = new Date(startDateStr + 'T00:00:00');
+    const endDate = new Date(endDateStr + 'T23:59:59.999');
 
-    const contacts = await prisma.contact.findMany({
-      where: { createdAt: { gte: startDate } },
-      select: { createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    const [contacts, statusHists, convEmail, convLinkedIn, convCall] = await Promise.all([
+      prisma.contact.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        select: { createdAt: true },
+      }),
+      prisma.contactStatusHistory.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate }, oldStatus: 'AWAITING_RESPONSE', newStatus: 'CONNECTED' },
+        select: { createdAt: true },
+      }),
+      prisma.$queryRaw<{ date: string, count: number }[]>`
+        SELECT date, COUNT(DISTINCT contactId) as count
+        FROM (
+          SELECT contactId, MIN(date) as date
+          FROM Conversation
+          WHERE type = 'EMAIL'
+          GROUP BY contactId
+        ) t
+        WHERE date >= ${startDateStr} AND date <= ${endDateStr}
+        GROUP BY date
+      `,
+      prisma.$queryRaw<{ date: string, count: number }[]>`
+        SELECT date, COUNT(DISTINCT contactId) as count
+        FROM (
+          SELECT contactId, MIN(date) as date
+          FROM Conversation
+          WHERE type = 'LINKEDIN'
+          GROUP BY contactId
+        ) t
+        WHERE date >= ${startDateStr} AND date <= ${endDateStr}
+        GROUP BY date
+      `,
+      prisma.$queryRaw<{ date: string, count: number }[]>`
+        SELECT date, COUNT(DISTINCT contactId) as count
+        FROM (
+          SELECT contactId, MIN(date) as date
+          FROM Conversation
+          WHERE type IN ('CALL', 'VIDEO_CALL', 'MEETING', 'COFFEE')
+          GROUP BY contactId
+        ) t
+        WHERE date >= ${startDateStr} AND date <= ${endDateStr}
+        GROUP BY date
+      `
+    ]);
 
-    // Group by date
-    const grouped = new Map<string, number>();
+    const dates = getDatesInRange(startDateStr, endDateStr);
+    const result = dates.map(date => ({
+      date,
+      added: 0,
+      awaitingToConnected: 0,
+      firstEmail: 0,
+      firstLinkedIn: 0,
+      firstCallOrMeeting: 0,
+    }));
+
+    const resultByDate = new Map(result.map(r => [r.date, r]));
+
     for (const c of contacts) {
-      const date = c.createdAt.toLocaleDateString('en-CA');
-      grouped.set(date, (grouped.get(date) || 0) + 1);
+      const d = c.createdAt.toLocaleDateString('en-CA');
+      if (resultByDate.has(d)) resultByDate.get(d)!.added++;
     }
-
-    // Fill in missing dates
-    const result = [];
-    for (let i = daysBack; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const date = d.toLocaleDateString('en-CA');
-      result.push({ date, count: grouped.get(date) || 0 });
+    for (const h of statusHists) {
+      const d = h.createdAt.toLocaleDateString('en-CA');
+      if (resultByDate.has(d)) resultByDate.get(d)!.awaitingToConnected++;
+    }
+    for (const c of convEmail) {
+      if (resultByDate.has(c.date)) resultByDate.get(c.date)!.firstEmail += Number(c.count);
+    }
+    for (const c of convLinkedIn) {
+      if (resultByDate.has(c.date)) resultByDate.get(c.date)!.firstLinkedIn += Number(c.count);
+    }
+    for (const c of convCall) {
+      if (resultByDate.has(c.date)) resultByDate.get(c.date)!.firstCallOrMeeting += Number(c.count);
     }
 
     res.json(result);
   } catch (error) {
-    console.error('Error fetching contacts over time:', error);
-    res.status(500).json({ error: 'Failed to fetch contacts over time' });
+    console.error('Error fetching contacts metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch contacts metrics' });
   }
 });
 
-// GET /api/analytics/conversations-over-time?period=week|month
-// Returns conversations logged by day
-router.get('/conversations-over-time', async (req: Request, res: Response) => {
+router.get('/conversations-metrics', async (req: Request, res: Response) => {
   try {
-    const period = (req.query.period as string) || 'month';
-    const daysBack = period === 'week' ? 7 : 30;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - daysBack);
-    const startDateStr = startDate.toLocaleDateString('en-CA');
+    const startDateStr = (req.query.startDate as string);
+    const endDateStr = (req.query.endDate as string);
 
     const conversations = await prisma.conversation.findMany({
-      where: { date: { gte: startDateStr } },
-      select: { date: true },
-      orderBy: { date: 'asc' },
+      where: { date: { gte: startDateStr, lte: endDateStr } },
+      select: { date: true, type: true },
     });
 
-    // Group by date
-    const grouped = new Map<string, number>();
+    const dates = getDatesInRange(startDateStr, endDateStr);
+    const result = dates.map(date => ({ date, EMAIL: 0, CALL: 0, VIDEO_CALL: 0, MEETING: 0, COFFEE: 0, LINKEDIN: 0, EVENT: 0, OTHER: 0 }));
+    const resultByDate = new Map(result.map(r => [r.date, r]));
+
     for (const c of conversations) {
-      grouped.set(c.date, (grouped.get(c.date) || 0) + 1);
-    }
-
-    // Fill in missing dates
-    const result = [];
-    for (let i = daysBack; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const date = d.toLocaleDateString('en-CA');
-      result.push({ date, count: grouped.get(date) || 0 });
-    }
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching conversations over time:', error);
-    res.status(500).json({ error: 'Failed to fetch conversations over time' });
-  }
-});
-
-// GET /api/analytics/by-ecosystem
-// Returns contact count by ecosystem
-router.get('/by-ecosystem', async (_req: Request, res: Response) => {
-  try {
-    const grouped = await prisma.contact.groupBy({
-      by: ['ecosystem'],
-      _count: true,
-    });
-
-    const result = grouped.map((g) => ({
-      ecosystem: g.ecosystem,
-      count: g._count,
-    }));
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching contacts by ecosystem:', error);
-    res.status(500).json({ error: 'Failed to fetch contacts by ecosystem' });
-  }
-});
-
-// GET /api/analytics/by-status
-// Returns contact count by status
-router.get('/by-status', async (_req: Request, res: Response) => {
-  try {
-    const grouped = await prisma.contact.groupBy({
-      by: ['status'],
-      _count: true,
-    });
-
-    const result = grouped.map((g) => ({
-      status: g.status,
-      count: g._count,
-    }));
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching contacts by status:', error);
-    res.status(500).json({ error: 'Failed to fetch contacts by status' });
-  }
-});
-
-// GET /api/analytics/actions-completed?period=week|month
-// Returns completed actions over time
-router.get('/actions-completed', async (req: Request, res: Response) => {
-  try {
-    const period = (req.query.period as string) || 'month';
-    const daysBack = period === 'week' ? 7 : 30;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - daysBack);
-    const startDateStr = startDate.toLocaleDateString('en-CA');
-
-    const actions = await prisma.action.findMany({
-      where: {
-        completed: true,
-        completedDate: { gte: startDateStr },
-      },
-      select: { completedDate: true },
-      orderBy: { completedDate: 'asc' },
-    });
-
-    // Group by date
-    const grouped = new Map<string, number>();
-    for (const a of actions) {
-      if (a.completedDate) {
-        grouped.set(a.completedDate, (grouped.get(a.completedDate) || 0) + 1);
+      if (resultByDate.has(c.date)) {
+        const row = resultByDate.get(c.date)!;
+        let type = c.type as keyof typeof row;
+        if (!(type in row)) type = 'OTHER' as keyof typeof row;
+        (row[type] as number)++;
       }
     }
 
-    // Fill in missing dates
-    const result = [];
-    for (let i = daysBack; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const date = d.toLocaleDateString('en-CA');
-      result.push({ date, count: grouped.get(date) || 0 });
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching conversations metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations metrics' });
+  }
+});
+
+router.get('/companies-metrics', async (req: Request, res: Response) => {
+  try {
+    const startDateStr = (req.query.startDate as string);
+    const endDateStr = (req.query.endDate as string);
+    const startDate = new Date(startDateStr + 'T00:00:00');
+    const endDate = new Date(endDateStr + 'T23:59:59.999');
+
+    const [companies, statusHists] = await Promise.all([
+      prisma.company.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        select: { createdAt: true },
+      }),
+      prisma.companyStatusHistory.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate }, newStatus: 'IN_DISCUSSIONS' },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    const dates = getDatesInRange(startDateStr, endDateStr);
+    const result = dates.map(date => ({ date, added: 0, toInDiscussions: 0 }));
+    const resultByDate = new Map(result.map(r => [r.date, r]));
+
+    for (const c of companies) {
+      const d = c.createdAt.toLocaleDateString('en-CA');
+      if (resultByDate.has(d)) resultByDate.get(d)!.added++;
+    }
+    for (const h of statusHists) {
+      const d = h.createdAt.toLocaleDateString('en-CA');
+      if (resultByDate.has(d)) resultByDate.get(d)!.toInDiscussions++;
     }
 
     res.json(result);
   } catch (error) {
-    console.error('Error fetching actions completed:', error);
-    res.status(500).json({ error: 'Failed to fetch actions completed' });
+    console.error('Error fetching companies metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch companies metrics' });
+  }
+});
+
+router.get('/actions-metrics', async (req: Request, res: Response) => {
+  try {
+    const startDateStr = (req.query.startDate as string);
+    const endDateStr = (req.query.endDate as string);
+
+    const actions = await prisma.action.findMany({
+      where: { completed: true, completedDate: { gte: startDateStr, lte: endDateStr } },
+      select: { completedDate: true },
+    });
+
+    const dates = getDatesInRange(startDateStr, endDateStr);
+    const result = dates.map(date => ({ date, completed: 0 }));
+    const resultByDate = new Map(result.map(r => [r.date, r]));
+
+    for (const a of actions) {
+      if (a.completedDate && resultByDate.has(a.completedDate)) {
+        resultByDate.get(a.completedDate)!.completed++;
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching actions metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch actions metrics' });
   }
 });
 

@@ -56,6 +56,16 @@ router.post('/', async (req: Request, res: Response) => {
     const company = await prisma.company.create({
       data: { name: name.trim(), ...rest },
     });
+
+    // Record initial status in history
+    await prisma.companyStatusHistory.create({
+      data: {
+        companyId: company.id,
+        oldStatus: null,
+        newStatus: company.status,
+      }
+    });
+
     res.status(201).json(company);
   } catch (error) {
     console.error('Error creating company:', error);
@@ -83,6 +93,18 @@ router.put('/:id', async (req: Request, res: Response) => {
       where: { id },
       data: req.body,
     });
+
+    // Record status change if it changed
+    if (req.body.status && req.body.status !== existing.status) {
+      await prisma.companyStatusHistory.create({
+        data: {
+          companyId: company.id,
+          oldStatus: existing.status,
+          newStatus: company.status,
+        }
+      });
+    }
+
     res.json(company);
   } catch (error) {
     console.error('Error updating company:', error);

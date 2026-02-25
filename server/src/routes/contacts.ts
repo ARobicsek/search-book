@@ -260,6 +260,16 @@ router.post('/', async (req: Request, res: Response) => {
       data: { name: (name as string).trim(), ...rest } as any,
       include: { company: { select: { id: true, name: true } } },
     });
+
+    // Record initial status in history
+    await prisma.contactStatusHistory.create({
+      data: {
+        contactId: contact.id,
+        oldStatus: null,
+        newStatus: contact.status,
+      }
+    });
+
     res.status(201).json(contact);
   } catch (error) {
     console.error('Error creating contact:', error);
@@ -289,6 +299,18 @@ router.put('/:id', async (req: Request, res: Response) => {
       data,
       include: { company: { select: { id: true, name: true } } },
     });
+
+    // Record status change if it changed
+    if (data.status && data.status !== existing.status) {
+      await prisma.contactStatusHistory.create({
+        data: {
+          contactId: contact.id,
+          oldStatus: existing.status,
+          newStatus: contact.status,
+        }
+      });
+    }
+
     res.json(contact);
   } catch (error) {
     console.error('Error updating contact:', error);

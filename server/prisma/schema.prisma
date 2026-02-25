@@ -41,6 +41,7 @@ model Contact {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  statusHistory            ContactStatusHistory[]
   tags                     ContactTag[]
   conversations            Conversation[]
   actions                  Action[]
@@ -68,6 +69,7 @@ model Company {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  statusHistory            CompanyStatusHistory[]
   contacts                 Contact[]
   tags                     CompanyTag[]
   actions                  Action[]
@@ -90,6 +92,26 @@ model CompanyActivity {
   title     String   // Brief summary, e.g. "Applied to Senior PM role"
   notes     String?  // Optional detailed notes (supports markdown)
   createdAt DateTime @default(now())
+}
+
+// ─── Status History ─────────────────────────────────────────
+
+model ContactStatusHistory {
+  id          Int      @id @default(autoincrement())
+  contactId   Int
+  contact     Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  oldStatus   String?
+  newStatus   String
+  createdAt   DateTime @default(now())
+}
+
+model CompanyStatusHistory {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  oldStatus   String?
+  newStatus   String
+  createdAt   DateTime @default(now())
 }
 
 // ─── Employment History ─────────────────────────────────────

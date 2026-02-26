@@ -246,7 +246,7 @@ export function AnalyticsPage() {
       ) : (
         <>
           {/* Overview Cards */}
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Contacts</CardTitle>
@@ -352,10 +352,14 @@ export function AnalyticsPage() {
             <Card className="flex flex-col justify-between">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Overdue Actions</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-destructive" />
+                {overview?.overdueActionsCount === 0 ? (
+                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                )}
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-destructive">
+                <div className={`text-2xl font-bold ${overview?.overdueActionsCount === 0 ? 'text-emerald-500' : 'text-destructive'}`}>
                   {overview?.overdueActionsCount ?? 0}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">Across all time</div>
@@ -561,7 +565,14 @@ export function AnalyticsPage() {
                             {drilldownConfig?.type === 'conversations' ? (
                               <>
                                 <p className="font-medium text-sm">
-                                  {item.contactsDiscussed?.map((cd: any) => cd.contact.name).join(', ') || 'No Contacts'}
+                                  {(() => {
+                                    const names = new Set<string>();
+                                    if (item.contact?.name) names.add(item.contact.name);
+                                    item.contactsDiscussed?.forEach((cd: any) => {
+                                      if (cd.contact?.name) names.add(cd.contact.name);
+                                    });
+                                    return Array.from(names).join(', ') || 'No Contacts';
+                                  })()}
                                 </p>
                                 <p className="text-xs text-muted-foreground capitalize">{String(item.type).replace('_', ' ').toLowerCase()}</p>
                               </>

@@ -407,6 +407,7 @@ router.get('/drilldown/conversations', async (req: Request, res: Response) => {
     const conversations = await prisma.conversation.findMany({
       where: { date: dateStr, type },
       include: {
+        contact: { select: { name: true } },
         contactsDiscussed: {
           include: { contact: { select: { name: true } } }
         }

@@ -68,17 +68,25 @@ const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) =
   const search = filterValue.toLowerCase()
   const action = row.original
 
-  // Search across title, description, contact names, company names
+  // Search across title, description, contact names, company names, and contact's companies
   const contactNames = action.actionContacts?.map((ac) => ac.contact.name) ?? []
   if (action.contact?.name) contactNames.push(action.contact.name)
   const companyNames = action.actionCompanies?.map((ac) => ac.company.name) ?? []
   if (action.company?.name) companyNames.push(action.company.name)
+
+  const contactCompanyNames = action.actionContacts?.flatMap((ac) => [
+    ac.contact.company?.name,
+    ac.contact.companyName,
+  ].filter(Boolean) as string[]) ?? []
+  if (action.contact?.company?.name) contactCompanyNames.push(action.contact.company.name)
+  if (action.contact?.companyName) contactCompanyNames.push(action.contact.companyName)
 
   const searchFields = [
     action.title,
     action.description,
     ...contactNames,
     ...companyNames,
+    ...contactCompanyNames,
   ]
 
   return searchFields.some((field) => field?.toLowerCase().includes(search))
@@ -197,6 +205,14 @@ export function ActionListPage() {
     },
     {
       accessorKey: 'dueDate',
+      sortingFn: (rowA, rowB, columnId) => {
+        const valA = rowA.getValue(columnId) as string | null
+        const valB = rowB.getValue(columnId) as string | null
+        if (!valA && !valB) return 0
+        if (!valA) return 1
+        if (!valB) return -1
+        return valA.localeCompare(valB)
+      },
       header: ({ column }) => (
         <Button
           variant="ghost"

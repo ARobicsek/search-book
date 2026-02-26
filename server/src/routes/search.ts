@@ -59,6 +59,14 @@ router.get('/', async (req: Request, res: Response) => {
         OR: [
           { title: { contains: searchTerm } },
           { description: { contains: searchTerm } },
+          { contact: { name: { contains: searchTerm } } },
+          { actionContacts: { some: { contact: { name: { contains: searchTerm } } } } },
+          { company: { name: { contains: searchTerm } } },
+          { actionCompanies: { some: { company: { name: { contains: searchTerm } } } } },
+          { contact: { company: { name: { contains: searchTerm } } } },
+          { contact: { companyName: { contains: searchTerm } } },
+          { actionContacts: { some: { contact: { company: { name: { contains: searchTerm } } } } } },
+          { actionContacts: { some: { contact: { companyName: { contains: searchTerm } } } } },
         ],
       },
       include: {

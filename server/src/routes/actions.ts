@@ -4,11 +4,11 @@ import prisma from '../db';
 const router = Router();
 
 const actionIncludes = {
-  contact: { select: { id: true, name: true } },
+  contact: { select: { id: true, name: true, company: { select: { name: true } }, companyName: true } },
   company: { select: { id: true, name: true } },
   conversation: { select: { id: true, summary: true } },
   actionContacts: {
-    include: { contact: { select: { id: true, name: true } } },
+    include: { contact: { select: { id: true, name: true, company: { select: { name: true } }, companyName: true } } },
   },
   actionCompanies: {
     include: { company: { select: { id: true, name: true } } },
@@ -72,6 +72,15 @@ router.get('/', async (req: Request, res: Response) => {
       include: actionIncludes,
       orderBy,
     });
+
+    // For dueDate asc, SQLite puts nulls first. We want nulls last.
+    if (sortBy !== 'completedDate') {
+      const withDate = actions.filter(a => a.dueDate !== null);
+      const withoutDate = actions.filter(a => a.dueDate === null);
+      res.json([...withDate, ...withoutDate]);
+      return;
+    }
+
     res.json(actions);
   } catch (error) {
     console.error('Error fetching actions:', error);

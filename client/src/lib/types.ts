@@ -107,7 +107,7 @@ export interface Action {
   completed: boolean;
   completedDate: string | null;
   contactId: number | null;
-  contact: { id: number; name: string } | null;
+  contact: { id: number; name: string; company?: { name: string } | null; companyName?: string | null } | null;
   companyId: number | null;
   company: { id: number; name: string } | null;
   conversationId: number | null;
@@ -118,7 +118,7 @@ export interface Action {
   recurringEndDate: string | null;
   createdAt: string;
   updatedAt: string;
-  actionContacts?: { contact: { id: number; name: string } }[];
+  actionContacts?: { contact: { id: number; name: string; company?: { name: string } | null; companyName?: string | null } }[];
   actionCompanies?: { company: { id: number; name: string } }[];
 }
 

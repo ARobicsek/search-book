@@ -9,12 +9,10 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 ---
 
 ## What Was Completed Last Session
-
-### Analytics Page Enhancements
-1. **Interactive Drill-down Charts:** Added `/drilldown/contacts`, `/drilldown/conversations`, `/drilldown/companies`, and `/drilldown/actions` REST endpoints to the analytics routes. Wired up `onClick` handlers to all Recharts `<Bar>` components to trigger a detailed drill-down dialog displaying the exact underlying data. For conversations, it shows the name of the person, the type of conversation, and the summary.
-2. **Sparkline Visibility Fix:** Added internal exact pixel `margin` constraints to the custom sparkline `LineChart` wrappers to prevent the first-point labels from clipping on the outer SVG bounds.
-3. **Overview Cards Layout:** Squeezed the grid layout gap sizing for the top row cards from `md:grid-cols-5` with `gap-4` to `xl:grid-cols-6` with `gap-2` to guarantee all 6 metric cards fit cleanly onto a single horizontal row.
-4. **Overdue Actions Color:** Programmed the Overdue Actions metric card to dynamically turn emerald green when the count is exactly 0.
+### Action Search & Conversation Card Fixes
+1. **Global and Local Action Search**: Modified backend API and frontend `globalFilterFn` to include target company names linked to actions via associated contacts.
+2. **Action Sorting Improvement**: Updated ascending `dueDate` sort logic dynamically server-side and client-side to ensure actions lacking a scheduled date appear at the bottom.
+3. **Conversation Action Link Bubbling**: Modified Action titles inside Conversation cards to use React Router `Link` tags with `e.stopPropagation()` to bypass unintended edit modal pop-ups.
 
 ---
 

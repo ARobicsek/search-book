@@ -10,11 +10,11 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 
 ## What Was Completed Last Session
 
-### Analytics Page Refinements
-1. **Sparkline Tooltips & Labels** — Fixed the Recharts "Invalid Date" bug by binding a hidden XAxis, and manually painted custom `dot` SVG markers on the first zero-index point of all sparklines to firmly establish Y-axis context.
-2. **Company Discussions Card** — Deployed a new top-level summary card tracking the exact amount of Companies currently in the `IN_DISCUSSIONS` stage, piping data through an injected `inDiscussionsCompaniesCount` prop via `prisma.count`.
-3. **BarChart Drill-down Dialog** — Tapped into Recharts' `onClick` Bar handler to intercept date arrays, and built a brand new API pipeline (`/analytics/drilldown/contact-transitions`) to stream `ContactStatusHistory` JOINs resolving directly into an interactive frontend Dialog showing exactly who converted on a selected day.
-4. **Vercel Build Fixes** — Overrode native `<Bar>` strict-typing to cast custom payload arguments as `any` and migrated stray `wouter` routing components fully to Standard `react-router-dom` conventions to clear deployment blockers.
+### Analytics Page Enhancements
+1. **Interactive Drill-down Charts:** Added `/drilldown/contacts`, `/drilldown/conversations`, `/drilldown/companies`, and `/drilldown/actions` REST endpoints to the analytics routes. Wired up `onClick` handlers to all Recharts `<Bar>` components to trigger a detailed drill-down dialog displaying the exact underlying data. For conversations, it shows the name of the person, the type of conversation, and the summary.
+2. **Sparkline Visibility Fix:** Added internal exact pixel `margin` constraints to the custom sparkline `LineChart` wrappers to prevent the first-point labels from clipping on the outer SVG bounds.
+3. **Overview Cards Layout:** Squeezed the grid layout gap sizing for the top row cards from `md:grid-cols-5` with `gap-4` to `xl:grid-cols-6` with `gap-2` to guarantee all 6 metric cards fit cleanly onto a single horizontal row.
+4. **Overdue Actions Color:** Programmed the Overdue Actions metric card to dynamically turn emerald green when the count is exactly 0.
 
 ---
 
@@ -36,9 +36,7 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-1. please set up the bar charts in the Analytics page so that ALL bars and bar segments are clickable and will open a dialog showing the underlying data that makes up that bar or bar segment, just like the 'awaiting --> connected' bar chart drill-down dialog. For conversations, please show the name of the person, the type of conversation and the data in the conversation's 'summary' field.
-2. the label over the first point of the sparklines is not visible. I think it's cut off on the left side of the card.
-3. please make the cards in the first row narrower so that they fit on one row.
+(Pending user input to define the items to work on next.)
 
 ---
 

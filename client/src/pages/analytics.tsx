@@ -112,7 +112,12 @@ export function AnalyticsPage() {
 
   // Drilldown state
   const [drilldownOpen, setDrilldownOpen] = useState(false)
-  const [drilldownDate, setDrilldownDate] = useState<string | null>(null)
+  const [drilldownConfig, setDrilldownConfig] = useState<{
+    type: 'contact-transitions' | 'contacts' | 'conversations' | 'companies' | 'actions',
+    date: string,
+    metric: string,
+    title: string
+  } | null>(null)
   const [drilldownData, setDrilldownData] = useState<any[] | null>(null)
   const [drilldownLoading, setDrilldownLoading] = useState(false)
 
@@ -155,16 +160,29 @@ export function AnalyticsPage() {
   }, [dates])
 
   useEffect(() => {
-    if (drilldownOpen && drilldownDate) {
+    if (drilldownOpen && drilldownConfig) {
       setDrilldownLoading(true)
-      api.get<any[]>(`/analytics/drilldown/contact-transitions?date=${drilldownDate}&oldStatus=AWAITING_RESPONSE&newStatus=CONNECTED`)
+      let endpoint = '';
+      if (drilldownConfig.type === 'contact-transitions') {
+        endpoint = `/analytics/drilldown/contact-transitions?date=${drilldownConfig.date}&oldStatus=AWAITING_RESPONSE&newStatus=CONNECTED`;
+      } else if (drilldownConfig.type === 'contacts') {
+        endpoint = `/analytics/drilldown/contacts?date=${drilldownConfig.date}&metric=${drilldownConfig.metric}`;
+      } else if (drilldownConfig.type === 'conversations') {
+        endpoint = `/analytics/drilldown/conversations?date=${drilldownConfig.date}&type=${drilldownConfig.metric}`;
+      } else if (drilldownConfig.type === 'companies') {
+        endpoint = `/analytics/drilldown/companies?date=${drilldownConfig.date}&metric=${drilldownConfig.metric}`;
+      } else if (drilldownConfig.type === 'actions') {
+        endpoint = `/analytics/drilldown/actions?date=${drilldownConfig.date}`;
+      }
+
+      api.get<any[]>(endpoint)
         .then(data => setDrilldownData(data))
         .catch(err => toast.error('Failed to load drill-down data: ' + err.message))
         .finally(() => setDrilldownLoading(false))
     } else {
       setDrilldownData(null)
     }
-  }, [drilldownOpen, drilldownDate])
+  }, [drilldownOpen, drilldownConfig])
 
   // Compute totals for Contact metrics
   const contactTotals = contactsMetrics.reduce((acc, curr) => ({
@@ -228,7 +246,7 @@ export function AnalyticsPage() {
       ) : (
         <>
           {/* Overview Cards */}
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Contacts</CardTitle>
@@ -239,7 +257,7 @@ export function AnalyticsPage() {
                 {overview?.sparklines.contacts && overview.sparklines.contacts.length > 0 && (
                   <div className="h-[40px] mt-3 -mx-2">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={overview.sparklines.contacts}>
+                      <LineChart data={overview.sparklines.contacts} margin={{ top: 15, right: 5, left: 15, bottom: 0 }}>
                         <XAxis dataKey="date" hide />
                         <Line
                           type="monotone"
@@ -279,7 +297,7 @@ export function AnalyticsPage() {
                 {overview?.sparklines.companies && overview.sparklines.companies.length > 0 && (
                   <div className="h-[40px] mt-3 -mx-2">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={overview.sparklines.companies}>
+                      <LineChart data={overview.sparklines.companies} margin={{ top: 15, right: 5, left: 15, bottom: 0 }}>
                         <XAxis dataKey="date" hide />
                         <Line
                           type="monotone"
@@ -354,7 +372,7 @@ export function AnalyticsPage() {
                 {overview?.sparklines.completedActions && overview.sparklines.completedActions.length > 0 && (
                   <div className="h-[40px] mt-3 -mx-2">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={overview.sparklines.completedActions}>
+                      <LineChart data={overview.sparklines.completedActions} margin={{ top: 15, right: 5, left: 15, bottom: 0 }}>
                         <XAxis dataKey="date" hide />
                         <Line
                           type="monotone"
@@ -410,7 +428,7 @@ export function AnalyticsPage() {
                     <YAxis allowDecimals={false} className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                     <Tooltip labelFormatter={formatDate} contentStyle={{ backgroundColor: 'hsl(var(--background))', borderRadius: '6px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar name="Added" dataKey="added" fill={COLORS.Added} radius={[2, 2, 0, 0]} />
+                    <Bar name="Added" dataKey="added" fill={COLORS.Added} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.added > 0) { setDrilldownConfig({ type: 'contacts', metric: 'added', date: d.date, title: 'Contacts Added' }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
                     <Bar
                       name="Awaiting → Connected"
                       dataKey="awaitingToConnected"
@@ -418,15 +436,15 @@ export function AnalyticsPage() {
                       radius={[2, 2, 0, 0]}
                       onClick={(data: any) => {
                         if (data && data.date && data.awaitingToConnected > 0) {
-                          setDrilldownDate(data.date);
+                          setDrilldownConfig({ type: 'contact-transitions', metric: 'awaitingToConnected', date: data.date, title: 'Awaiting → Connected' });
                           setDrilldownOpen(true);
                         }
                       }}
                       className="cursor-pointer hover:opacity-80 transition-opacity"
                     />
-                    <Bar name="1st Email" dataKey="firstEmail" fill={COLORS.FirstEmail} radius={[2, 2, 0, 0]} />
-                    <Bar name="1st LinkedIn" dataKey="firstLinkedIn" fill={COLORS.FirstLinkedIn} radius={[2, 2, 0, 0]} />
-                    <Bar name="1st Direct (Call/Meet)" dataKey="firstCallOrMeeting" fill={COLORS.FirstCallOrMeeting} radius={[2, 2, 0, 0]} />
+                    <Bar name="1st Email" dataKey="firstEmail" fill={COLORS.FirstEmail} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.firstEmail > 0) { setDrilldownConfig({ type: 'contacts', metric: 'firstEmail', date: d.date, title: '1st Email' }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
+                    <Bar name="1st LinkedIn" dataKey="firstLinkedIn" fill={COLORS.FirstLinkedIn} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.firstLinkedIn > 0) { setDrilldownConfig({ type: 'contacts', metric: 'firstLinkedIn', date: d.date, title: '1st LinkedIn' }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
+                    <Bar name="1st Direct (Call/Meet)" dataKey="firstCallOrMeeting" fill={COLORS.FirstCallOrMeeting} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.firstCallOrMeeting > 0) { setDrilldownConfig({ type: 'contacts', metric: 'firstCallOrMeeting', date: d.date, title: '1st Direct (Call/Meet)' }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -463,7 +481,7 @@ export function AnalyticsPage() {
                     <Tooltip labelFormatter={formatDate} contentStyle={{ backgroundColor: 'hsl(var(--background))', borderRadius: '6px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
                     {CONVERSATION_TYPE_OPTIONS.filter(opt => activeConvTypes[opt.value]).map(opt => (
-                      <Bar key={opt.value} name={opt.label} dataKey={opt.value} stackId="a" fill={CONV_COLORS[opt.value]} />
+                      <Bar key={opt.value} name={opt.label} dataKey={opt.value} stackId="a" fill={CONV_COLORS[opt.value]} onClick={(d: any) => { if (d?.date && d[opt.value] > 0) { setDrilldownConfig({ type: 'conversations', metric: opt.value, date: d.date, title: opt.label }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
@@ -490,8 +508,8 @@ export function AnalyticsPage() {
                     <YAxis allowDecimals={false} className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                     <Tooltip labelFormatter={formatDate} contentStyle={{ backgroundColor: 'hsl(var(--background))', borderRadius: '6px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar name="Added" dataKey="added" fill={COLORS.Added} radius={[2, 2, 0, 0]} />
-                    <Bar name="To 'In Discussions'" dataKey="toInDiscussions" fill={COLORS.ToInDiscussions} radius={[2, 2, 0, 0]} />
+                    <Bar name="Added" dataKey="added" fill={COLORS.Added} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.added > 0) { setDrilldownConfig({ type: 'companies', metric: 'added', date: d.date, title: 'Companies Added' }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
+                    <Bar name="To 'In Discussions'" dataKey="toInDiscussions" fill={COLORS.ToInDiscussions} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.toInDiscussions > 0) { setDrilldownConfig({ type: 'companies', metric: 'toInDiscussions', date: d.date, title: "Companies Moved to 'In Discussions'" }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -516,7 +534,7 @@ export function AnalyticsPage() {
                     <YAxis allowDecimals={false} className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                     <Tooltip labelFormatter={formatDate} contentStyle={{ backgroundColor: 'hsl(var(--background))', borderRadius: '6px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar name="Completed Actions" dataKey="completed" fill={COLORS.Completed} radius={[2, 2, 0, 0]} />
+                    <Bar name="Completed Actions" dataKey="completed" fill={COLORS.Completed} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.completed > 0) { setDrilldownConfig({ type: 'actions', metric: 'completed', date: d.date, title: 'Completed Actions' }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -527,24 +545,54 @@ export function AnalyticsPage() {
           <Dialog open={drilldownOpen} onOpenChange={setDrilldownOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Awaiting → Connected ({drilldownDate ? formatDate(drilldownDate) : ''})</DialogTitle>
+                <DialogTitle>{drilldownConfig?.title} ({drilldownConfig?.date ? formatDate(drilldownConfig.date) : ''})</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 {drilldownLoading ? (
                   <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
                 ) : drilldownData?.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center p-4">No contacts found for this transition on this date.</p>
+                  <p className="text-sm text-muted-foreground text-center p-4">No records found for this metric on this date.</p>
                 ) : (
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                    {drilldownData?.map((contact) => (
-                      <div key={contact.id} className="flex items-center justify-between p-3 border rounded-md">
-                        <div>
-                          <p className="font-medium text-sm">{contact.name}</p>
-                          <p className="text-xs text-muted-foreground">{contact.title}</p>
+                    {drilldownData?.map((item) => (
+                      <div key={item.id} className="flex flex-col p-3 border rounded-md gap-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            {drilldownConfig?.type === 'conversations' ? (
+                              <>
+                                <p className="font-medium text-sm">
+                                  {item.contactsDiscussed?.map((cd: any) => cd.contact.name).join(', ') || 'No Contacts'}
+                                </p>
+                                <p className="text-xs text-muted-foreground capitalize">{String(item.type).replace('_', ' ').toLowerCase()}</p>
+                              </>
+                            ) : drilldownConfig?.type === 'actions' ? (
+                              <>
+                                <p className="font-medium text-sm">{item.title}</p>
+                                <p className="text-xs text-muted-foreground capitalize">{String(item.priority).toLowerCase()} Priority</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-medium text-sm">{item.name}</p>
+                                <p className="text-xs text-muted-foreground">{item.title || item.website || (item.status ? String(item.status).replace('_', ' ') : '')}</p>
+                              </>
+                            )}
+                          </div>
+                          {(drilldownConfig?.type === 'contacts' || drilldownConfig?.type === 'contact-transitions') && (
+                            <Link to={`/contacts/${item.id}`} className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs shrink-0">
+                              Profile <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          )}
+                          {drilldownConfig?.type === 'companies' && (
+                            <Link to={`/companies/${item.id}`} className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs shrink-0">
+                              Company <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          )}
                         </div>
-                        <Link to={`/contacts/${contact.id}`} className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs">
-                          View Profile <ExternalLink className="h-3 w-3" />
-                        </Link>
+                        {drilldownConfig?.type === 'conversations' && item.summary && (
+                          <div className="text-sm text-foreground bg-muted p-2 rounded-md">
+                            {item.summary}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

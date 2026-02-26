@@ -327,4 +327,158 @@ router.get('/drilldown/contact-transitions', async (req: Request, res: Response)
   }
 });
 
+router.get('/drilldown/contacts', async (req: Request, res: Response) => {
+  try {
+    const dateStr = req.query.date as string;
+    const metric = req.query.metric as string;
+
+    if (!dateStr || !metric) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const startDate = new Date(dateStr + 'T00:00:00');
+    const endDate = new Date(dateStr + 'T23:59:59.999');
+
+    if (metric === 'added') {
+      const contacts = await prisma.contact.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        select: { id: true, name: true, title: true }
+      });
+      return res.json(contacts);
+    }
+
+    let contacts;
+    if (metric === 'firstEmail') {
+      contacts = await prisma.$queryRaw<any[]>`
+        SELECT c.id, c.name, c.title
+        FROM Contact c
+        JOIN (
+          SELECT contactId, MIN(date) as first_date
+          FROM Conversation
+          WHERE type = 'EMAIL'
+          GROUP BY contactId
+        ) t ON c.id = t.contactId
+        WHERE t.first_date = ${dateStr}
+      `;
+    } else if (metric === 'firstLinkedIn') {
+      contacts = await prisma.$queryRaw<any[]>`
+        SELECT c.id, c.name, c.title
+        FROM Contact c
+        JOIN (
+          SELECT contactId, MIN(date) as first_date
+          FROM Conversation
+          WHERE type = 'LINKEDIN'
+          GROUP BY contactId
+        ) t ON c.id = t.contactId
+        WHERE t.first_date = ${dateStr}
+      `;
+    } else if (metric === 'firstCallOrMeeting') {
+      contacts = await prisma.$queryRaw<any[]>`
+        SELECT c.id, c.name, c.title
+        FROM Contact c
+        JOIN (
+          SELECT contactId, MIN(date) as first_date
+          FROM Conversation
+          WHERE type IN ('CALL', 'VIDEO_CALL', 'MEETING', 'COFFEE')
+          GROUP BY contactId
+        ) t ON c.id = t.contactId
+        WHERE t.first_date = ${dateStr}
+      `;
+    } else {
+      return res.status(400).json({ error: 'Invalid metric' });
+    }
+
+    res.json(contacts);
+  } catch (error) {
+    console.error('Error fetching contacts drilldown data:', error);
+    res.status(500).json({ error: 'Failed to fetch contacts drilldown data' });
+  }
+});
+
+router.get('/drilldown/conversations', async (req: Request, res: Response) => {
+  try {
+    const dateStr = req.query.date as string;
+    const type = req.query.type as string;
+
+    if (!dateStr || !type) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const conversations = await prisma.conversation.findMany({
+      where: { date: dateStr, type },
+      include: {
+        contactsDiscussed: {
+          include: { contact: { select: { name: true } } }
+        }
+      }
+    });
+
+    res.json(conversations);
+  } catch (error) {
+    console.error('Error fetching conversations drilldown data:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations drilldown data' });
+  }
+});
+
+router.get('/drilldown/companies', async (req: Request, res: Response) => {
+  try {
+    const dateStr = req.query.date as string;
+    const metric = req.query.metric as string;
+
+    if (!dateStr || !metric) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const startDate = new Date(dateStr + 'T00:00:00');
+    const endDate = new Date(dateStr + 'T23:59:59.999');
+
+    if (metric === 'added') {
+      const companies = await prisma.company.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        select: { id: true, name: true, website: true, status: true }
+      });
+      return res.json(companies);
+    } else if (metric === 'toInDiscussions') {
+      const historyRecords = await prisma.companyStatusHistory.findMany({
+        where: {
+          createdAt: { gte: startDate, lte: endDate },
+          newStatus: 'IN_DISCUSSIONS',
+        },
+        include: {
+          company: {
+            select: { id: true, name: true, website: true, status: true }
+          }
+        }
+      });
+      const companies = historyRecords.map(h => h.company);
+      return res.json(companies);
+    }
+
+    res.status(400).json({ error: 'Invalid metric' });
+  } catch (error) {
+    console.error('Error fetching companies drilldown data:', error);
+    res.status(500).json({ error: 'Failed to fetch companies drilldown data' });
+  }
+});
+
+router.get('/drilldown/actions', async (req: Request, res: Response) => {
+  try {
+    const dateStr = req.query.date as string;
+
+    if (!dateStr) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const actions = await prisma.action.findMany({
+      where: { completed: true, completedDate: dateStr },
+      select: { id: true, title: true, priority: true }
+    });
+
+    res.json(actions);
+  } catch (error) {
+    console.error('Error fetching actions drilldown data:', error);
+    res.status(500).json({ error: 'Failed to fetch actions drilldown data' });
+  }
+});
+
 export default router;

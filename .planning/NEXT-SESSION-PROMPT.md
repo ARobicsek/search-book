@@ -36,7 +36,9 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-1. **Bug Squashing** — The next session will be dedicated exclusively to knocking out any remaining bugs in the application.
+1. please set up the bar charts in the Analytics page so that ALL bars and bar segments are clickable and will open a dialog showing the underlying data that makes up that bar or bar segment, just like the 'awaiting --> connected' bar chart drill-down dialog. For conversations, please show the name of the person, the type of conversation and the data in the conversation's 'summary' field.
+2. the label over the first point of the sparklines is not visible. I think it's cut off on the left side of the card.
+3. please make the cards in the first row narrower so that they fit on one row.
 
 ---
 

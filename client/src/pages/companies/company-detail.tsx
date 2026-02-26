@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType } from '@/lib/types'
+import type { Company, Contact, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, COMPANY_ACTIVITY_TYPE_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 
 const actionTypeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -115,13 +116,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+// Extend Company to include joined relations from the new API
+type CompanyWithRelations = Company & {
+  employedContacts?: Contact[];
+  connectedContacts?: Contact[];
+}
+
 export function CompanyDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const [company, setCompany] = useState<Company | null>(null)
+  const [company, setCompany] = useState<CompanyWithRelations | null>(null)
   const [actions, setActions] = useState<Action[]>([])
   const [links, setLinks] = useState<LinkRecord[]>([])
   const [activities, setActivities] = useState<CompanyActivity[]>([])
+  const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
+  const [selectedContact, setSelectedContact] = useState('')
+  const [linkingContact, setLinkingContact] = useState(false)
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -137,19 +147,24 @@ export function CompanyDetailPage() {
     }
   }
 
-  useEffect(() => {
-    if (!id) return
-    api
-      .get<Company>(`/companies/${id}`)
+  function loadCompany() {
+    if (!id) return;
+    api.get<CompanyWithRelations>(`/companies/${id}`)
       .then(setCompany)
       .catch((err) => {
         toast.error(err.message)
         navigate('/companies')
       })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    if (!id) return
+    loadCompany();
 
     api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => { })
     api.get<CompanyActivity[]>(`/company-activities?companyId=${id}`).then(setActivities).catch(() => { })
+    api.get<{ id: number; name: string }[]>('/contacts/names').then(setAllContacts).catch(() => { })
     loadLinks()
   }, [id, navigate])
 
@@ -256,6 +271,32 @@ export function CompanyDetailPage() {
       toast.success('Link removed')
     } catch {
       toast.error('Failed to remove link')
+    }
+  }
+
+  async function handleAddContact(type: 'EMPLOYED' | 'CONNECTED') {
+    if (!selectedContact) return;
+    setLinkingContact(true);
+
+    // Check if selectedContact is an ID (existing) or text (new)
+    const isExisting = allContacts.some(c => c.id.toString() === selectedContact);
+
+    const payload = isExisting
+      ? { contactId: parseInt(selectedContact), type }
+      : { contactName: selectedContact, type };
+
+    try {
+      await api.post(`/companies/${id}/contacts`, payload);
+      toast.success(`Contact linked as ${type.toLowerCase()}`);
+      setSelectedContact('');
+      loadCompany();
+      // Also refresh the contacts list so the new contact is available in the dropdown immediately
+      const updatedNames = await api.get<{ id: number; name: string }[]>('/contacts/names');
+      setAllContacts(updatedNames);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to link contact');
+    } finally {
+      setLinkingContact(false);
     }
   }
 
@@ -564,36 +605,115 @@ export function CompanyDetailPage() {
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          {company.contacts && company.contacts.length > 0 ? (
-            <div className="space-y-3">
-              {company.contacts.map((c) => (
-                <div key={c.id} className="flex items-center justify-between">
-                  <div>
-                    <Link
-                      to={`/contacts/${c.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {c.name}
-                    </Link>
-                    {c.title && (
-                      <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
-                      {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
-                    </Badge>
-                    <Badge variant="outline" className={contactStatusColors[c.status]}>
-                      {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+        <CardContent className="space-y-6">
+          {/* Add Contact Section */}
+          <div className="flex gap-2 items-start">
+            <div className="flex-1">
+              <Combobox
+                options={allContacts.map((c) => ({
+                  value: c.id.toString(),
+                  label: c.name,
+                }))}
+                value={selectedContact}
+                onChange={(val) => setSelectedContact(val)}
+                placeholder="Search to add or type new name..."
+                allowFreeText={true}
+                disabled={linkingContact}
+              />
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No contacts linked to this company.</p>
-          )}
+            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddContact('EMPLOYED')}
+                disabled={!selectedContact || linkingContact}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                Add as Employed
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddContact('CONNECTED')}
+                disabled={!selectedContact || linkingContact}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                Add as Connected
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Employed Contacts */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Employed</h3>
+            {company.employedContacts && company.employedContacts.length > 0 ? (
+              <div className="space-y-3">
+                {company.employedContacts.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between">
+                    <div>
+                      <Link
+                        to={`/contacts/${c.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {c.name}
+                      </Link>
+                      {c.title && (
+                        <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
+                        {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
+                      </Badge>
+                      <Badge variant="outline" className={contactStatusColors[c.status]}>
+                        {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No employed contacts listed.</p>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Connected Contacts */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Connected</h3>
+            {company.connectedContacts && company.connectedContacts.length > 0 ? (
+              <div className="space-y-3">
+                {company.connectedContacts.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between">
+                    <div>
+                      <Link
+                        to={`/contacts/${c.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {c.name}
+                      </Link>
+                      {c.title && (
+                        <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
+                        {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
+                      </Badge>
+                      <Badge variant="outline" className={contactStatusColors[c.status]}>
+                        {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No connected contacts listed.</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

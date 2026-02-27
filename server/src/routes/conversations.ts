@@ -5,6 +5,9 @@ const router = Router();
 
 const conversationIncludes = {
   contact: { select: { id: true, name: true } },
+  participants: {
+    include: { contact: { select: { id: true, name: true } } },
+  },
   contactsDiscussed: {
     include: { contact: { select: { id: true, name: true } } },
   },
@@ -66,6 +69,7 @@ router.post('/', async (req: Request, res: Response) => {
       photoFile,
       contactsDiscussed,   // number[] of contact IDs
       companiesDiscussed,  // number[] of company IDs
+      participantIds,      // number[] of contact IDs
       createAction,        // optional single action (legacy): { title, type, dueDate, priority }
       createActions,       // optional array of actions: { title, type, dueDate, priority }[]
       linkActionIds,       // optional array of existing action IDs to link to this conversation
@@ -89,6 +93,13 @@ router.post('/', async (req: Request, res: Response) => {
         contactsDiscussed: contactsDiscussed?.length
           ? {
             create: (contactsDiscussed as number[]).map((cId) => ({
+              contactId: cId,
+            })),
+          }
+          : undefined,
+        participants: participantIds?.length
+          ? {
+            create: (participantIds as number[]).map((cId) => ({
               contactId: cId,
             })),
           }
@@ -184,6 +195,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const {
       contactsDiscussed,
       companiesDiscussed,
+      participantIds,
       createAction,
       createActions,
       linkActionIds,
@@ -196,6 +208,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       // Delete existing junctions
       await tx.conversationContact.deleteMany({ where: { conversationId: id } });
       await tx.conversationCompany.deleteMany({ where: { conversationId: id } });
+      await tx.conversationParticipant.deleteMany({ where: { conversationId: id } });
 
       // Update conversation
       await tx.conversation.update({
@@ -205,6 +218,13 @@ router.put('/:id', async (req: Request, res: Response) => {
           contactsDiscussed: contactsDiscussed?.length
             ? {
               create: (contactsDiscussed as number[]).map((cId: number) => ({
+                contactId: cId,
+              })),
+            }
+            : undefined,
+          participants: participantIds?.length
+            ? {
+              create: (participantIds as number[]).map((cId: number) => ({
                 contactId: cId,
               })),
             }

@@ -1052,6 +1052,7 @@ function ConversationsTab({
     summary: string
     notes: string
     nextSteps: string
+    participantIds: string[]
     contactsDiscussed: string[]
     companiesDiscussed: string[]
     actions: ActionFormEntry[]
@@ -1068,6 +1069,7 @@ function ConversationsTab({
     summary: '',
     notes: '',
     nextSteps: '',
+    participantIds: [],
     contactsDiscussed: [],
     companiesDiscussed: [],
     actions: [{ ...emptyAction }],
@@ -1133,6 +1135,7 @@ function ConversationsTab({
       summary: conv.summary || '',
       notes: conv.notes || '',
       nextSteps: conv.nextSteps || '',
+      participantIds: conv.participants?.map((p) => p.contact.id.toString()) || [],
       contactsDiscussed: conv.contactsDiscussed.map((cd) => cd.contact.id.toString()),
       companiesDiscussed: conv.companiesDiscussed.map((cd) => cd.company.id.toString()),
       actions: [{ ...emptyAction }],
@@ -1158,6 +1161,9 @@ function ConversationsTab({
     if (!editId) return
 
     // Only include existing contact/company IDs (numeric strings only)
+    const existingParticipantIds = data.participantIds
+      .filter((val) => /^\d+$/.test(val))
+      .map(Number)
     const existingContactIds = data.contactsDiscussed
       .filter((val) => /^\d+$/.test(val))
       .map(Number)
@@ -1173,6 +1179,7 @@ function ConversationsTab({
       summary: data.summary.trim() || null,
       notes: data.notes.trim() || null,
       nextSteps: data.nextSteps.trim() || null,
+      participantIds: existingParticipantIds,
       contactsDiscussed: existingContactIds,
       companiesDiscussed: existingCompanyIds,
       // Note: actions and links are NOT auto-saved - they save on explicit submit
@@ -1205,6 +1212,24 @@ function ConversationsTab({
   })
 
   async function resolveNewEntries() {
+    const resolvedParticipants: string[] = []
+    for (const val of form.participantIds) {
+      if (/^\d+$/.test(val)) {
+        resolvedParticipants.push(val)
+      } else {
+        try {
+          const newContact = await api.post<{ id: number; name: string }>('/contacts', {
+            name: val,
+            status: 'CONNECTED',
+            ecosystem: 'ROLODEX',
+          })
+          resolvedParticipants.push(newContact.id.toString())
+        } catch {
+          toast.error(`Failed to create contact "${val}"`)
+        }
+      }
+    }
+
     // Create contacts for any free-text entries (non-numeric IDs)
     const resolvedContacts: string[] = []
     for (const val of form.contactsDiscussed) {
@@ -1242,7 +1267,7 @@ function ConversationsTab({
       }
     }
 
-    return { resolvedContacts, resolvedCompanies }
+    return { resolvedParticipants, resolvedContacts, resolvedCompanies }
   }
 
   async function handleSubmit() {
@@ -1254,7 +1279,7 @@ function ConversationsTab({
     autoSave.cancel()
     setSaving(true)
     try {
-      const { resolvedContacts, resolvedCompanies } = await resolveNewEntries()
+      const { resolvedParticipants, resolvedContacts, resolvedCompanies } = await resolveNewEntries()
 
       const payload: Record<string, unknown> = {
         contactId,
@@ -1264,6 +1289,7 @@ function ConversationsTab({
         summary: form.summary.trim() || null,
         notes: form.notes.trim() || null,
         nextSteps: form.nextSteps.trim() || null,
+        participantIds: resolvedParticipants.map(Number),
         contactsDiscussed: resolvedContacts.map(Number),
         companiesDiscussed: resolvedCompanies.map(Number),
       }
@@ -1478,8 +1504,13 @@ function ConversationsTab({
                         <span className="font-medium">Next:</span> {conv.nextSteps}
                       </p>
                     )}
-                    {(conv.contactsDiscussed.length > 0 || conv.companiesDiscussed.length > 0) && (
+                    {((conv.participants && conv.participants.length > 0) || conv.contactsDiscussed.length > 0 || conv.companiesDiscussed.length > 0) && (
                       <div className="flex flex-wrap gap-1 pt-1">
+                        {conv.participants?.map((p) => (
+                          <Badge key={p.contact.id} variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200">
+                            {p.contact.name} (Participant)
+                          </Badge>
+                        ))}
                         {conv.contactsDiscussed.map((cd) => (
                           <Badge key={cd.contact.id} variant="outline" className="text-xs">
                             {cd.contact.name}
@@ -1656,6 +1687,18 @@ function ConversationsTab({
                   onChange={(e) => set('nextSteps', e.target.value)}
                   placeholder="What to do next..."
                   rows={2}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Additional Participants</Label>
+                <MultiCombobox
+                  options={localContactOptions}
+                  values={form.participantIds}
+                  onChange={(v) => set('participantIds', v)}
+                  placeholder="In the meeting..."
+                  searchPlaceholder="Search participants..."
+                  allowFreeText={true}
                 />
               </div>
 

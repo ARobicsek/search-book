@@ -51,6 +51,7 @@ model Contact {
   employmentHistory        EmploymentHistory[]
   relationshipsFrom        Relationship[] @relation("RelFrom")
   relationshipsTo          Relationship[] @relation("RelTo")
+  participantInConversations ConversationParticipant[] @relation("ParticipantInConversations")
   discussedInConversations ConversationContact[] @relation("DiscussedInConversations")
   ideaContacts             IdeaContact[]
   actionContacts           ActionContact[] @relation("ActionContacts")
@@ -173,8 +174,19 @@ model Conversation {
   createdAt     DateTime @default(now())
 
   actions            Action[]
+  participants       ConversationParticipant[] @relation("ConversationParticipants")
   contactsDiscussed  ConversationContact[]
   companiesDiscussed ConversationCompany[]
+}
+
+// Junction: contacts who were participants in the conversation
+model ConversationParticipant {
+  conversationId Int
+  conversation   Conversation @relation("ConversationParticipants", fields: [conversationId], references: [id], onDelete: Cascade)
+  contactId      Int
+  contact        Contact      @relation("ParticipantInConversations", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, contactId])
 }
 
 // Junction: people discussed in a conversation

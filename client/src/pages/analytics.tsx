@@ -568,8 +568,8 @@ export function AnalyticsPage() {
                                   {(() => {
                                     const names = new Set<string>();
                                     if (item.contact?.name) names.add(item.contact.name);
-                                    item.contactsDiscussed?.forEach((cd: any) => {
-                                      if (cd.contact?.name) names.add(cd.contact.name);
+                                    item.participants?.forEach((p: any) => {
+                                      if (p.contact?.name) names.add(p.contact.name);
                                     });
                                     return Array.from(names).join(', ') || 'No Contacts';
                                   })()}

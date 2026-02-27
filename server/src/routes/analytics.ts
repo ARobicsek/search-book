@@ -408,6 +408,9 @@ router.get('/drilldown/conversations', async (req: Request, res: Response) => {
       where: { date: dateStr, type },
       include: {
         contact: { select: { name: true } },
+        participants: {
+          include: { contact: { select: { name: true } } }
+        },
         contactsDiscussed: {
           include: { contact: { select: { name: true } } }
         }

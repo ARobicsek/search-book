@@ -117,7 +117,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error('Error fetching contacts:', error);
-    res.status(500).json({ error: 'Failed to fetch contacts' });
+    res.status(500).json({ error: 'Failed to fetch contacts', details: error instanceof Error ? error.message : String(error) });
   }
 });
 

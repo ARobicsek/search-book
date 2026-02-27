@@ -177,6 +177,7 @@ export interface Conversation {
   nextSteps: string | null;
   photoFile: string | null;
   createdAt: string;
+  participants?: { contact: { id: number; name: string } }[];
   contactsDiscussed: { contact: { id: number; name: string } }[];
   companiesDiscussed: { company: { id: number; name: string } }[];
   actions?: { id: number; title: string; completed: boolean; dueDate: string | null }[];

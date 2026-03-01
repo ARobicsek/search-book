@@ -9,10 +9,12 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 ---
 
 ## What Was Completed Last Session
-### Action Search & Conversation Card Fixes
-1. **Global and Local Action Search**: Modified backend API and frontend `globalFilterFn` to include target company names linked to actions via associated contacts.
-2. **Action Sorting Improvement**: Updated ascending `dueDate` sort logic dynamically server-side and client-side to ensure actions lacking a scheduled date appear at the bottom.
-3. **Conversation Action Link Bubbling**: Modified Action titles inside Conversation cards to use React Router `Link` tags with `e.stopPropagation()` to bypass unintended edit modal pop-ups.
+### Conversation Participants & Analytics Drilldown Fixes
+1. **Participant vs. Discussed Distinction**: Implemented `ConversationParticipant` junction table to explicitly separate meeting attendees from people simply mentioned.
+2. **Database & API Updates**: Updated Prisma schema, manually migrated Turso cloud DB, and modified REST endpoints (`POST`/`PUT` `/api/conversations`) to natively process `participantIds`.
+3. **UI Distinction**: Divided the UI into a separated `MultiCombobox` in the Conversation Dialog to select "Additional Participants", rendering them with distinct blue badges on conversation card logs.
+4. **Analytics Drilldown Fix**: Wired the `/analytics/drilldown/conversations` endpoint and frontend `AnalyticsPage` drilldown parser to accurately aggregate and display meeting `participants` names rather than `contactsDiscussed`.
+5. **Legacy Draft Fallbacks**: Prevented `undefined.length` crashes by injecting secure empty array fallbacks into older `localStorage` conversation drafts that lacked the initial `participantIds` block upon reloading the dialog.
 
 ---
 
@@ -34,7 +36,8 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-(Pending user input to define the items to work on next.)
+1. When I click on one of the conversation bars in the Analytics activity, the popup box correctly shows me the name of the person I spoke to but INCORRECTLY shows me the name of the contacts WE TALKED ABOUT at the meeting.
+2. There should be a way to add contacts to the meeting who ARE in the meeting and distinguish them from contacts who are NOT in the meeting but were mentioned in the meeting.
 
 ---
 

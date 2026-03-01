@@ -1109,7 +1109,8 @@ function ConversationsTab({
     const saved = localStorage.getItem(draftKey)
     if (saved) {
       try {
-        setForm(JSON.parse(saved))
+        const parsed = JSON.parse(saved)
+        setForm({ ...emptyForm, ...parsed, participantIds: parsed.participantIds || [] })
       } catch {
         setForm(emptyForm)
       }
@@ -1145,7 +1146,8 @@ function ConversationsTab({
     const savedDraft = localStorage.getItem(`draft_edit_conversation_${conv.id}`)
     if (savedDraft) {
       try {
-        setForm(JSON.parse(savedDraft))
+        const parsed = JSON.parse(savedDraft)
+        setForm({ ...serverForm, ...parsed, participantIds: parsed.participantIds || [] })
       } catch {
         setForm(serverForm)
       }
@@ -1694,7 +1696,7 @@ function ConversationsTab({
                 <Label>Additional Participants</Label>
                 <MultiCombobox
                   options={localContactOptions}
-                  values={form.participantIds}
+                  values={form.participantIds || []}
                   onChange={(v) => set('participantIds', v)}
                   placeholder="In the meeting..."
                   searchPlaceholder="Search participants..."
@@ -1706,7 +1708,7 @@ function ConversationsTab({
                 <Label>People Discussed</Label>
                 <MultiCombobox
                   options={localContactOptions}
-                  values={form.contactsDiscussed}
+                  values={form.contactsDiscussed || []}
                   onChange={(v) => set('contactsDiscussed', v)}
                   placeholder="Search or type new name..."
                   searchPlaceholder="Search contacts..."
@@ -1718,7 +1720,7 @@ function ConversationsTab({
                 <Label>Companies Discussed</Label>
                 <MultiCombobox
                   options={localCompanyOptions}
-                  values={form.companiesDiscussed}
+                  values={form.companiesDiscussed || []}
                   onChange={(v) => set('companiesDiscussed', v)}
                   placeholder="Search or type new name..."
                   searchPlaceholder="Search companies..."

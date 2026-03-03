@@ -64,6 +64,57 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/prepnotes/import-dossier — import all notes from a company dossier
+router.post('/import-dossier', async (req: Request, res: Response) => {
+  try {
+    const { contactId, companyId } = req.body;
+    if (!contactId || !companyId) {
+      res.status(400).json({ error: 'contactId and companyId are required' });
+      return;
+    }
+
+    // Get company notes
+    const companyNotes = await prisma.companyPrepNote.findMany({
+      where: { companyId },
+      orderBy: { ordering: 'asc' },
+    });
+
+    if (companyNotes.length === 0) {
+      res.json({ count: 0 });
+      return;
+    }
+
+    // Get current max ordering for contact prep notes
+    const maxOrdering = await prisma.prepNote.aggregate({
+      where: { contactId },
+      _max: { ordering: true },
+    });
+    let nextOrdering = (maxOrdering._max.ordering ?? -1) + 1;
+
+    // Create new prep notes
+    const creates = companyNotes.map(cn => {
+      const ord = nextOrdering++;
+      return prisma.prepNote.create({
+        data: {
+          content: cn.content,
+          url: cn.url,
+          urlTitle: cn.urlTitle,
+          date: cn.date,
+          ordering: ord,
+          contactId,
+        }
+      });
+    });
+
+    await prisma.$transaction(creates);
+
+    res.json({ count: creates.length });
+  } catch (error) {
+    console.error('Error importing dossier:', error);
+    res.status(500).json({ error: 'Failed to import dossier' });
+  }
+});
+
 // POST /api/prepnotes/reorder — reorder notes
 router.post('/reorder', async (req: Request, res: Response) => {
   try {

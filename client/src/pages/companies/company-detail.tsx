@@ -45,6 +45,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Combobox } from '@/components/ui/combobox'
+import { CompanyPrepSheet } from '@/components/companies/company-prep-sheet'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FileText, Building2, Link as LinkIcon } from 'lucide-react'
 
 const actionTypeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -129,6 +132,7 @@ export function CompanyDetailPage() {
   const [actions, setActions] = useState<Action[]>([])
   const [links, setLinks] = useState<LinkRecord[]>([])
   const [activities, setActivities] = useState<CompanyActivity[]>([])
+  const [prepNotesCount, setPrepNotesCount] = useState<number>(0)
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [selectedContact, setSelectedContact] = useState('')
   const [linkingContact, setLinkingContact] = useState(false)
@@ -165,6 +169,7 @@ export function CompanyDetailPage() {
     api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => { })
     api.get<CompanyActivity[]>(`/company-activities?companyId=${id}`).then(setActivities).catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/names').then(setAllContacts).catch(() => { })
+    api.get<any[]>(`/company-prepnotes?companyId=${id}`).then((res) => setPrepNotesCount(res.length)).catch(() => { })
     loadLinks()
   }, [id, navigate])
 
@@ -389,390 +394,412 @@ export function CompanyDetailPage() {
 
       <Separator />
 
-      {/* Company Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <Field label="Size">{company.size}</Field>
-            <Field label="HQ Location">{company.hqLocation}</Field>
-            <Field label="Website">
-              {company.website && (
-                <a
-                  href={company.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {company.website}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </Field>
-          </dl>
-        </CardContent>
-      </Card>
-
-      {/* Notes */}
-      {company.notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm prep-note-markdown"><ReactMarkdown>{company.notes}</ReactMarkdown></div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Activity Log */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>
-            Activity Log{' '}
-            {activities.length > 0 && (
-              <span className="text-sm font-normal text-muted-foreground">
-                ({activities.length})
-              </span>
+      <Tabs defaultValue="overview">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="overview" className="shrink-0">
+            <Building2 className="mr-1 h-4 w-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="dossier" className="shrink-0">
+            <FileText className="mr-1 h-4 w-4" />
+            Research Dossier
+            {prepNotesCount > 0 && (
+              <span className="ml-1 h-2 w-2 rounded-full bg-green-500 inline-block" />
             )}
-          </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowActivityForm(!showActivityForm)}
-          >
-            {showActivityForm ? (
-              <><ChevronUp className="mr-1 h-3 w-3" /> Cancel</>
-            ) : (
-              <><Plus className="mr-1 h-3 w-3" /> Log Activity</>
-            )}
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {showActivityForm && (
-            <div className="rounded-md border p-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="activity-date">Date</Label>
-                  <Input
-                    id="activity-date"
-                    type="date"
-                    value={activityForm.date}
-                    onChange={(e) => setActivityForm((f) => ({ ...f, date: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="activity-type">Type</Label>
-                  <Select
-                    value={activityForm.type}
-                    onValueChange={(val) => setActivityForm((f) => ({ ...f, type: val as CompanyActivityType }))}
-                  >
-                    <SelectTrigger id="activity-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COMPANY_ACTIVITY_TYPE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="activity-title">Title</Label>
-                <Input
-                  id="activity-title"
-                  value={activityForm.title}
-                  onChange={(e) => setActivityForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder='e.g. "Applied to Senior PM role"'
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="activity-notes">Notes (optional, supports markdown)</Label>
-                <Textarea
-                  id="activity-notes"
-                  value={activityForm.notes}
-                  onChange={(e) => setActivityForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Additional details..."
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button size="sm" onClick={saveActivity} disabled={!activityForm.title.trim() || savingActivity}>
-                  {savingActivity ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            </div>
-          )}
+          </TabsTrigger>
+        </TabsList>
 
-          {activities.length === 0 && !showActivityForm ? (
-            <p className="text-sm text-muted-foreground">No activities logged yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {activities.map((activity) => (
-                <div key={activity.id} className="group flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className={`text-xs ${actionTypeColors[activity.type] || 'bg-slate-100 text-slate-700'}`}>
-                        {COMPANY_ACTIVITY_TYPE_OPTIONS.find((o) => o.value === activity.type)?.label ?? activity.type}
-                      </Badge>
-                      <span className="text-sm font-medium">{activity.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(activity.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    </div>
-                    {activity.notes && (
-                      <div className="mt-1 text-sm text-muted-foreground prep-note-markdown">
-                        <ReactMarkdown>{activity.notes}</ReactMarkdown>
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => deleteActivity(activity.id)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Links */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Links</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {links.length > 0 && (
-            <ul className="space-y-2">
-              {links.map((link) => (
-                <li key={link.id} className="flex items-center justify-between gap-2">
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    {link.title}
-                  </a>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-2 items-end">
-            <div className="flex-1 grid gap-2 sm:grid-cols-2">
-              <Input
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-                placeholder="URL (Google Drive, webpage, etc.)"
-                onKeyDown={(e) => e.key === 'Enter' && addLink()}
-              />
-              <Input
-                value={newLinkTitle}
-                onChange={(e) => setNewLinkTitle(e.target.value)}
-                placeholder="Label (optional)"
-                onKeyDown={(e) => e.key === 'Enter' && addLink()}
-              />
-            </div>
-            <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
-              <Plus className="mr-1 h-3 w-3" />
-              Add
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Linked Contacts */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Contacts{' '}
-            {company.contacts && (
-              <span className="text-sm font-normal text-muted-foreground">
-                ({company.contacts.length})
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Add Contact Section */}
-          <div className="flex gap-2 items-start">
-            <div className="flex-1">
-              <Combobox
-                options={allContacts.map((c) => ({
-                  value: c.id.toString(),
-                  label: c.name,
-                }))}
-                value={selectedContact}
-                onChange={(val) => setSelectedContact(val)}
-                placeholder="Search to add or type new name..."
-                allowFreeText={true}
-                disabled={linkingContact}
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleAddContact('EMPLOYED')}
-                disabled={!selectedContact || linkingContact}
-              >
-                <Plus className="mr-1 h-3 w-3" />
-                Add as Employed
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleAddContact('CONNECTED')}
-                disabled={!selectedContact || linkingContact}
-              >
-                <Plus className="mr-1 h-3 w-3" />
-                Add as Connected
-              </Button>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Employed Contacts */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Employed</h3>
-            {company.employedContacts && company.employedContacts.length > 0 ? (
-              <div className="space-y-3">
-                {company.employedContacts.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between">
-                    <div>
-                      <Link
-                        to={`/contacts/${c.id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {c.name}
-                      </Link>
-                      {c.title && (
-                        <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
-                        {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
-                      </Badge>
-                      <Badge variant="outline" className={contactStatusColors[c.status]}>
-                        {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No employed contacts listed.</p>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Connected Contacts */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Connected</h3>
-            {company.connectedContacts && company.connectedContacts.length > 0 ? (
-              <div className="space-y-3">
-                {company.connectedContacts.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between">
-                    <div>
-                      <Link
-                        to={`/contacts/${c.id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {c.name}
-                      </Link>
-                      {c.title && (
-                        <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
-                        {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
-                      </Badge>
-                      <Badge variant="outline" className={contactStatusColors[c.status]}>
-                        {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No connected contacts listed.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Actions</CardTitle>
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/actions/new?companyId=${company.id}`}>
-              <Plus className="mr-1 h-3 w-3" />
-              New Action
-            </Link>
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {actions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No actions yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {actions.map((action) => {
-                return (
-                  <div key={action.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
-                    <button
-                      onClick={() => toggleActionComplete(action)}
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${action.completed
-                        ? 'border-green-500 bg-green-500 text-white'
-                        : 'border-muted-foreground/30 hover:border-green-500'
-                        }`}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Company Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-4 sm:grid-cols-2">
+                <Field label="Size">{company.size}</Field>
+                <Field label="HQ Location">{company.hqLocation}</Field>
+                <Field label="Website">
+                  {company.website && (
+                    <a
+                      href={company.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
                     >
-                      {action.completed && <Check className="h-2.5 w-2.5" />}
-                    </button>
-                    <Link
-                      to={`/actions/${action.id}`}
-                      className={`flex-1 text-sm hover:underline ${action.completed ? 'text-muted-foreground line-through' : ''}`}
-                    >
-                      {action.title}
-                    </Link>
-                    <Badge variant="outline" className={`text-xs ${actionTypeColors[action.type]}`}>
-                      {getLabel(action.type, ACTION_TYPE_OPTIONS)}
-                    </Badge>
-                    <Badge variant="outline" className={`text-xs ${actionPriorityColors[action.priority]}`}>
-                      {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
-                    </Badge>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <ActionDateSelect
-                        action={action}
-                        onUpdate={() => {
-                          api.get<Action[]>(`/actions?companyId=${action.companyId || ''}`).then((res) => setActions(res)).catch(() => { })
-                        }}
-                        className="-ml-2 h-8"
+                      {company.website}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </Field>
+              </dl>
+            </CardContent>
+          </Card>
+
+          {/* Notes */}
+          {company.notes && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm prep-note-markdown"><ReactMarkdown>{company.notes}</ReactMarkdown></div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Activity Log */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>
+                Activity Log{' '}
+                {activities.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ({activities.length})
+                  </span>
+                )}
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowActivityForm(!showActivityForm)}
+              >
+                {showActivityForm ? (
+                  <><ChevronUp className="mr-1 h-3 w-3" /> Cancel</>
+                ) : (
+                  <><Plus className="mr-1 h-3 w-3" /> Log Activity</>
+                )}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {showActivityForm && (
+                <div className="rounded-md border p-4 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="activity-date">Date</Label>
+                      <Input
+                        id="activity-date"
+                        type="date"
+                        value={activityForm.date}
+                        onChange={(e) => setActivityForm((f) => ({ ...f, date: e.target.value }))}
                       />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="activity-type">Type</Label>
+                      <Select
+                        value={activityForm.type}
+                        onValueChange={(val) => setActivityForm((f) => ({ ...f, type: val as CompanyActivityType }))}
+                      >
+                        <SelectTrigger id="activity-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COMPANY_ACTIVITY_TYPE_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="activity-title">Title</Label>
+                    <Input
+                      id="activity-title"
+                      value={activityForm.title}
+                      onChange={(e) => setActivityForm((f) => ({ ...f, title: e.target.value }))}
+                      placeholder='e.g. "Applied to Senior PM role"'
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="activity-notes">Notes (optional, supports markdown)</Label>
+                    <Textarea
+                      id="activity-notes"
+                      value={activityForm.notes}
+                      onChange={(e) => setActivityForm((f) => ({ ...f, notes: e.target.value }))}
+                      placeholder="Additional details..."
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={saveActivity} disabled={!activityForm.title.trim() || savingActivity}>
+                      {savingActivity ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {activities.length === 0 && !showActivityForm ? (
+                <p className="text-sm text-muted-foreground">No activities logged yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="group flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className={`text-xs ${actionTypeColors[activity.type] || 'bg-slate-100 text-slate-700'}`}>
+                            {COMPANY_ACTIVITY_TYPE_OPTIONS.find((o) => o.value === activity.type)?.label ?? activity.type}
+                          </Badge>
+                          <span className="text-sm font-medium">{activity.title}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(activity.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </div>
+                        {activity.notes && (
+                          <div className="mt-1 text-sm text-muted-foreground prep-note-markdown">
+                            <ReactMarkdown>{activity.notes}</ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => deleteActivity(activity.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Links */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Links</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {links.length > 0 && (
+                <ul className="space-y-2">
+                  {links.map((link) => (
+                    <li key={link.id} className="flex items-center justify-between gap-2">
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        {link.title}
+                      </a>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={newLinkUrl}
+                    onChange={(e) => setNewLinkUrl(e.target.value)}
+                    placeholder="URL (Google Drive, webpage, etc.)"
+                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                  />
+                  <Input
+                    value={newLinkTitle}
+                    onChange={(e) => setNewLinkTitle(e.target.value)}
+                    placeholder="Label (optional)"
+                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                  />
+                </div>
+                <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Linked Contacts */}
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Contacts{' '}
+                {company.contacts && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ({company.contacts.length})
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Add Contact Section */}
+              <div className="flex gap-2 items-start">
+                <div className="flex-1">
+                  <Combobox
+                    options={allContacts.map((c) => ({
+                      value: c.id.toString(),
+                      label: c.name,
+                    }))}
+                    value={selectedContact}
+                    onChange={(val) => setSelectedContact(val)}
+                    placeholder="Search to add or type new name..."
+                    allowFreeText={true}
+                    disabled={linkingContact}
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAddContact('EMPLOYED')}
+                    disabled={!selectedContact || linkingContact}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    Add as Employed
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAddContact('CONNECTED')}
+                    disabled={!selectedContact || linkingContact}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    Add as Connected
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Employed Contacts */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Employed</h3>
+                {company.employedContacts && company.employedContacts.length > 0 ? (
+                  <div className="space-y-3">
+                    {company.employedContacts.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between">
+                        <div>
+                          <Link
+                            to={`/contacts/${c.id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {c.name}
+                          </Link>
+                          {c.title && (
+                            <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
+                            {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
+                          </Badge>
+                          <Badge variant="outline" className={contactStatusColors[c.status]}>
+                            {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No employed contacts listed.</p>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Connected Contacts */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Connected</h3>
+                {company.connectedContacts && company.connectedContacts.length > 0 ? (
+                  <div className="space-y-3">
+                    {company.connectedContacts.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between">
+                        <div>
+                          <Link
+                            to={`/contacts/${c.id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {c.name}
+                          </Link>
+                          {c.title && (
+                            <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
+                            {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
+                          </Badge>
+                          <Badge variant="outline" className={contactStatusColors[c.status]}>
+                            {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No connected contacts listed.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Actions */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Actions</CardTitle>
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/actions/new?companyId=${company.id}`}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  New Action
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {actions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No actions yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {actions.map((action) => {
+                    return (
+                      <div key={action.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
+                        <button
+                          onClick={() => toggleActionComplete(action)}
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${action.completed
+                            ? 'border-green-500 bg-green-500 text-white'
+                            : 'border-muted-foreground/30 hover:border-green-500'
+                            }`}
+                        >
+                          {action.completed && <Check className="h-2.5 w-2.5" />}
+                        </button>
+                        <Link
+                          to={`/actions/${action.id}`}
+                          className={`flex-1 text-sm hover:underline ${action.completed ? 'text-muted-foreground line-through' : ''}`}
+                        >
+                          {action.title}
+                        </Link>
+                        <Badge variant="outline" className={`text-xs ${actionTypeColors[action.type]}`}>
+                          {getLabel(action.type, ACTION_TYPE_OPTIONS)}
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${actionPriorityColors[action.priority]}`}>
+                          {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
+                        </Badge>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ActionDateSelect
+                            action={action}
+                            onUpdate={() => {
+                              api.get<Action[]>(`/actions?companyId=${action.companyId || ''}`).then((res) => setActions(res)).catch(() => { })
+                            }}
+                            className="-ml-2 h-8"
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="dossier" className="space-y-6 mt-6">
+          <CompanyPrepSheet companyId={parseInt(id!)} />
+        </TabsContent>
+      </Tabs>
 
       {/* Timestamps */}
       <div className="flex gap-6 text-xs text-muted-foreground">

@@ -75,6 +75,7 @@ import {
   Loader2,
   ArrowUp,
   ArrowDown,
+  Building2,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -209,6 +210,8 @@ export function ContactDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [newLinkTitle, setNewLinkTitle] = useState('')
+  const [companyDossierCount, setCompanyDossierCount] = useState(0)
+  const [importingDossier, setImportingDossier] = useState(false)
 
   function loadLinks() {
     if (id) {
@@ -246,7 +249,14 @@ export function ContactDetailPage() {
   const loadData = useCallback(() => {
     if (!id) return
     api.get<Contact>(`/contacts/${id}`)
-      .then(setContact)
+      .then((c) => {
+        setContact(c)
+        if (c.company?.id) {
+          api.get<any[]>(`/company-prepnotes?companyId=${c.company.id}`)
+            .then(notes => setCompanyDossierCount(notes.length))
+            .catch(() => { })
+        }
+      })
       .catch((err) => {
         toast.error(err.message)
         navigate('/contacts')
@@ -317,6 +327,27 @@ export function ContactDetailPage() {
       setContact((prev) => (prev ? { ...prev, [field]: originalValue } : null))
       const message = err instanceof Error ? err.message : 'Failed to update'
       toast.error(message)
+    }
+  }
+
+  async function importDossier() {
+    if (!contact?.company?.id) return;
+    setImportingDossier(true);
+    try {
+      const res = await api.post<{ count: number }>('/prepnotes/import-dossier', {
+        contactId: contact.id,
+        companyId: contact.company.id
+      });
+      if (res.count > 0) {
+        toast.success(`Imported ${res.count} notes from company dossier`);
+        api.get<PrepNote[]>(`/prepnotes?contactId=${contact.id}`).then(setPrepNotes).catch(() => { });
+      } else {
+        toast.info('No notes found in company dossier');
+      }
+    } catch {
+      toast.error('Failed to import dossier');
+    } finally {
+      setImportingDossier(false);
     }
   }
 
@@ -2396,16 +2427,32 @@ function PrepSheetTab({
             </div>
           )}
           {/* Add new prep note */}
-          {!showAddPrepForm ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAddPrepForm(true)}
-            >
-              <Plus className="mr-1 h-3 w-3" />
-              Add Prep Note
-            </Button>
-          ) : (
+          <div className="flex gap-2 items-center flex-wrap">
+            {!showAddPrepForm ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddPrepForm(true)}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                Add Prep Note
+              </Button>
+            ) : null}
+
+            {companyDossierCount > 0 && !showAddPrepForm && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={importDossier}
+                disabled={importingDossier}
+              >
+                <Building2 className="mr-1 h-3 w-3" />
+                {importingDossier ? 'Importing...' : `Import from ${contact?.company?.name} Dossier (${companyDossierCount})`}
+              </Button>
+            )}
+          </div>
+
+          {showAddPrepForm && (
             <div className="space-y-3 rounded-md border p-3 bg-muted/30">
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-1">

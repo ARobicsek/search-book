@@ -249,6 +249,19 @@ export interface PrepNote {
   createdAt: string;
 }
 
+// ─── Company Prep Notes (Research Dossier) ──────────────────
+
+export interface CompanyPrepNote {
+  id: number;
+  content: string;
+  url: string | null;
+  urlTitle: string | null;
+  date: string;
+  ordering: number;
+  companyId: number;
+  createdAt: string;
+}
+
 // ─── Company Activities ─────────────────────────────────────
 
 export type CompanyActivityType = 'APPLIED' | 'EMAIL' | 'CALL' | 'MEETING' | 'RESEARCH' | 'FOLLOW_UP' | 'OTHER';

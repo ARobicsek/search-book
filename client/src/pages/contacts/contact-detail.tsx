@@ -996,6 +996,9 @@ export function ContactDetailPage() {
             links={links}
             prepNotes={prepNotes}
             onRefresh={loadData}
+            companyDossierCount={companyDossierCount}
+            importingDossier={importingDossier}
+            importDossier={importDossier}
           />
         </TabsContent>
       </Tabs>
@@ -2180,6 +2183,9 @@ function PrepSheetTab({
   links,
   prepNotes,
   onRefresh,
+  companyDossierCount,
+  importingDossier,
+  importDossier,
 }: {
   contact: Contact
   conversations: Conversation[]
@@ -2188,6 +2194,9 @@ function PrepSheetTab({
   links: LinkRecord[]
   prepNotes: PrepNote[]
   onRefresh: () => void
+  companyDossierCount: number
+  importingDossier: boolean
+  importDossier: () => void
 }) {
   const lastConversation = conversations.length > 0 ? conversations[0] : null
   const pendingActions = actions.filter((a) => !a.completed)

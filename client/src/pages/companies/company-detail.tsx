@@ -47,7 +47,7 @@ import {
 import { Combobox } from '@/components/ui/combobox'
 import { CompanyPrepSheet } from '@/components/companies/company-prep-sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FileText, Building2, Link as LinkIcon } from 'lucide-react'
+import { FileText, Building2 } from 'lucide-react'
 
 const actionTypeColors: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',

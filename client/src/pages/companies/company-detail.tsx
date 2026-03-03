@@ -395,7 +395,7 @@ export function CompanyDetailPage() {
       <Separator />
 
       <Tabs defaultValue="overview">
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="w-full justify-start">
           <TabsTrigger value="overview" className="shrink-0">
             <Building2 className="mr-1 h-4 w-4" />
             Overview

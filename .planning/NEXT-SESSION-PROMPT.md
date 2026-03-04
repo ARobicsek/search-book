@@ -34,7 +34,13 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-[Leave blank for next session's prompt]**Auto-deploys on push to main** — Vercel is connected to GitHub.
+[Leave blank for next session's prompt]
+
+---
+
+## Production Deployment
+
+**Auto-deploys on push to main** — Vercel is connected to GitHub.
 
 **Before pushing, always run:**
 ```bash

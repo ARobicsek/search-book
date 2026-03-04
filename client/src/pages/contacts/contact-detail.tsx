@@ -1607,7 +1607,7 @@ function ConversationsTab({
         }
         setDialogOpen(open)
       }}>
-        <DialogContent className={cn('max-h-[85vh] overflow-y-auto', !editId && prepNotes.length > 0 ? 'sm:max-w-5xl' : 'sm:max-w-xl')} onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent className={cn('max-h-[90vh] overflow-y-auto w-[95vw]', !editId && prepNotes.length > 0 ? 'sm:max-w-7xl' : 'sm:max-w-2xl')} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>

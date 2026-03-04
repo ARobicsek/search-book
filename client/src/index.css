@@ -117,6 +117,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -125,29 +126,37 @@
 /* Markdown rendered content in prep notes */
 .prep-note-markdown p {
   margin-bottom: 0.25rem;
+  white-space: pre-wrap;
 }
+
 .prep-note-markdown p:last-child {
   margin-bottom: 0;
 }
+
 .prep-note-markdown strong {
   font-weight: 600;
 }
+
 .prep-note-markdown em {
   font-style: italic;
 }
+
 .prep-note-markdown ul {
   list-style-type: disc;
   padding-left: 1.25rem;
   margin-bottom: 0.25rem;
 }
+
 .prep-note-markdown ol {
   list-style-type: decimal;
   padding-left: 1.25rem;
   margin-bottom: 0.25rem;
 }
+
 .prep-note-markdown li {
   margin-bottom: 0.125rem;
 }
+
 .prep-note-markdown li:last-child {
   margin-bottom: 0;
 }

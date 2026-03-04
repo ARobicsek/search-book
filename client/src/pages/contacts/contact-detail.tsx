@@ -1096,7 +1096,7 @@ function ConversationsTab({
   // Draft auto-save for NEW conversations
   const draftKey = `draft_conversation_${contactId}`
 
-  const emptyForm: ConversationForm = {
+  const getEmptyForm = (): ConversationForm => ({
     date: new Date().toLocaleDateString('en-CA'),
     datePrecision: 'DAY',
     type: 'VIDEO_CALL',
@@ -1108,10 +1108,10 @@ function ConversationsTab({
     companiesDiscussed: [],
     actions: [{ ...emptyAction }],
     links: [],
-  }
+  })
 
-  const [form, setForm] = useState<ConversationForm>(emptyForm)
-  const formRef = useRef<ConversationForm>(emptyForm)
+  const [form, setForm] = useState<ConversationForm>(getEmptyForm)
+  const formRef = useRef<ConversationForm>(getEmptyForm())
   const [originalForm, setOriginalForm] = useState<ConversationForm | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
 
@@ -1144,12 +1144,12 @@ function ConversationsTab({
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        setForm({ ...emptyForm, ...parsed, participantIds: parsed.participantIds || [] })
+        setForm({ ...getEmptyForm(), ...parsed, participantIds: parsed.participantIds || [] })
       } catch {
-        setForm(emptyForm)
+        setForm(getEmptyForm())
       }
     } else {
-      setForm(emptyForm)
+      setForm(getEmptyForm())
     }
 
     setOriginalForm(null)
@@ -1365,7 +1365,7 @@ function ConversationsTab({
       if (!editId) {
         localStorage.removeItem(draftKey)
         setHasDraft(false)
-        setForm(emptyForm)
+        setForm(getEmptyForm())
       } else {
         localStorage.removeItem(`draft_edit_conversation_${editId}`)
         setEditDrafts((prev) => { const s = new Set(prev); s.delete(editId); return s })
@@ -1393,7 +1393,7 @@ function ConversationsTab({
     }
   }
 
-  function set<K extends keyof typeof emptyForm>(key: K, val: (typeof emptyForm)[K]) {
+  function set<K extends keyof ConversationForm>(key: K, val: ConversationForm[K]) {
     setForm((prev) => ({ ...prev, [key]: val }))
   }
 
@@ -1879,7 +1879,7 @@ function ConversationsTab({
                   setDialogOpen(false)
                   localStorage.removeItem(draftKey)
                   setHasDraft(false)
-                  setForm(emptyForm)
+                  setForm(getEmptyForm())
                 }}>Cancel</Button>
                 <Button onClick={handleSubmit} disabled={saving}>
                   {saving ? 'Saving...' : 'Log Conversation'}

@@ -126,6 +126,52 @@ app.get('/api/debug', async (_req, res) => {
   }
 });
 
+// Debug endpoint to diagnose company table issues
+app.get('/api/debug/companies', async (_req, res) => {
+  const results: Record<string, any> = {};
+
+  // Test 1: Raw SQL count
+  try {
+    const start1 = Date.now();
+    const rawCount = await prisma.$queryRawUnsafe('SELECT COUNT(*) as cnt FROM Company');
+    results.rawSqlCount = { ms: Date.now() - start1, result: rawCount };
+  } catch (e: any) {
+    results.rawSqlCount = { error: e.message };
+  }
+
+  // Test 2: Prisma count
+  try {
+    const start2 = Date.now();
+    const prismaCount = await prisma.company.count();
+    results.prismaCount = { ms: Date.now() - start2, result: prismaCount };
+  } catch (e: any) {
+    results.prismaCount = { error: e.message };
+  }
+
+  // Test 3: Prisma findMany (just names)
+  try {
+    const start3 = Date.now();
+    const names = await prisma.company.findMany({ select: { id: true, name: true } });
+    results.prismaFindNames = { ms: Date.now() - start3, count: names.length };
+  } catch (e: any) {
+    results.prismaFindNames = { error: e.message };
+  }
+
+  // Test 4: Prisma findMany with _count (the slow query)
+  try {
+    const start4 = Date.now();
+    const withCount = await prisma.company.findMany({
+      include: { _count: { select: { contacts: true } } },
+      take: 3 // limit to 3 to test if it's the subquery
+    });
+    results.prismaFindWithCount = { ms: Date.now() - start4, count: withCount.length };
+  } catch (e: any) {
+    results.prismaFindWithCount = { error: e.message };
+  }
+
+  res.json(results);
+});
+
 // Routes
 app.use('/api/contacts', contactsRouter);
 app.use('/api/companies', companiesRouter);

@@ -1665,6 +1665,8 @@ function ConversationsTab({
                           )}
                         </div>
                       </div>
+                    )}
+                  </div>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize={65} minSize={30} className="pl-4">

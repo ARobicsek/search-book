@@ -9,10 +9,10 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 ---
 
 ## What Was Completed Last Session
-### Log Conversation Default Date Fixed
-1. **Dynamic Initialization:** Refactored static `emptyForm` into `getEmptyForm()` to calculate `new Date()` correctly upon dialog opening.
-2. **Stale Closure Bug:** Solved a React closure bug where a long-lived browser session caused the "Log Conversation" modal to default to the previous render's timestamp instead of today.
-3. **Draft Compatibility:** Preserved Draft state restoration functionality while correcting the root initialization layer.
+### Log Conversation UI Fixes
+1. **Modal Expansion:** Widened the the Log Conversation modal structurally, moving from a standard `max-w-5xl` constraint to a nearly full viewport `w-[95vw] sm:max-w-7xl` class when displaying Prep Notes.
+2. **Markdown Pre-wrap:** Added `white-space: pre-wrap` to the `.prep-note-markdown p` ReactMarkdown wrapper in `index.css` to force the browser to respect standard single-line breaks inside bullets.
+3. **Resizable Panel Layout:** Imported Shadcn UI `react-resizable-panels` components (`ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle` elements) to convert the modal's static CSS grid into an interactive slider layout. The user can now horizontally drag the vertical boundary between the Prep Notes (default 35% width) and the Conversation Form (default 65% width).
 
 ---
 

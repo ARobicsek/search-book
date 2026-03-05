@@ -264,42 +264,47 @@ export function ContactDetailPage() {
     }
   }
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     if (!id) return
-    api.get<Contact>(`/contacts/${id}`)
-      .then((c) => {
-        setContact(c)
-        if (c.company?.id) {
-          api.get<any[]>(`/company-prepnotes?companyId=${c.company.id}`)
-            .then(notes => setCompanyDossierCount(notes.length))
-            .catch(() => { })
-        }
-      })
-      .catch((err) => {
-        toast.error(err.message)
-        navigate('/contacts')
-      })
-      .finally(() => setLoading(false))
 
-    api.get<Action[]>(`/actions?contactId=${id}`).then(setActions).catch(() => { })
-    api.get<Conversation[]>(`/conversations?contactId=${id}`).then(setConversations).catch(() => { })
-    api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => { })
-    api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
-    api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => { })
-    api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => { })
-    api.get<Tag[]>(`/tags/contact/${id}`).then(setTags).catch(() => { })
+    try {
+      // Phase 1: Load contact first — this triggers the server-side DB warmup
+      const c = await api.get<Contact>(`/contacts/${id}`)
+      setContact(c)
+      setLoading(false)
+
+      if (c.company?.id) {
+        api.get<any[]>(`/company-prepnotes?companyId=${c.company.id}`)
+          .then(notes => setCompanyDossierCount(notes.length))
+          .catch(() => { })
+      }
+
+      // Phase 2: Now that connection is warm, load secondary data in parallel
+      api.get<Action[]>(`/actions?contactId=${id}`).then(setActions).catch(() => { })
+      api.get<Conversation[]>(`/conversations?contactId=${id}`).then(setConversations).catch(() => { })
+      api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => { })
+      api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
+      api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => { })
+      api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => { })
+      api.get<Tag[]>(`/tags/contact/${id}`).then(setTags).catch(() => { })
+
+      // Phase 2b: Load lookup data for comboboxes (with retry)
+      fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/contacts/names')).then(
+        (data) => setAllContacts(data)
+      ).catch(() => toast.error('Failed to load contact names'))
+      fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/companies')).then(
+        (data) => setAllCompanies(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
+      ).catch(() => toast.error('Failed to load companies'))
+      fetchWithRetry(() => api.get<Tag[]>('/tags')).then(setAllTags).catch(() => { })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load contact')
+      navigate('/contacts')
+      setLoading(false)
+    }
   }, [id, navigate])
 
   useEffect(() => {
     loadData()
-    // Load contacts and companies for comboboxes in dialogs (with retry)
-    fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/contacts/names')).then(
-      (data) => setAllContacts(data)
-    ).catch(() => toast.error('Failed to load contact names'))
-    fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/companies')).then(
-      (data) => setAllCompanies(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
-    ).catch(() => toast.error('Failed to load companies'))
-    fetchWithRetry(() => api.get<Tag[]>('/tags')).then(setAllTags).catch(() => { })
   }, [loadData])
 
   async function toggleActionComplete(action: Action) {

@@ -67,6 +67,29 @@ app.use((req, res, next) => {
   next();
 });
 
+// Database warmup middleware — wakes up Turso on cold start before real queries
+// Uses singleton promise: only ONE warmup query fires, all parallel requests wait for it
+let warmupPromise: Promise<void> | null = null;
+app.use('/api', async (_req, _res, next) => {
+  if (!warmupPromise) {
+    const start = Date.now();
+    warmupPromise = prisma.$queryRawUnsafe('SELECT 1')
+      .then(() => {
+        console.log(`[WARMUP] Database connection verified in ${Date.now() - start}ms`);
+      })
+      .catch((e: Error) => {
+        console.error(`[WARMUP] Failed after ${Date.now() - start}ms:`, e.message);
+        warmupPromise = null; // Allow retry on next request
+      });
+  }
+  try {
+    await warmupPromise;
+  } catch {
+    // warmup failed but let the request proceed anyway
+  }
+  next();
+});
+
 // Serve uploaded photos statically (for local dev - Vercel will use Blob storage)
 if (process.env.NODE_ENV !== 'production') {
   app.use('/photos', express.static(path.join(process.cwd(), 'data', 'photos')));

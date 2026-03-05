@@ -67,25 +67,26 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database warmup middleware — wakes up Turso on cold start before real queries
-// Uses singleton promise: only ONE warmup query fires, all parallel requests wait for it
-let warmupPromise: Promise<void> | null = null;
+// Database warmup — fire eagerly on module load (non-blocking)
+// This wakes up Turso BEFORE any real request arrives
+const warmupStart = Date.now();
+const warmupPromise = prisma.$queryRawUnsafe('SELECT 1')
+  .then(() => {
+    console.log(`[WARMUP] Database ready in ${Date.now() - warmupStart}ms`);
+  })
+  .catch((e: Error) => {
+    console.error(`[WARMUP] Failed after ${Date.now() - warmupStart}ms:`, e.message);
+  });
+
+// Middleware: wait for warmup, but give up after 5s to avoid blocking all requests
 app.use('/api', async (_req, _res, next) => {
-  if (!warmupPromise) {
-    const start = Date.now();
-    warmupPromise = prisma.$queryRawUnsafe('SELECT 1')
-      .then(() => {
-        console.log(`[WARMUP] Database connection verified in ${Date.now() - start}ms`);
-      })
-      .catch((e: Error) => {
-        console.error(`[WARMUP] Failed after ${Date.now() - start}ms:`, e.message);
-        warmupPromise = null; // Allow retry on next request
-      });
-  }
   try {
-    await warmupPromise;
+    await Promise.race([
+      warmupPromise,
+      new Promise(resolve => setTimeout(resolve, 5000)),
+    ]);
   } catch {
-    // warmup failed but let the request proceed anyway
+    // warmup failed, proceed anyway
   }
   next();
 });

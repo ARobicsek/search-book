@@ -1629,7 +1629,7 @@ function ConversationsTab({
           <div className={cn(!editId && prepNotes.length > 0 ? 'h-full flex flex-col' : '')}>
             {/* Prep Notes panel (only when creating, and notes exist) */}
             {!editId && prepNotes.length > 0 ? (
-              <ResizablePanelGroup direction="horizontal" className="min-h-[50vh]">
+              <ResizablePanelGroup orientation="horizontal" className="min-h-[50vh]">
                 <ResizablePanel defaultSize={35} minSize={20} className="pr-4 border-r mr-2">
                   <div className="space-y-3 h-full">
                     <h3 className="text-sm font-semibold">Prep Notes</h3>

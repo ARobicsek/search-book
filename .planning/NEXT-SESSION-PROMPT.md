@@ -9,10 +9,10 @@ I'm building **SearchBook**, a lightweight local CRM for managing my executive j
 ---
 
 ## What Was Completed Last Session
-### Log Conversation UI Fixes
-1. **Modal Expansion:** Widened the the Log Conversation modal structurally, moving from a standard `max-w-5xl` constraint to a nearly full viewport `w-[95vw] sm:max-w-7xl` class when displaying Prep Notes.
-2. **Markdown Pre-wrap:** Added `white-space: pre-wrap` to the `.prep-note-markdown p` ReactMarkdown wrapper in `index.css` to force the browser to respect standard single-line breaks inside bullets.
-3. **Resizable Panel Layout:** Imported Shadcn UI `react-resizable-panels` components (`ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle` elements) to convert the modal's static CSS grid into an interactive slider layout. The user can now horizontally drag the vertical boundary between the Prep Notes (default 35% width) and the Conversation Form (default 65% width).
+### Timeout Investigation & Rollback
+1. **Timeout Root Cause Analysis:** Diagnosed intermittent Vercel `request time out` errors and the "Company #X" fallback text. Suspected Vercel serverless cold-starts firing 11 parallel requests and exhausting Turso connection limits.
+2. **Aggregated Endpoint Attempt:** Built `/api/contacts/:id/full` to combine the 11 parallel requests into a single Promise.all.
+3. **Rollback:** The unified endpoint did not solve the timeouts (they persisted) and broke the existing `useAutoSave` logic (contact edits silently failed to save). Reverted the repository back to a clean state.
 
 ---
 
@@ -34,7 +34,14 @@ If Prisma errors: `cd server && npx prisma generate`
 
 ## Work for Next Session
 
-[Leave blank for next session's prompt]
+**1. Investigate Persistent Vercel Timeouts:**
+The 30-second `fetchWithTimeout` abort is still triggering in production. The single-endpoint aggregation didn't fix it. We need a new theory on why the Turso/Vercel connection is intermittently hanging severely.
+
+**2. Fix Contact Editing / Non-Saving Bug:**
+The user reported that Contact edits were not saving *even before* the experimental aggregated endpoint was deployed. We need to trace the `PUT /api/contacts/:id` route, verify the `useAutoSave` firing mechanism in `contact-detail.tsx`, and fix whatever is preventing updates from persisting.
+
+**3. Fix "Company #" rendering:**
+When the `/companies` fetch fails or times out, the `.catch(() => {})` quietly swallows the error and the UI renders "Company #X" instead of the name. We need resilient error handling for lookup arrays.
 
 ---
 

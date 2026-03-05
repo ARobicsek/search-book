@@ -82,11 +82,13 @@ export function useAutoSave<T>({
   }, [data, isDirty])
 
   const performSave = useCallback(async () => {
-    if (isSavingRef.current) return
-    if (!enabled || !originalData) return
-    if (validate && !validate(data)) return
-    if (!hasNewChanges()) return
+    if (isSavingRef.current) { console.log('[AUTO-SAVE] Skipped: already saving'); return }
+    if (!enabled) { console.log('[AUTO-SAVE] Skipped: not enabled'); return }
+    if (!originalData) { console.log('[AUTO-SAVE] Skipped: no originalData'); return }
+    if (validate && !validate(data)) { console.log('[AUTO-SAVE] Skipped: validation failed'); return }
+    if (!hasNewChanges()) { console.log('[AUTO-SAVE] Skipped: no new changes'); return }
 
+    console.log('[AUTO-SAVE] Starting save...')
     isSavingRef.current = true
     setStatus('saving')
 
@@ -94,6 +96,7 @@ export function useAutoSave<T>({
       await onSave(data)
       lastSavedDataRef.current = data
       setStatus('saved')
+      console.log('[AUTO-SAVE] Save succeeded')
 
       // Clear "saved" status after 3 seconds
       if (savedTimeoutRef.current) {
@@ -104,6 +107,7 @@ export function useAutoSave<T>({
       }, 3000)
     } catch (error) {
       setStatus('error')
+      console.error('[AUTO-SAVE] Save failed:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to save')
     } finally {
       isSavingRef.current = false

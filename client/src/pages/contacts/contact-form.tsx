@@ -346,7 +346,7 @@ export function ContactFormPage() {
   // Auto-save handler for edit mode
   const handleAutoSave = useCallback(async (data: FormData) => {
     // Prevent auto-save if manual save is in progress
-    if (saving) return
+    if (saving) { console.log('[CONTACT-SAVE] Skipped: manual save in progress'); return }
 
     // Check if there are any new company entries (not IDs)
     const hasNewCompanies = data.companyEntries.some(entry =>
@@ -363,9 +363,6 @@ export function ContactFormPage() {
     // If we have new companies that aren't created yet, DO NOT save the company list.
     // Saving a partial list would overwrite the server state and cause the new company to be lost
     // when the UI syncs back with the server response.
-    // If we have new companies that aren't created yet, DO NOT save the company list.
-    // Saving a partial list would overwrite the server state and cause the new company to be lost
-    // when the UI syncs back with the server response.
     if (hasNewCompanies) {
       delete (payload as any).companyEntries
     }
@@ -373,7 +370,9 @@ export function ContactFormPage() {
     // Remove referredByName for auto-save (don't auto-create)
     delete (payload as { referredByName?: string | null }).referredByName
 
+    console.log('[CONTACT-SAVE] Sending PUT /contacts/' + id, { fields: Object.keys(payload) })
     await api.put(`/contacts/${id}`, payload)
+    console.log('[CONTACT-SAVE] PUT succeeded')
   }, [id, companies, saving])
 
   // Use auto-save hook (only in edit mode)

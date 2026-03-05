@@ -194,6 +194,19 @@ function Field({ label, children, className }: { label: string; children: React.
   )
 }
 
+// ─── Retry helper for lookup data ─────────────────────────────
+function fetchWithRetry<T>(fetcher: () => Promise<T>, retries = 1, delayMs = 2000): Promise<T> {
+  return fetcher().catch((err) => {
+    if (retries > 0) {
+      console.log(`[RETRY] Fetch failed, retrying in ${delayMs}ms...`, err.message)
+      return new Promise<T>((resolve, reject) => {
+        setTimeout(() => fetchWithRetry(fetcher, retries - 1, delayMs).then(resolve).catch(reject), delayMs)
+      })
+    }
+    throw err
+  })
+}
+
 // ─── Main component ─────────────────────────────────────────
 
 export function ContactDetailPage() {
@@ -279,14 +292,14 @@ export function ContactDetailPage() {
 
   useEffect(() => {
     loadData()
-    // Load contacts and companies for comboboxes in dialogs
-    api.get<{ id: number; name: string }[]>('/contacts/names').then(
+    // Load contacts and companies for comboboxes in dialogs (with retry)
+    fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/contacts/names')).then(
       (data) => setAllContacts(data)
-    ).catch(() => { })
-    api.get<{ id: number; name: string }[]>('/companies').then(
+    ).catch(() => toast.error('Failed to load contact names'))
+    fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/companies')).then(
       (data) => setAllCompanies(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
-    ).catch(() => { })
-    api.get<Tag[]>('/tags').then(setAllTags).catch(() => { })
+    ).catch(() => toast.error('Failed to load companies'))
+    fetchWithRetry(() => api.get<Tag[]>('/tags')).then(setAllTags).catch(() => { })
   }, [loadData])
 
   async function toggleActionComplete(action: Action) {

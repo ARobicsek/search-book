@@ -54,6 +54,19 @@ app.use(cors({
 
 app.use(express.json({ limit: '50mb' }));
 
+// Request timing middleware — logs to Vercel function logs
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    // Only log API routes and anything that takes > 100ms
+    if (req.path.startsWith('/api') || duration > 100) {
+      console.log(`[TIMING] ${req.method} ${req.path} — ${duration}ms (${res.statusCode})`);
+    }
+  });
+  next();
+});
+
 // Serve uploaded photos statically (for local dev - Vercel will use Blob storage)
 if (process.env.NODE_ENV !== 'production') {
   app.use('/photos', express.static(path.join(process.cwd(), 'data', 'photos')));

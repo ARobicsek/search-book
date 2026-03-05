@@ -292,8 +292,8 @@ export function ContactDetailPage() {
       fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/contacts/names')).then(
         (data) => setAllContacts(data)
       ).catch(() => toast.error('Failed to load contact names'))
-      fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/companies')).then(
-        (data) => setAllCompanies(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
+      fetchWithRetry(() => api.get<{ id: number; name: string }[]>('/companies/names')).then(
+        (data) => setAllCompanies(data)
       ).catch(() => toast.error('Failed to load companies'))
       fetchWithRetry(() => api.get<Tag[]>('/tags')).then(setAllTags).catch(() => { })
     } catch (err) {

@@ -189,7 +189,7 @@ export function ContactFormPage() {
 
   // Track manual changes in 'new' mode for realistic "saving..." animation
   const [isDraftSaving, setIsDraftSaving] = useState(false)
-  const [companies, setCompanies] = useState<Company[]>([])
+  const [companies, setCompanies] = useState<{ id: number; name: string }[]>([])
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
@@ -253,7 +253,7 @@ export function ContactFormPage() {
   const [personalDetailsOpen, setPersonalDetailsOpen] = useState(hasPersonalDetails)
 
   useEffect(() => {
-    api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
+    api.get<{ id: number; name: string }[]>('/companies/names').then(setCompanies).catch(() => toast.error('Failed to load companies'))
     api.get<{ id: number; name: string }[]>('/contacts/names').then(
       (data) => setAllContacts(data)
     ).catch(() => { })

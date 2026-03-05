@@ -3,7 +3,21 @@ import prisma from '../db';
 
 const router = Router();
 
-// GET /api/companies — list all
+// GET /api/companies/names — lightweight list of just id/name (no _count subquery)
+router.get('/names', async (_req: Request, res: Response) => {
+  try {
+    const companies = await prisma.company.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json(companies);
+  } catch (error) {
+    console.error('Error fetching company names:', error);
+    res.status(500).json({ error: 'Failed to fetch company names' });
+  }
+});
+
+// GET /api/companies — full list (with contact counts — can be slow)
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const companies = await prisma.company.findMany({

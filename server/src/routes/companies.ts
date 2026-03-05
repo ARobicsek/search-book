@@ -17,11 +17,10 @@ router.get('/names', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/companies — full list (with contact counts — can be slow)
+// GET /api/companies — full list (without expensive _count subquery)
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const companies = await prisma.company.findMany({
-      include: { _count: { select: { contacts: true } } },
       orderBy: { updatedAt: 'desc' },
     });
     res.json(companies);

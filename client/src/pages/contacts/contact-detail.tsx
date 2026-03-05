@@ -253,28 +253,11 @@ export function ContactDetailPage() {
 
   const loadData = useCallback(() => {
     if (!id) return
-    api.get<{
-      contact: Contact;
-      actions: Action[];
-      conversations: Conversation[];
-      relationships: Relationship[];
-      links: LinkRecord[];
-      prepNotes: PrepNote[];
-      employmentHistory: EmploymentHistory[];
-      tags: Tag[];
-    }>(`/contacts/${id}/full`)
-      .then((data) => {
-        setContact(data.contact)
-        setActions(data.actions)
-        setConversations(data.conversations)
-        setRelationships(data.relationships)
-        setLinks(data.links)
-        setPrepNotes(data.prepNotes)
-        setEmploymentHistory(data.employmentHistory)
-        setTags(data.tags)
-
-        if (data.contact.company?.id) {
-          api.get<any[]>(`/company-prepnotes?companyId=${data.contact.company.id}`)
+    api.get<Contact>(`/contacts/${id}`)
+      .then((c) => {
+        setContact(c)
+        if (c.company?.id) {
+          api.get<any[]>(`/company-prepnotes?companyId=${c.company.id}`)
             .then(notes => setCompanyDossierCount(notes.length))
             .catch(() => { })
         }
@@ -284,6 +267,14 @@ export function ContactDetailPage() {
         navigate('/contacts')
       })
       .finally(() => setLoading(false))
+
+    api.get<Action[]>(`/actions?contactId=${id}`).then(setActions).catch(() => { })
+    api.get<Conversation[]>(`/conversations?contactId=${id}`).then(setConversations).catch(() => { })
+    api.get<Relationship[]>(`/relationships?contactId=${id}`).then(setRelationships).catch(() => { })
+    api.get<LinkRecord[]>(`/links?contactId=${id}`).then(setLinks).catch(() => { })
+    api.get<PrepNote[]>(`/prepnotes?contactId=${id}`).then(setPrepNotes).catch(() => { })
+    api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`).then(setEmploymentHistory).catch(() => { })
+    api.get<Tag[]>(`/tags/contact/${id}`).then(setTags).catch(() => { })
   }, [id, navigate])
 
   useEffect(() => {

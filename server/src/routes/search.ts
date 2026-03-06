@@ -46,9 +46,6 @@ router.get('/', async (req: Request, res: Response) => {
           { notes: { contains: searchTerm } },
         ],
       },
-      include: {
-        _count: { select: { contacts: true } },
-      },
       take: maxResults,
       orderBy: { updatedAt: 'desc' },
     });
@@ -121,7 +118,6 @@ router.get('/', async (req: Request, res: Response) => {
           name: company.name,
           industry: company.industry,
           status: company.status,
-          _count: company._count,
         };
 
         if (fetchRelated) {

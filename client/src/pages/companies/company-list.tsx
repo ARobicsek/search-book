@@ -13,6 +13,7 @@ import {
 } from '@tanstack/react-table'
 import { ArrowUpDown, Plus, Search, X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useLocalStorage } from '@/hooks/use-local-storage'
 import { api } from '@/lib/api'
 import type { Company, CompanyStatus } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS } from '@/lib/types'
@@ -207,11 +208,11 @@ export function CompanyListPage() {
   const isMobile = useIsMobile()
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'updatedAt', desc: true }])
+  const [sorting, setSorting] = useLocalStorage<SortingState>('companies_table_sorting', [{ id: 'updatedAt', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [globalFilter, setGlobalFilter] = useLocalStorage<string>('companies_table_search', '')
+  const [statusFilter, setStatusFilter] = useLocalStorage<string>('companies_table_status', 'all')
 
   useEffect(() => {
     api

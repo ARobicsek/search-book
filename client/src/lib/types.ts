@@ -1,6 +1,6 @@
 export type Ecosystem = 'RECRUITER' | 'ROLODEX' | 'TARGET' | 'INFLUENCER' | 'ACADEMIA' | 'INTRO_SOURCE';
 export type ContactStatus = 'NEW' | 'RESEARCHING' | 'CONNECTED' | 'AWAITING_RESPONSE' | 'FOLLOW_UP_NEEDED' | 'LEAD_TO_PURSUE' | 'ON_HOLD' | 'CLOSED';
-export type CompanyStatus = 'RESEARCHING' | 'ACTIVE_TARGET' | 'IN_DISCUSSIONS' | 'CONNECTED' | 'ON_HOLD' | 'CLOSED';
+export type CompanyStatus = 'RESEARCHING' | 'ACTIVE_TARGET' | 'IN_DISCUSSIONS' | 'AWAITING_RESPONSE' | 'CONNECTED' | 'ON_HOLD' | 'CLOSED';
 
 export interface Contact {
   id: number;
@@ -88,6 +88,7 @@ export const COMPANY_STATUS_OPTIONS: { value: CompanyStatus; label: string }[] =
   { value: 'RESEARCHING', label: 'Researching' },
   { value: 'ACTIVE_TARGET', label: 'Active Target' },
   { value: 'IN_DISCUSSIONS', label: 'In Discussions' },
+  { value: 'AWAITING_RESPONSE', label: 'Awaiting Response' },
   { value: 'CONNECTED', label: 'Connected' },
   { value: 'ON_HOLD', label: 'On Hold' },
   { value: 'CLOSED', label: 'Closed' },

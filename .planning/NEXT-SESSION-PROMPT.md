@@ -1,9 +1,9 @@
 ## What Was Completed Last Session
 
-### Company Industry Backfill (2026-03-09)
-1. Created and ran a one-off `@libsql/client` script to connect directly to the Turso production database.
-2. Successfully updated 68 existing company records to be explicitly marked with the `Recruiting` industry. 
-3. Bypassed the local `prisma` adapter hanging issue by using raw SQL via the Turso credentials.
+### Dashboard Contact Names Fix (2026-03-19)
+1. Fixed bug where contact names weren't showing on dashboard action items (Today, Overdue, Upcoming, Unscheduled sections).
+2. Root cause: `ActionRow` in `dashboard.tsx` only checked `action.contact` (legacy single FK), but actions created via the multi-select contact picker store contacts in the `actionContacts` junction table.
+3. Updated `ActionRow` to check `action.actionContacts` first, falling back to `action.contact` — matching the pattern already used in the actions list page.
 
 ---
 

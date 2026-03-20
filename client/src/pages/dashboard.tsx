@@ -78,14 +78,20 @@ function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
           <Badge variant="outline" className={`text-xs ${priorityColors[action.priority as ActionPriority]}`}>
             {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
           </Badge>
-          {action.contact && (
-            <Link
-              to={`/contacts/${action.contact.id}`}
-              className="text-xs text-muted-foreground hover:underline"
-            >
-              {action.contact.name}
-            </Link>
-          )}
+          {(() => {
+            const contacts = action.actionContacts?.length
+              ? action.actionContacts.map((ac) => ac.contact)
+              : action.contact ? [action.contact] : []
+            return contacts.map((c) => (
+              <Link
+                key={c.id}
+                to={`/contacts/${c.id}`}
+                className="text-xs text-muted-foreground hover:underline"
+              >
+                {c.name}
+              </Link>
+            ))
+          })()}
           <div onClick={(e) => e.stopPropagation()}>
             <ActionDateSelect
               action={action}

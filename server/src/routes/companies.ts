@@ -18,8 +18,6 @@ router.get('/names', async (_req: Request, res: Response) => {
 });
 
 // GET /api/companies — list for table view
-// Explicit select avoids fetching large text fields (notes) that cause the
-// @libsql/client@0.5.6 HTTP transport to hang on 200+ row responses.
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const companies = await prisma.company.findMany({

@@ -68,8 +68,7 @@ app.use((req, res, next) => {
 });
 
 // Per-request fresh Prisma client in production (Turso).
-// The @libsql/client@0.5.6 reuses HTTP keep-alive connections that go stale
-// in serverless, causing queries to hang. Fresh client = fresh connection.
+// Prevents stale HTTP connections in serverless environments.
 app.use('/api', (_req, _res, next) => {
   resetPrisma();
   next();

@@ -1,22 +1,36 @@
+import path from 'path';
 import { PrismaClient } from './generated/prisma/client';
-import { PrismaLibSQL } from '@prisma/adapter-libsql';
+import { PrismaLibSql } from '@prisma/adapter-libsql';
 
-// Create a fresh Prisma client (with Turso adapter in production, plain SQLite locally)
+// Resolve DATABASE_URL relative to server/prisma/ (where the schema lives)
+// to match Prisma 6 behavior, since the adapter resolves relative to CWD.
+function resolveLocalDbUrl(): string {
+  const raw = process.env.DATABASE_URL || 'file:./dev.db';
+  const filePath = raw.replace(/^file:/, '');
+  const absolute = path.resolve(__dirname, '..', 'prisma', filePath);
+  return `file:${absolute}`;
+}
+
+// Create a fresh Prisma client (with Turso adapter in production, SQLite adapter locally)
 function createPrismaClient(): PrismaClient {
   if (process.env.TURSO_DATABASE_URL) {
-    const adapter = new PrismaLibSQL({
+    const adapter = new PrismaLibSql({
       url: process.env.TURSO_DATABASE_URL!,
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
     return new PrismaClient({ adapter });
   }
-  return new PrismaClient();
+  // Dynamic require: better-sqlite3 is a native module only available in dev
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
+  const adapter = new PrismaBetterSqlite3({
+    url: resolveLocalDbUrl(),
+  });
+  return new PrismaClient({ adapter });
 }
 
 // In local dev (SQLite), reuse a single client.
 // In production (Turso), create a fresh client per request to avoid stale HTTP connections.
-// The @libsql/client@0.5.6 reuses HTTP keep-alive connections that go stale in serverless,
-// causing all queries after the first to hang indefinitely.
 let _client: PrismaClient = createPrismaClient();
 
 /** Call before each request in production to get a fresh Turso connection. */

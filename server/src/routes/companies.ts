@@ -17,24 +17,13 @@ router.get('/names', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/companies — list for table view (select only needed fields)
+// GET /api/companies — list for table view
+// Uses raw SQL because Prisma findMany (all columns) hangs on Turso/libsql adapter
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const companies = await prisma.company.findMany({
-      select: {
-        id: true,
-        name: true,
-        industry: true,
-        size: true,
-        hqLocation: true,
-        status: true,
-        website: true,
-        notes: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const companies = await prisma.$queryRawUnsafe(
+      'SELECT id, name, industry, size, hqLocation, website, notes, status, createdAt, updatedAt FROM Company ORDER BY updatedAt DESC'
+    );
     res.json(companies);
   } catch (error) {
     console.error('Error fetching companies:', error);

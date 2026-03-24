@@ -36,9 +36,9 @@ export const api = {
     return fetchWithTimeout(`${API_BASE}${path}`)
       .then(handleResponse<T>)
       .catch((error) => {
-        // Auto-retry GET requests once on timeout/504 (transient DB issues)
-        if (error.message.includes('timed out') || error.message.includes('504')) {
-          console.log(`[api] Retrying GET ${path} after timeout...`);
+        // Auto-retry GET requests once on timeout/server error (transient DB issues)
+        if (error.message.includes('timed out') || error.message.includes('504') || error.message.includes('500')) {
+          console.log(`[api] Retrying GET ${path} after error: ${error.message}`);
           return fetchWithTimeout(`${API_BASE}${path}`).then(handleResponse<T>);
         }
         throw error;

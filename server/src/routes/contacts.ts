@@ -41,10 +41,24 @@ router.get('/', async (req: Request, res: Response) => {
 
     // When sorting by lastOutreachDate, we need to fetch all contacts first,
     // compute lastOutreachDate, sort, then paginate
+    // Explicit select avoids fetching large text fields (notes, openQuestions,
+    // personalDetails, etc.) that cause @libsql/client to hang on 200+ row responses.
     const contacts = await prisma.contact.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        title: true,
+        companyId: true,
+        companyName: true,
         company: { select: { id: true, name: true } },
+        ecosystem: true,
+        status: true,
+        location: true,
+        flagged: true,
+        photoUrl: true,
+        createdAt: true,
+        updatedAt: true,
       },
       orderBy: sortByLastOutreach ? undefined : { updatedAt: 'desc' },
       take: sortByLastOutreach ? undefined : take,

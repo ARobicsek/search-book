@@ -80,7 +80,22 @@ router.get('/', async (req: Request, res: Response) => {
 
     const actions = await prisma.action.findMany({
       where,
-      include: actionListIncludes,
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        dueDate: true,
+        completed: true,
+        completedDate: true,
+        priority: true,
+        recurring: true,
+        recurringIntervalDays: true,
+        contactId: true,
+        companyId: true,
+        createdAt: true,
+        updatedAt: true,
+        ...actionListIncludes,
+      },
       orderBy,
     });
 

@@ -156,29 +156,6 @@ app.get('/api/debug/companies', async (_req, res) => {
 
   // NOTE: _count include removed — generates correlated subquery that hangs on Turso
 
-  // Helper: run a query with a 5s timeout
-  const timedQuery = (label: string, sql: string) =>
-    Promise.race([
-      prisma.$queryRawUnsafe(sql).then((r: any) => ({ ms: -1, count: r.length })),
-      new Promise<{ timeout: true }>(resolve => setTimeout(() => resolve({ timeout: true }), 5000)),
-    ]).then(r => {
-      results[label] = r;
-    }).catch((e: any) => {
-      results[label] = { error: e.message };
-    });
-
-  const start4 = Date.now();
-  await timedQuery('allColsOneRow', 'SELECT * FROM Company LIMIT 1');
-  results.allColsOneRow = { ...results.allColsOneRow, ms: Date.now() - start4 };
-
-  const start5 = Date.now();
-  await timedQuery('allColsTenRows', 'SELECT * FROM Company ORDER BY updatedAt DESC LIMIT 10');
-  results.allColsTenRows = { ...results.allColsTenRows, ms: Date.now() - start5 };
-
-  const start6 = Date.now();
-  await timedQuery('allColsAllRows', 'SELECT * FROM Company ORDER BY updatedAt DESC');
-  results.allColsAllRows = { ...results.allColsAllRows, ms: Date.now() - start6 };
-
   res.json(results);
 });
 

@@ -18,12 +18,22 @@ router.get('/names', async (_req: Request, res: Response) => {
 });
 
 // GET /api/companies — list for table view
-// Uses raw SQL because Prisma findMany (all columns) hangs on Turso/libsql adapter
+// Explicit select avoids fetching large text fields (notes) that cause the
+// @libsql/client@0.5.6 HTTP transport to hang on 200+ row responses.
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const companies = await prisma.$queryRawUnsafe(
-      'SELECT id, name, industry, size, hqLocation, website, notes, status, createdAt, updatedAt FROM Company ORDER BY updatedAt DESC'
-    );
+    const companies = await prisma.company.findMany({
+      select: {
+        id: true,
+        name: true,
+        industry: true,
+        size: true,
+        hqLocation: true,
+        status: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
     res.json(companies);
   } catch (error) {
     console.error('Error fetching companies:', error);

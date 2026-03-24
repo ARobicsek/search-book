@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import prisma from './db';
+import prisma, { resetPrisma } from './db';
 import path from 'path';
 import contactsRouter from './routes/contacts';
 import companiesRouter from './routes/companies';
@@ -67,31 +67,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database warmup — fire eagerly on module load (non-blocking)
-// This wakes up Turso BEFORE any real request arrives
-const warmupStart = Date.now();
-const warmupPromise = prisma.$queryRawUnsafe('SELECT 1')
-  .catch(() => {
-    console.log(`[WARMUP] First attempt failed after ${Date.now() - warmupStart}ms, retrying...`);
-    return prisma.$queryRawUnsafe('SELECT 1');
-  })
-  .then(() => {
-    console.log(`[WARMUP] Database ready in ${Date.now() - warmupStart}ms`);
-  })
-  .catch((e: Error) => {
-    console.error(`[WARMUP] Failed after ${Date.now() - warmupStart}ms:`, e.message);
-  });
-
-// Middleware: wait for warmup, but give up after 4s to avoid blocking real requests
-app.use('/api', async (_req, _res, next) => {
-  try {
-    await Promise.race([
-      warmupPromise,
-      new Promise(resolve => setTimeout(resolve, 4000)),
-    ]);
-  } catch {
-    // warmup failed, proceed anyway
-  }
+// Per-request fresh Prisma client in production (Turso).
+// The @libsql/client@0.5.6 reuses HTTP keep-alive connections that go stale
+// in serverless, causing queries to hang. Fresh client = fresh connection.
+app.use('/api', (_req, _res, next) => {
+  resetPrisma();
   next();
 });
 

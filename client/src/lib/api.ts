@@ -33,7 +33,16 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const api = {
   get<T>(path: string): Promise<T> {
-    return fetchWithTimeout(`${API_BASE}${path}`).then(handleResponse<T>);
+    return fetchWithTimeout(`${API_BASE}${path}`)
+      .then(handleResponse<T>)
+      .catch((error) => {
+        // Auto-retry GET requests once on timeout/504 (transient DB issues)
+        if (error.message.includes('timed out') || error.message.includes('504')) {
+          console.log(`[api] Retrying GET ${path} after timeout...`);
+          return fetchWithTimeout(`${API_BASE}${path}`).then(handleResponse<T>);
+        }
+        throw error;
+      });
   },
   post<T>(path: string, data?: unknown): Promise<T> {
     return fetchWithTimeout(`${API_BASE}${path}`, {

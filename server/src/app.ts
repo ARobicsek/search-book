@@ -82,12 +82,12 @@ const warmupPromise = prisma.$queryRawUnsafe('SELECT 1')
     console.error(`[WARMUP] Failed after ${Date.now() - warmupStart}ms:`, e.message);
   });
 
-// Middleware: wait for warmup, but give up after 8s to avoid blocking all requests
+// Middleware: wait for warmup, but give up after 4s to avoid blocking real requests
 app.use('/api', async (_req, _res, next) => {
   try {
     await Promise.race([
       warmupPromise,
-      new Promise(resolve => setTimeout(resolve, 8000)),
+      new Promise(resolve => setTimeout(resolve, 4000)),
     ]);
   } catch {
     // warmup failed, proceed anyway
@@ -95,14 +95,14 @@ app.use('/api', async (_req, _res, next) => {
   next();
 });
 
-// Request-level timeout — return a clean 504 before Vercel kills at 30s
+// Request-level timeout — 12s so client gets two attempts within Vercel's 30s limit
 app.use('/api', (req, res, next) => {
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
-      console.error(`[TIMEOUT] ${req.method} ${req.path} exceeded 25s`);
+      console.error(`[TIMEOUT] ${req.method} ${req.path} exceeded 12s`);
       res.status(504).json({ error: 'Request timed out. Please try again.' });
     }
-  }, 25000);
+  }, 12000);
   res.on('finish', () => clearTimeout(timeout));
   res.on('close', () => clearTimeout(timeout));
   next();

@@ -4,16 +4,14 @@
 
 **Root cause found and fixed.** The `@libsql/client@0.5.6` HTTP transport has TWO issues:
 1. **Stale HTTP keep-alive connections** in Vercel serverless — fixed by creating a fresh PrismaClient per request via `resetPrisma()` middleware.
-2. **Response size limit** — the HTTP transport hangs when returning 170+ rows with all columns. This is the actual reason the app broke: as data grew past a threshold, list queries started exceeding the transport's capacity.
+2. **Response size limit** — the HTTP transport hangs when returning 170+ rows with all columns. As data grew past a threshold, list queries started exceeding the transport's capacity.
 
-**Fixes applied:**
+**Fixes applied (workarounds, to be removed after Prisma 7 upgrade):**
 - `server/src/db.ts` — Proxy-based PrismaClient with `resetPrisma()` that creates a fresh client per request in production. Local dev (SQLite) still uses singleton.
 - `server/src/app.ts` — Replaced warmup middleware with `resetPrisma()` call before each API request.
 - `server/src/routes/companies.ts` — Added explicit `select` (7 fields) to list endpoint, excluding `notes` and `website`.
 - `server/src/routes/contacts.ts` — Added explicit `select` (13 fields) to list endpoint, excluding `notes`, `openQuestions`, `personalDetails`, `roleDescription`, etc.
 - `server/src/routes/actions.ts` — Conditional select: unfiltered queries (calendar) return 8 essential fields only; filtered queries (dashboard, detail pages) return full data with relation includes.
-
-**Key finding (add to CLAUDE.md):** The `@libsql/client@0.5.6` HTTP transport hangs when result set exceeds ~200 rows × 10 columns. All list endpoints MUST use explicit `select` to limit response size. This is a hard limit of the library version — upgrading to `@libsql/client@0.17.0` (requires Prisma 7) would likely fix this.
 
 ### Production Performance After Fix
 | Endpoint | Time |
@@ -29,14 +27,30 @@
 
 ## Work for Next Session
 
-**1. Update CLAUDE.md with libsql response size constraint**
-Add the discovery about `@libsql/client@0.5.6` response size limits. Any new list endpoint must use explicit `select` to stay under the threshold.
+### 1. PRIORITY: Upgrade Prisma 6 → 7 + libsql client 0.5.6 → 0.17.0
 
-**2. Phase 8: Document Search**
+This upgrade eliminates the root cause of the response size limit that required all the workarounds above.
+
+**What to upgrade:**
+- `prisma` (dev): `^6.3.1` → `^7.x`
+- `@prisma/client`: `^6.3.1` → `^7.x`
+- `@prisma/adapter-libsql`: `^6.3.1` → `^7.x`
+- `@libsql/client`: `^0.5.6` → `^0.17.0`
+
+**Key concerns:**
+- Prisma 7 has breaking changes — check the [Prisma 7 upgrade guide](https://www.prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7)
+- The generated client import path may change (`./generated/prisma/client` → check)
+- The `PrismaLibSQL` adapter constructor API may differ
+- `@libsql/client@0.17.0` is already used in the browser-direct backup module (`client/src/lib/turso-backup.ts`) — so we know it works with Turso
+- After upgrade, verify locally then deploy and test ALL endpoints
+
+**After successful upgrade, clean up workarounds:**
+- `db.ts`: The `resetPrisma()` per-request pattern may no longer be needed (test without it)
+- `companies.ts`, `contacts.ts`, `actions.ts`: The explicit `select` constraints can be relaxed (test with full findMany)
+- CLAUDE.md: Update the libsql response size warning
+
+### 2. Phase 8: Document Search (if time permits)
 See `.planning/ROADMAP.md` for details.
-
-**3. Consider Prisma 7 upgrade (optional)**
-`@prisma/adapter-libsql@7.5.0` + `@libsql/client@0.17.0` would likely eliminate the response size issue entirely. Significant upgrade but worth evaluating.
 
 ---
 

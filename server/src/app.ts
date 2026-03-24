@@ -156,6 +156,15 @@ app.get('/api/debug/companies', async (_req, res) => {
 
   // NOTE: _count include removed — generates correlated subquery that hangs on Turso
 
+  // Action count check
+  try {
+    const startA = Date.now();
+    const actionCount = await prisma.$queryRawUnsafe('SELECT COUNT(*) as cnt FROM Action');
+    results.actionCount = { ms: Date.now() - startA, result: actionCount };
+  } catch (e: any) {
+    results.actionCount = { error: e.message };
+  }
+
   res.json(results);
 });
 

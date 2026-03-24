@@ -143,7 +143,7 @@ app.get('/api/debug', async (_req, res) => {
   }
 });
 
-// Debug endpoint to diagnose company table issues
+// Debug endpoint to diagnose database timing
 app.get('/api/debug/companies', async (_req, res) => {
   const results: Record<string, any> = {};
 
@@ -174,17 +174,7 @@ app.get('/api/debug/companies', async (_req, res) => {
     results.prismaFindNames = { error: e.message };
   }
 
-  // Test 4: Prisma findMany with _count (the slow query)
-  try {
-    const start4 = Date.now();
-    const withCount = await prisma.company.findMany({
-      include: { _count: { select: { contacts: true } } },
-      take: 3 // limit to 3 to test if it's the subquery
-    });
-    results.prismaFindWithCount = { ms: Date.now() - start4, count: withCount.length };
-  } catch (e: any) {
-    results.prismaFindWithCount = { error: e.message };
-  }
+  // NOTE: _count include removed — generates correlated subquery that hangs on Turso
 
   res.json(results);
 });

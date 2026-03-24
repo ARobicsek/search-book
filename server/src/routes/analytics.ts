@@ -29,9 +29,11 @@ router.get('/overview', async (req: Request, res: Response) => {
       pendingActionsCount,
       overdueActionsCount,
       completedActionsCount,
-      allContacts,
-      allCompanies,
-      allCompletedActions,
+      contactsBeforeStart,
+      companiesBeforeStart,
+      contactsByDateRaw,
+      companiesByDateRaw,
+      completedByDateRaw,
       inDiscussionsCompaniesCount,
     ] = await Promise.all([
       prisma.contact.count(),
@@ -41,12 +43,25 @@ router.get('/overview', async (req: Request, res: Response) => {
       prisma.action.count({
         where: { completed: true, completedDate: { gte: startDateStr, lte: endDateStr } },
       }),
-      prisma.contact.findMany({ select: { createdAt: true } }),
-      prisma.company.findMany({ select: { createdAt: true } }),
-      prisma.action.findMany({
-        where: { completed: true, completedDate: { gte: startDateStr, lte: endDateStr } },
-        select: { completedDate: true },
-      }),
+      // Count contacts created before the date range (for running total baseline)
+      prisma.contact.count({ where: { createdAt: { lt: startDate } } }),
+      prisma.company.count({ where: { createdAt: { lt: startDate } } }),
+      // Group by date within range (SQL aggregation instead of full table scan)
+      prisma.$queryRaw<{ d: string; cnt: number }[]>`
+        SELECT DATE(createdAt) as d, COUNT(*) as cnt FROM Contact
+        WHERE createdAt >= ${startDate.toISOString()} AND createdAt <= ${endDate.toISOString()}
+        GROUP BY DATE(createdAt)
+      `,
+      prisma.$queryRaw<{ d: string; cnt: number }[]>`
+        SELECT DATE(createdAt) as d, COUNT(*) as cnt FROM Company
+        WHERE createdAt >= ${startDate.toISOString()} AND createdAt <= ${endDate.toISOString()}
+        GROUP BY DATE(createdAt)
+      `,
+      prisma.$queryRaw<{ d: string; cnt: number }[]>`
+        SELECT completedDate as d, COUNT(*) as cnt FROM Action
+        WHERE completed = 1 AND completedDate >= ${startDateStr} AND completedDate <= ${endDateStr}
+        GROUP BY completedDate
+      `,
       prisma.company.count({ where: { status: 'IN_DISCUSSIONS' } }),
     ]);
 
@@ -58,27 +73,23 @@ router.get('/overview', async (req: Request, res: Response) => {
       completedActions: [] as { date: string; count: number }[],
     };
 
-    let runningContacts = allContacts.filter((c) => c.createdAt < startDate).length;
-    let runningCompanies = allCompanies.filter((c) => c.createdAt < startDate).length;
+    let runningContacts = contactsBeforeStart;
+    let runningCompanies = companiesBeforeStart;
     let runningCompleted = 0;
 
     const contactsByDate = new Map<string, number>();
-    for (const c of allContacts) {
-      const d = c.createdAt.toLocaleDateString('en-CA');
-      contactsByDate.set(d, (contactsByDate.get(d) || 0) + 1);
+    for (const row of contactsByDateRaw) {
+      contactsByDate.set(row.d, Number(row.cnt));
     }
 
     const companiesByDate = new Map<string, number>();
-    for (const c of allCompanies) {
-      const d = c.createdAt.toLocaleDateString('en-CA');
-      companiesByDate.set(d, (companiesByDate.get(d) || 0) + 1);
+    for (const row of companiesByDateRaw) {
+      companiesByDate.set(row.d, Number(row.cnt));
     }
 
     const completedByDate = new Map<string, number>();
-    for (const a of allCompletedActions) {
-      if (a.completedDate) {
-        completedByDate.set(a.completedDate, (completedByDate.get(a.completedDate) || 0) + 1);
-      }
+    for (const row of completedByDateRaw) {
+      completedByDate.set(row.d, Number(row.cnt));
     }
 
     for (const d of dates) {

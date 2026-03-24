@@ -15,6 +15,17 @@ const actionIncludes = {
   },
 };
 
+// Lighter includes for list views (dashboard, action lists) — skips conversation and nested company lookups
+const actionListIncludes = {
+  contact: { select: { id: true, name: true } },
+  actionContacts: {
+    include: { contact: { select: { id: true, name: true } } },
+  },
+  actionCompanies: {
+    include: { company: { select: { id: true, name: true } } },
+  },
+};
+
 // GET /api/actions — list all actions with optional filters
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -69,7 +80,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const actions = await prisma.action.findMany({
       where,
-      include: actionIncludes,
+      include: actionListIncludes,
       orderBy,
     });
 

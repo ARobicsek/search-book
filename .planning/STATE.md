@@ -48,3 +48,5 @@ For full history, see SESSION-HISTORY.md.
 | 2026-03-04 | Log Conversation fixes — default date stale closure, modal width expansion, resizable panels (35/65 split). |
 | 2026-03-05 | Timeout investigation — attempted unified endpoint, broke useAutoSave, reverted. |
 | 2026-03-05 | **Timeout Root Cause & Fix.** Prisma `_count` subquery caused cascading Vercel timeouts. Stripped `_count`, added `/companies/names`, staggered loading, fetchWithRetry, non-blocking warmup. |
+| 2026-03-24 | Multi-word search filtering, resilience layers (SW timeout fix, server timeout, client retry, warmup). |
+| 2026-03-24 | **Query optimizations** — lighter action includes, analytics SQL aggregations, removed `_count` debug endpoint. Server timeout 25s→12s. Client retry on 500. **Turso connection reliability still unresolved** — queries fast (200-400ms) when they connect, but connections intermittently hang for 12s+. Custom fetch timeout broke libsql client (reverted). Root cause: Turso connection-level issue, not query complexity. |

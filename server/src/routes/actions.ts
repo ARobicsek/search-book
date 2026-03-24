@@ -94,7 +94,9 @@ router.get('/', async (req: Request, res: Response) => {
         companyId: true,
         createdAt: true,
         updatedAt: true,
-        ...actionListIncludes,
+        // Only include relation data for filtered queries (small result sets).
+        // Unfiltered queries (calendar) return too many rows for libsql with joins.
+        ...(where.completed !== undefined || contactId || companyId ? actionListIncludes : {}),
       },
       orderBy,
     });

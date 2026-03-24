@@ -78,6 +78,7 @@ router.get('/', async (req: Request, res: Response) => {
       ? [{ completedDate: 'desc' as const }, { priority: 'asc' as const }]
       : [{ dueDate: 'asc' as const }, { priority: 'asc' as const }];
 
+    const isFiltered = where.completed !== undefined || contactId || companyId;
     const actions = await prisma.action.findMany({
       where,
       select: {
@@ -89,14 +90,16 @@ router.get('/', async (req: Request, res: Response) => {
         completedDate: true,
         priority: true,
         recurring: true,
-        recurringIntervalDays: true,
-        contactId: true,
-        companyId: true,
-        createdAt: true,
-        updatedAt: true,
-        // Only include relation data for filtered queries (small result sets).
-        // Unfiltered queries (calendar) return too many rows for libsql with joins.
-        ...(where.completed !== undefined || contactId || companyId ? actionListIncludes : {}),
+        // Only include extra fields + relations for filtered queries (small result sets).
+        // Unfiltered queries (calendar) return too many rows for libsql transport.
+        ...(isFiltered ? {
+          recurringIntervalDays: true,
+          contactId: true,
+          companyId: true,
+          createdAt: true,
+          updatedAt: true,
+          ...actionListIncludes,
+        } : {}),
       },
       orderBy,
     });

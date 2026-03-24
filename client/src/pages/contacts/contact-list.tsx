@@ -666,24 +666,28 @@ export function ContactListPage() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     globalFilterFn: (row, _columnId, filterValue) => {
-      const search = filterValue.toLowerCase()
+      const searchTerms = filterValue.toLowerCase().trim().split(/\s+/)
       const contact = row.original
       // Get additional company names (including past companies)
       const additionalCompanyIds = getAllCompanyIds(contact)
       const additionalCompanyNames = additionalCompanyIds
         .map((id) => allCompanies.find((c) => c.id === id)?.name ?? '')
         .filter(Boolean)
-      // Search across multiple fields
-      return (
-        contact.name.toLowerCase().includes(search) ||
-        (contact.title?.toLowerCase().includes(search) ?? false) ||
-        (contact.company?.name.toLowerCase().includes(search) ?? false) ||
-        (contact.companyName?.toLowerCase().includes(search) ?? false) ||
-        additionalCompanyNames.some((name) => name.toLowerCase().includes(search)) ||
-        (contact.location?.toLowerCase().includes(search) ?? false) ||
-        (contact.notes?.toLowerCase().includes(search) ?? false) ||
-        (contact.openQuestions?.toLowerCase().includes(search) ?? false) ||
-        (contact.roleDescription?.toLowerCase().includes(search) ?? false)
+      
+      const searchFields = [
+        contact.name,
+        contact.title,
+        contact.company?.name,
+        contact.companyName,
+        ...additionalCompanyNames,
+        contact.location,
+        contact.notes,
+        contact.openQuestions,
+        contact.roleDescription
+      ]
+
+      return searchTerms.every((term: string) =>
+        searchFields.some((field) => field?.toLowerCase().includes(term))
       )
     },
   })

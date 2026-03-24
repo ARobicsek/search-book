@@ -272,14 +272,16 @@ export function CompanyListPage() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     globalFilterFn: (row, _columnId, filterValue) => {
-      const search = filterValue.toLowerCase()
+      const searchTerms = filterValue.toLowerCase().trim().split(/\s+/)
       const company = row.original
-      // Search across multiple fields
-      return (
-        company.name.toLowerCase().includes(search) ||
-        (company.industry?.toLowerCase().includes(search) ?? false) ||
-        (company.hqLocation?.toLowerCase().includes(search) ?? false) ||
-        (company.notes?.toLowerCase().includes(search) ?? false)
+      const searchFields = [
+        company.name,
+        company.industry,
+        company.hqLocation,
+        company.notes
+      ]
+      return searchTerms.every((term: string) =>
+        searchFields.some((field) => field?.toLowerCase().includes(term))
       )
     },
   })

@@ -65,7 +65,7 @@ function formatDate(dateStr: string | null) {
 
 // Global filter function for searching across multiple fields
 const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) => {
-  const search = filterValue.toLowerCase()
+  const searchTerms = filterValue.toLowerCase().trim().split(/\s+/)
   const action = row.original
 
   // Search across title, description, contact names, company names, and contact's companies
@@ -89,7 +89,10 @@ const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) =
     ...contactCompanyNames,
   ]
 
-  return searchFields.some((field) => field?.toLowerCase().includes(search))
+  // Every word in the search query must be found in at least one field
+  return searchTerms.every((term: string) =>
+    searchFields.some((field) => field?.toLowerCase().includes(term))
+  )
 }
 
 export function ActionListPage() {

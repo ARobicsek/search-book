@@ -156,6 +156,15 @@ app.get('/api/debug/companies', async (_req, res) => {
 
   // NOTE: _count include removed — generates correlated subquery that hangs on Turso
 
+  // Test 4: Prisma findMany all fields with orderBy (replicates GET /api/companies)
+  try {
+    const start4 = Date.now();
+    const all = await prisma.company.findMany({ orderBy: { updatedAt: 'desc' } });
+    results.prismaFindAll = { ms: Date.now() - start4, count: all.length };
+  } catch (e: any) {
+    results.prismaFindAll = { error: e.message };
+  }
+
   res.json(results);
 });
 

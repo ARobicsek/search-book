@@ -17,10 +17,22 @@ router.get('/names', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/companies — full list (without expensive _count subquery)
+// GET /api/companies — list for table view (select only needed fields)
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const companies = await prisma.company.findMany({
+      select: {
+        id: true,
+        name: true,
+        industry: true,
+        size: true,
+        hqLocation: true,
+        status: true,
+        website: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: { updatedAt: 'desc' },
     });
     res.json(companies);

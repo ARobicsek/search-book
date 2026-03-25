@@ -51,3 +51,4 @@ For full history, see SESSION-HISTORY.md.
 | 2026-03-24 | Multi-word search filtering, resilience layers (SW timeout fix, server timeout, client retry, warmup). |
 | 2026-03-24 | **Query optimizations** — lighter action includes, analytics SQL aggregations, removed `_count` debug endpoint. Server timeout 25s→12s. Client retry on 500. |
 | 2026-03-24 | **Turso reliability FIXED.** Root cause: `@libsql/client@0.5.6` HTTP transport hangs on large responses (170+ rows × all columns). Fix: (1) per-request fresh PrismaClient via `resetPrisma()` middleware, (2) explicit `select` on all list endpoints excluding large text fields. All endpoints now <300ms. |
+| 2026-03-24 | **Prisma 6→7 upgrade.** `@libsql/client` 0.5.6→0.17.2. Adapter-based architecture (PrismaLibSql for Turso, PrismaBetterSqlite3 for local dev). Removed conditional select workaround in actions route. 171 actions now returned with full includes in production — no more response size limits. |

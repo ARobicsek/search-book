@@ -62,11 +62,12 @@ api/index.ts      # Vercel serverless entry point
 - If Prisma errors: `cd server && npx prisma generate`
 
 ### Turso / Prisma Gotchas
+- **Prisma 7 adapter-based architecture** — All database connections require explicit adapters: `PrismaLibSql` for Turso (production), `PrismaBetterSqlite3` for local SQLite (dev-only, dynamic import). No more `url` in schema datasource — connection config is in `prisma.config.ts` (CLI) and `db.ts` (runtime).
 - **NEVER use `include: { _count: { select: { field: true } } }`** — generates a correlated subquery that hangs the Prisma-libsql adapter on Turso. Use `.length` client-side or raw SQL instead.
-- **List endpoints MUST use explicit `select`** — The `@libsql/client@0.5.6` HTTP transport hangs when returning ~170+ rows with all columns (response size limit). All list endpoints must exclude large text fields (`notes`, `description`, `personalDetails`, etc.). Safe threshold: ~200 rows × 7-8 small fields. Upgrading to Prisma 7 + `@libsql/client@0.17.0` would likely fix this.
-- **Per-request fresh PrismaClient** — `db.ts` exports `resetPrisma()` called by middleware in `app.ts`. Creates a fresh PrismaClient+adapter per request in production to prevent stale HTTP keep-alive connections in serverless.
+- **List endpoints use explicit `select`** — Good practice to exclude large text fields (`notes`, `personalDetails`, etc.) from list views for performance.
+- **Per-request fresh PrismaClient** — `db.ts` exports `resetPrisma()` called by middleware in `app.ts`. Creates a fresh PrismaClient+adapter per request in production to prevent stale HTTP connections in serverless.
 - **Turso CLI requires WSL on Windows** — use web dashboard instead
-- **@libsql/client versions**: Server uses 0.5.6 (Prisma adapter compat), Client uses 0.17.0 (browser-direct via `/web` export)
+- **@libsql/client versions**: Server uses 0.17.2 (via `@prisma/adapter-libsql`), Client uses 0.17.0 (browser-direct via `/web` export for backup)
 - **Schema migrations for Turso**: Prisma `db push` only works against local SQLite. For production, run DDL directly via libsql client (temporarily uncomment Turso creds in `.env`)
 
 ### Vercel Deployment

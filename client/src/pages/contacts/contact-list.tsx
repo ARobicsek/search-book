@@ -219,7 +219,9 @@ function buildColumns(
         </Button>
       ),
       cell: ({ getValue }) => (
-        <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+        <span className="text-muted-foreground block max-w-[300px] truncate" title={(getValue() as string) ?? ''}>
+          {(getValue() as string) ?? '—'}
+        </span>
       ),
     },
     {

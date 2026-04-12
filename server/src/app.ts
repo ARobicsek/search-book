@@ -21,6 +21,7 @@ import backupRouter from './routes/backup';
 import duplicatesRouter from './routes/duplicates';
 import searchRouter from './routes/search';
 import companyActivitiesRouter from './routes/company-activities';
+import linkedinRouter from './routes/linkedin';
 
 const app = express();
 
@@ -75,7 +76,9 @@ app.use('/api', (_req, _res, next) => {
 });
 
 // Request-level timeout — 12s so client gets two attempts within Vercel's 30s limit
+// LinkedIn parse is exempt: AI model calls can take 15-25s
 app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/linkedin')) return next();
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
       console.error(`[TIMEOUT] ${req.method} ${req.path} exceeded 12s`);
@@ -176,5 +179,6 @@ app.use('/api/backup', backupRouter);
 app.use('/api/duplicates', duplicatesRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/company-activities', companyActivitiesRouter);
+app.use('/api/linkedin', linkedinRouter);
 
 export default app;

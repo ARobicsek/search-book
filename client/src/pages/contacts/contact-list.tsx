@@ -811,19 +811,19 @@ export function ContactListPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)} className="flex-1 sm:flex-initial">
-            <Upload className="mr-2 h-4 w-4" />
-            Import
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportToCsv} className="flex-1 sm:flex-initial">
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
           <Button asChild size="sm" className="flex-1 sm:flex-initial">
             <Link to="/contacts/new">
               <Plus className="mr-2 h-4 w-4" />
               New Contact
             </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportToCsv} className="flex-1 sm:flex-initial">
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)} className="flex-1 sm:flex-initial">
+            <Upload className="mr-2 h-4 w-4" />
+            Import
           </Button>
         </div>
       </div>

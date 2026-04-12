@@ -29,9 +29,10 @@ import {
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
-import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink, Linkedin } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
+import { LinkedInImportDialog, type LinkedInParsedData } from '@/components/linkedin-import-dialog'
 
 type CompanyEntry = {
   value: string // company ID (numeric string) or new name
@@ -194,6 +195,9 @@ export function ContactFormPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // LinkedIn import dialog
+  const [linkedinImportOpen, setLinkedinImportOpen] = useState(false)
 
   // Links state (managed separately from form since they're a separate entity)
   const [links, setLinks] = useState<LinkRecord[]>([])
@@ -550,6 +554,15 @@ export function ContactFormPage() {
             </>
           ) : (
             <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLinkedinImportOpen(true)}
+                className="flex-1 sm:flex-initial"
+              >
+                <Linkedin className="mr-2 h-4 w-4 text-[#0a66c2]" />
+                Import from LinkedIn
+              </Button>
               <Button type="submit" form="contact-form" disabled={saving} className="flex-1 sm:flex-initial">
                 {saving ? 'Saving...' : 'Create Contact'}
               </Button>
@@ -1083,6 +1096,31 @@ export function ContactFormPage() {
           </div>
         )}
       </form>
+
+      {/* LinkedIn Import Dialog — only in create mode */}
+      {!isEdit && (
+        <LinkedInImportDialog
+          open={linkedinImportOpen}
+          onOpenChange={setLinkedinImportOpen}
+          onImport={(data: LinkedInParsedData) => {
+            setForm((prev) => ({
+              ...prev,
+              name: data.name || prev.name,
+              title: data.title || prev.title,
+              location: data.location || prev.location,
+              linkedinUrl: data.linkedinUrl || prev.linkedinUrl,
+              notes: data.about || prev.notes,
+              // Add company as a free-text entry if provided
+              companyEntries: data.company
+                ? [{ value: data.company, isCurrent: true }, ...prev.companyEntries]
+                : prev.companyEntries,
+            }))
+            // Open collapsible sections that now have data
+            if (data.linkedinUrl) setContactDetailsOpen(true)
+            if (data.about) setResearchOpen(true)
+          }}
+        />
+      )}
     </div >
   )
 }

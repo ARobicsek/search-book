@@ -713,6 +713,21 @@ export function ContactDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Notes — always visible */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {contact.notes ? (
+                <div className="prep-note-markdown"><ReactMarkdown>{contact.notes}</ReactMarkdown></div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No notes yet. Add notes via Edit.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {(contact.whereFound) && (
           <Card>
             <CardHeader>
               <CardTitle>Research</CardTitle>
@@ -720,14 +735,10 @@ export function ContactDetailPage() {
             <CardContent>
               <dl className="grid gap-4">
                 <Field label="Where Found">{contact.whereFound}</Field>
-                <Field label="Notes">
-                  {contact.notes && (
-                    <div className="prep-note-markdown"><ReactMarkdown>{contact.notes}</ReactMarkdown></div>
-                  )}
-                </Field>
               </dl>
             </CardContent>
           </Card>
+          )}
 
           {contact.personalDetails && (
             <Card>
@@ -2438,37 +2449,142 @@ function PrepSheetTab({
   const [newPrepContent, setNewPrepContent] = useState('')
   const [newPrepUrl, setNewPrepUrl] = useState('')
   const [newPrepUrlTitle, setNewPrepUrlTitle] = useState('')
+  
+  // Draft autosave for new prep note
+  const [draftSaveStatus, setDraftSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isFirstLoadRef = useRef(true)
 
-  // Inline edit state
+  // Load draft on mount or when contact changes
+  useEffect(() => {
+    let hasDraft = false
+    try {
+      const draftStr = localStorage.getItem(`prep_draft_${contact.id}`)
+      if (draftStr) {
+        const draft = JSON.parse(draftStr)
+        if (draft.content?.trim() || draft.url?.trim()) {
+          hasDraft = true
+          setShowAddPrepForm(true)
+          if (draft.content) setNewPrepContent(draft.content)
+          if (draft.date) setNewPrepDate(draft.date)
+          if (draft.url) setNewPrepUrl(draft.url)
+          if (draft.urlTitle) setNewPrepUrlTitle(draft.urlTitle)
+        }
+      }
+    } catch {}
+
+    if (!hasDraft) {
+      setShowAddPrepForm(false)
+      setNewPrepContent('')
+      setNewPrepUrl('')
+      setNewPrepUrlTitle('')
+      setNewPrepDate(new Date().toLocaleDateString('en-CA'))
+    }
+
+    isFirstLoadRef.current = true
+    setDraftSaveStatus('idle')
+  }, [contact.id])
+
+  // Save draft on changes (local storage only)
+  useEffect(() => {
+    if (!showAddPrepForm) return
+
+    // Skip the initial mount/load render
+    if (isFirstLoadRef.current) {
+      isFirstLoadRef.current = false
+      return
+    }
+
+    if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current)
+
+    setDraftSaveStatus('saving')
+    
+    draftSaveTimeoutRef.current = setTimeout(() => {
+      const draft = {
+        content: newPrepContent,
+        date: newPrepDate,
+        url: newPrepUrl,
+        urlTitle: newPrepUrlTitle
+      }
+      localStorage.setItem(`prep_draft_${contact.id}`, JSON.stringify(draft))
+      setDraftSaveStatus('saved')
+      
+      // Clear saved status after a moment
+      setTimeout(() => {
+        setDraftSaveStatus((prev) => prev === 'saved' ? 'idle' : prev)
+      }, 2000)
+    }, 1000)
+
+    return () => {
+      if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current)
+    }
+  }, [newPrepContent, newPrepDate, newPrepUrl, newPrepUrlTitle, contact.id, showAddPrepForm])
+
+  // Inline edit state with autosave
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
-  const [editSaving, setEditSaving] = useState(false)
+  const [editOriginalContent, setEditOriginalContent] = useState('')
+  const [editSaveStatus, setEditSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const editSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editIsSavingRef = useRef(false)
 
   function startEditNote(note: PrepNote) {
     setEditingNoteId(note.id)
     setEditContent(note.content)
+    setEditOriginalContent(note.content)
+    setEditSaveStatus('idle')
   }
 
   function cancelEditNote() {
+    if (editSaveTimeoutRef.current) clearTimeout(editSaveTimeoutRef.current)
+    if (editSavedTimeoutRef.current) clearTimeout(editSavedTimeoutRef.current)
     setEditingNoteId(null)
     setEditContent('')
+    setEditOriginalContent('')
+    setEditSaveStatus('idle')
   }
 
-  async function saveEditNote(noteId: number) {
+  // Autosave for prep note editing
+  useEffect(() => {
+    if (editingNoteId === null) return
     if (!editContent.trim()) return
-    setEditSaving(true)
-    try {
-      await api.put(`/prepnotes/${noteId}`, { content: editContent.trim() })
-      setEditingNoteId(null)
-      setEditContent('')
-      onRefresh()
-      toast.success('Prep note updated')
-    } catch {
-      toast.error('Failed to update prep note')
-    } finally {
-      setEditSaving(false)
+    if (editContent === editOriginalContent) return
+    if (editIsSavingRef.current) return
+
+    if (editSaveTimeoutRef.current) clearTimeout(editSaveTimeoutRef.current)
+
+    editSaveTimeoutRef.current = setTimeout(async () => {
+      if (editIsSavingRef.current) return
+      editIsSavingRef.current = true
+      setEditSaveStatus('saving')
+      try {
+        await api.put(`/prepnotes/${editingNoteId}`, { content: editContent.trim() })
+        setEditOriginalContent(editContent)
+        setEditSaveStatus('saved')
+        onRefresh()
+        if (editSavedTimeoutRef.current) clearTimeout(editSavedTimeoutRef.current)
+        editSavedTimeoutRef.current = setTimeout(() => setEditSaveStatus('idle'), 3000)
+      } catch {
+        setEditSaveStatus('error')
+        toast.error('Failed to save prep note')
+      } finally {
+        editIsSavingRef.current = false
+      }
+    }, 1500)
+
+    return () => {
+      if (editSaveTimeoutRef.current) clearTimeout(editSaveTimeoutRef.current)
     }
-  }
+  }, [editContent, editingNoteId, editOriginalContent, onRefresh])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (editSaveTimeoutRef.current) clearTimeout(editSaveTimeoutRef.current)
+      if (editSavedTimeoutRef.current) clearTimeout(editSavedTimeoutRef.current)
+    }
+  }, [])
 
   async function movePrepNote(index: number, direction: 'up' | 'down') {
     const newNotes = [...prepNotes]
@@ -2520,6 +2636,7 @@ function PrepSheetTab({
         date: newPrepDate,
         contactId: contact.id,
       })
+      localStorage.removeItem(`prep_draft_${contact.id}`)
       setNewPrepContent('')
       setNewPrepUrl('')
       setNewPrepUrlTitle('')
@@ -2530,6 +2647,16 @@ function PrepSheetTab({
     } catch {
       toast.error('Failed to add prep note')
     }
+  }
+
+  function cancelAddPrepNote() {
+    setShowAddPrepForm(false)
+    localStorage.removeItem(`prep_draft_${contact.id}`)
+    setNewPrepContent('')
+    setNewPrepUrl('')
+    setNewPrepUrlTitle('')
+    setNewPrepDate(new Date().toLocaleDateString('en-CA'))
+    setDraftSaveStatus('idle')
   }
 
   async function deletePrepNote(noteId: number) {
@@ -2614,17 +2741,17 @@ function PrepSheetTab({
                             onChange={(e) => setEditContent(e.target.value)}
                             rows={5}
                             className="text-sm"
+                            autoFocus
                             placeholder="Use **bold**, *italic*, and - bullet points"
                           />
-                          <p className="text-xs text-muted-foreground">Supports **bold**, *italic*, and - bullet points</p>
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="default" onClick={() => saveEditNote(note.id)} disabled={editSaving || !editContent.trim()}>
-                              <Check className="mr-1 h-3 w-3" />
-                              {editSaving ? 'Saving...' : 'Save'}
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={cancelEditNote}>
-                              Cancel
-                            </Button>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-muted-foreground">Supports **bold**, *italic*, and - bullet points</p>
+                            <div className="flex items-center gap-2">
+                              <SaveStatusIndicator status={editSaveStatus} />
+                              <Button size="sm" variant="ghost" onClick={cancelEditNote}>
+                                Done
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -2729,14 +2856,17 @@ function PrepSheetTab({
                   />
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
                 <Button size="sm" onClick={addPrepNote} disabled={!newPrepContent.trim()}>
                   <Plus className="mr-1 h-3 w-3" />
                   Add Prep Note
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowAddPrepForm(false)}>
+                <Button size="sm" variant="ghost" onClick={cancelAddPrepNote}>
                   Cancel
                 </Button>
+                <div className="ml-auto">
+                  <SaveStatusIndicator status={draftSaveStatus} />
+                </div>
               </div>
             </div>
           )}

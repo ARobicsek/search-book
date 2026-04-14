@@ -1,27 +1,26 @@
 ## What Was Completed Last Session
 
+### UI & Autosave Enhancements (2026-04-14)
+
+1. **Prep Note Local Drafts**: Implemented local draft autosaving for the "Add Prep Note" form on the `ContactDetailPage`.
+   - Drafts auto-save to `localStorage` (1s debounce).
+   - Added native `<SaveStatusIndicator>` (`Saving...`/`Saved`) to the form to match app-wide visual heuristics.
+   - Form now auto-expands on mount if an unfinished draft exists for that specific contact.
+   - Drafts are seamlessly preserved across tab closures and navigations, and cleared upon successful note creation or explicit cancellation.
+2. **Contact Form Layout**: Moved the global 'Notes' field out of the "Research" collapsible section into an always-visible top-level card for better accessibility.
+
 ### LinkedIn Profile Import Feature (2026-04-12)
 
 Added an AI-assisted "Import from LinkedIn" feature to the New Contact form. Users copy all visible text from a LinkedIn profile page, paste it into a dialog, and an OpenAI o4-mini call on the server extracts structured contact fields.
 
 **New files:**
-- `server/src/routes/linkedin.ts` — `POST /api/linkedin/parse` endpoint. Sends pasted text to OpenAI o4-mini, returns structured JSON (name, title, company, location, about, skills)
-- `client/src/components/linkedin-import-dialog.tsx` — Two-step dialog: paste input → preview extracted fields → populate form
+- `server/src/routes/linkedin.ts` — `POST /api/linkedin/parse` endpoint
+- `client/src/components/linkedin-import-dialog.tsx` — Two-step dialog
 
 **Modified files:**
-- `server/src/app.ts` — Registered `/api/linkedin` route; exempted it from 12s server timeout (AI calls take 15-25s)
-- `client/src/pages/contacts/contact-form.tsx` — Added "Import from LinkedIn" button (create mode only), wired dialog to populate form fields, auto-opens relevant collapsible sections
-- `client/src/pages/contacts/contact-list.tsx` — Reordered header buttons (New Contact first); added max-width + truncation on Title column to prevent long headlines from breaking layout
-- `server/.env.example` — Documented `OPENAI_API_KEY`
-- `server/package.json` — Added `openai` dependency
-
-**Field mapping:** name → name, headline → title, company → companyEntries, location → location, about → notes, URL → linkedinUrl
-
-**Environment setup:**
-- `OPENAI_API_KEY` added to local `server/.env` and Vercel Environment Variables
-- Cost: ~$0.005–$0.01 per import (o4-mini)
-
-**Production verified:** Tested with three real LinkedIn profiles (Rudish, Engelhard, Singal) in both dev and prod.
+- `server/src/app.ts` — Registered `/api/linkedin` route; exempted it from 12s server timeout
+- `client/src/pages/contacts/contact-form.tsx` — Import button and dialog integration
+- `client/src/pages/contacts/contact-list.tsx` — Reordered header buttons
 
 ---
 

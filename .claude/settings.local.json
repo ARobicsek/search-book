@@ -11,7 +11,8 @@
       "Bash(cmd:*)",
       "Bash(where:*)",
       "Bash(copy:*)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "WebFetch(domain:www.prisma.io)"
     ],
     "deny": [],
     "ask": []

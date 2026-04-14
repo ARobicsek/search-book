@@ -248,7 +248,7 @@ export function ContactFormPage() {
   // Progressive disclosure: auto-open if fields have data
   const hasContactDetails = !!(form.phone || form.linkedinUrl)
   const hasConnectionDetails = !!(form.howConnected || form.mutualConnections.length > 0)
-  const hasResearch = !!(form.whereFound || form.openQuestions || form.notes)
+  const hasResearch = !!(form.whereFound || form.openQuestions)
   const hasPersonalDetails = !!form.personalDetails
 
   const [contactDetailsOpen, setContactDetailsOpen] = useState(hasContactDetails)
@@ -272,7 +272,7 @@ export function ContactFormPage() {
           // Open sections that have data
           if (f.phone || f.linkedinUrl) setContactDetailsOpen(true)
           if (f.howConnected || f.mutualConnections.length > 0) setConnectionDetailsOpen(true)
-          if (f.whereFound || f.openQuestions || f.notes) setResearchOpen(true)
+          if (f.whereFound || f.openQuestions) setResearchOpen(true)
           if (f.personalDetails) setPersonalDetailsOpen(true)
         })
         .catch((err) => {
@@ -291,7 +291,7 @@ export function ContactFormPage() {
           setForm(parsed)
           if (parsed.phone || parsed.linkedinUrl) setContactDetailsOpen(true)
           if (parsed.howConnected || (parsed.mutualConnections && parsed.mutualConnections.length > 0)) setConnectionDetailsOpen(true)
-          if (parsed.whereFound || parsed.openQuestions || parsed.notes) setResearchOpen(true)
+          if (parsed.whereFound || parsed.openQuestions) setResearchOpen(true)
           if (parsed.personalDetails) setPersonalDetailsOpen(true)
         } catch {
           // ignore
@@ -964,21 +964,29 @@ export function ContactFormPage() {
                     rows={3}
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={form.notes}
-                    onChange={(e) => set('notes', e.target.value)}
-                    placeholder="General personalized research notes"
-                    rows={4}
-                  />
-                </div>
               </CardContent>
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* Notes — Always visible */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Notes</CardTitle>
+            <CardDescription>General notes and research about this person</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Textarea
+                id="notes"
+                value={form.notes}
+                onChange={(e) => set('notes', e.target.value)}
+                placeholder="General personalized research notes"
+                rows={6}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Personal Details — Progressive Disclosure */}
         <Collapsible open={personalDetailsOpen} onOpenChange={setPersonalDetailsOpen}>
@@ -1117,7 +1125,7 @@ export function ContactFormPage() {
             }))
             // Open collapsible sections that now have data
             if (data.linkedinUrl) setContactDetailsOpen(true)
-            if (data.about) setResearchOpen(true)
+            if (data.about) setResearchOpen(true) // about goes to notes but open research too for visibility
           }}
         />
       )}

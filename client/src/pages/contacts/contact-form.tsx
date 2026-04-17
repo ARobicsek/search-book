@@ -545,6 +545,15 @@ export function ContactFormPage() {
               )}
               <Button
                 type="button"
+                variant="outline"
+                onClick={() => setLinkedinImportOpen(true)}
+                className="flex-1 sm:flex-initial"
+              >
+                <Linkedin className="mr-2 h-4 w-4 text-[#0a66c2]" />
+                Import
+              </Button>
+              <Button
+                type="button"
                 onClick={() => handleSubmit()}
                 disabled={saving}
                 className="flex-1 sm:flex-initial"
@@ -1105,30 +1114,36 @@ export function ContactFormPage() {
         )}
       </form>
 
-      {/* LinkedIn Import Dialog — only in create mode */}
-      {!isEdit && (
-        <LinkedInImportDialog
-          open={linkedinImportOpen}
-          onOpenChange={setLinkedinImportOpen}
-          onImport={(data: LinkedInParsedData) => {
-            setForm((prev) => ({
+      {/* LinkedIn Import Dialog */}
+      <LinkedInImportDialog
+        open={linkedinImportOpen}
+        onOpenChange={setLinkedinImportOpen}
+        onImport={(data: LinkedInParsedData) => {
+          setForm((prev) => {
+            let newNotes = prev.notes
+            if (data.about) {
+              newNotes = prev.notes
+                ? `${prev.notes}\n\n---\nLinkedIn About:\n${data.about}`
+                : data.about
+            }
+            return {
               ...prev,
               name: data.name || prev.name,
               title: data.title || prev.title,
               location: data.location || prev.location,
               linkedinUrl: data.linkedinUrl || prev.linkedinUrl,
-              notes: data.about || prev.notes,
+              notes: newNotes,
               // Add company as a free-text entry if provided
               companyEntries: data.company
                 ? [{ value: data.company, isCurrent: true }, ...prev.companyEntries]
                 : prev.companyEntries,
-            }))
-            // Open collapsible sections that now have data
-            if (data.linkedinUrl) setContactDetailsOpen(true)
-            if (data.about) setResearchOpen(true) // about goes to notes but open research too for visibility
-          }}
-        />
-      )}
-    </div >
+            }
+          })
+          // Open collapsible sections that now have data
+          if (data.linkedinUrl || form.linkedinUrl) setContactDetailsOpen(true)
+          if (data.about || form.notes) setResearchOpen(true)
+        }}
+      />
+    </div>
   )
 }

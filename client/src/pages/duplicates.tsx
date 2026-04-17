@@ -18,11 +18,11 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { Users, Loader2, RefreshCw, GitMerge } from 'lucide-react'
-import { cn } from '@/lib/utils'
+
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import { FieldMergeUI, type FieldSelection } from '@/components/field-merge-ui'
 

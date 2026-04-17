@@ -32,7 +32,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink, Linkedin } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
-import { LinkedInImportDialog, type LinkedInParsedData } from '@/components/linkedin-import-dialog'
+import { LinkedInImportDialog } from '@/components/linkedin-import-dialog'
 
 type CompanyEntry = {
   value: string // company ID (numeric string) or new name

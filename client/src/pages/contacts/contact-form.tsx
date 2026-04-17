@@ -1118,27 +1118,26 @@ export function ContactFormPage() {
       <LinkedInImportDialog
         open={linkedinImportOpen}
         onOpenChange={setLinkedinImportOpen}
-        onImport={(data: LinkedInParsedData) => {
-          setForm((prev) => {
-            let newNotes = prev.notes
-            if (data.about) {
-              newNotes = prev.notes
-                ? `${prev.notes}\n\n---\nLinkedIn About:\n${data.about}`
-                : data.about
-            }
-            return {
-              ...prev,
-              name: data.name || prev.name,
-              title: data.title || prev.title,
-              location: data.location || prev.location,
-              linkedinUrl: data.linkedinUrl || prev.linkedinUrl,
-              notes: newNotes,
-              // Add company as a free-text entry if provided
-              companyEntries: data.company
-                ? [{ value: data.company, isCurrent: true }, ...prev.companyEntries]
-                : prev.companyEntries,
-            }
-          })
+        existingData={{
+          name: form.name,
+          title: form.title,
+          location: form.location,
+          notes: form.notes,
+          linkedinUrl: form.linkedinUrl
+        }}
+        onImport={(data: import('@/components/linkedin-import-dialog').LinkedInParsedData) => {
+          setForm((prev) => ({
+            ...prev,
+            name: data.name !== undefined ? data.name : prev.name,
+            title: data.title !== undefined ? data.title : prev.title,
+            location: data.location !== undefined ? data.location : prev.location,
+            linkedinUrl: data.linkedinUrl !== undefined ? data.linkedinUrl : prev.linkedinUrl,
+            notes: data.about !== undefined ? data.about : prev.notes,
+            // Add company as a free-text entry if provided
+            companyEntries: data.company
+              ? [{ value: data.company, isCurrent: true }, ...prev.companyEntries]
+              : prev.companyEntries,
+          }))
           // Open collapsible sections that now have data
           if (data.linkedinUrl || form.linkedinUrl) setContactDetailsOpen(true)
           if (data.about || form.notes) setResearchOpen(true)

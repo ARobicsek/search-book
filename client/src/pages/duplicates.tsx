@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import { Users, Loader2, RefreshCw, GitMerge } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
+import { FieldMergeUI, type FieldSelection } from '@/components/field-merge-ui'
 
 // Slim type returned by the duplicates API (for list display)
 interface DuplicateContactSummary {
@@ -66,7 +67,7 @@ interface DuplicateContact {
   company: { id: number; name: string } | null
 }
 
-type FieldSelection = 1 | 2 | 'both'
+
 
 interface MergeState {
   contact1: DuplicateContact
@@ -436,73 +437,20 @@ export function DuplicatesPage() {
           {mergeState && (
             <ScrollArea className="max-h-[60vh] pr-4">
               <div className="space-y-4">
-                {MERGEABLE_FIELDS.map(({ key, label }) => {
-                  // For email field, use special display that shows all emails
-                  const isEmail = key === 'email'
-                  const val1 = isEmail ? getEmailDisplay(mergeState.contact1) : getFieldValue(mergeState.contact1, key)
-                  const val2 = isEmail ? getEmailDisplay(mergeState.contact2) : getFieldValue(mergeState.contact2, key)
-                  const bothEmpty = val1 === '(empty)' && val2 === '(empty)'
-                  const sameValue = val1 === val2
-                  const showKeepBoth = isMultiValueField(key) && !sameValue && val1 !== '(empty)' && val2 !== '(empty)'
-
-                  if (bothEmpty) return null
-
-                  return (
-                    <div key={key} className="space-y-2">
-                      <Label className="text-sm font-medium">{label}</Label>
-                      {sameValue ? (
-                        <div className="text-sm text-muted-foreground bg-muted/50 rounded-md p-2">
-                          {val1}
-                        </div>
-                      ) : (
-                        <RadioGroup
-                          value={String(mergeState.fieldSelections[key])}
-                          onValueChange={(v) => setFieldSelection(key, v === 'both' ? 'both' : (parseInt(v) as FieldSelection))}
-                          className={cn("grid gap-2", showKeepBoth ? "grid-cols-3" : "grid-cols-2")}
-                        >
-                          <Label
-                            htmlFor={`${key}-1`}
-                            className={cn(
-                              "flex items-start gap-2 rounded-md border p-3 cursor-pointer transition-colors",
-                              mergeState.fieldSelections[key] === 1
-                                ? "border-primary bg-primary/5"
-                                : "border-muted hover:border-muted-foreground/50"
-                            )}
-                          >
-                            <RadioGroupItem value="1" id={`${key}-1`} className="mt-0.5" />
-                            <span className="text-sm break-words">{val1}</span>
-                          </Label>
-                          <Label
-                            htmlFor={`${key}-2`}
-                            className={cn(
-                              "flex items-start gap-2 rounded-md border p-3 cursor-pointer transition-colors",
-                              mergeState.fieldSelections[key] === 2
-                                ? "border-primary bg-primary/5"
-                                : "border-muted hover:border-muted-foreground/50"
-                            )}
-                          >
-                            <RadioGroupItem value="2" id={`${key}-2`} className="mt-0.5" />
-                            <span className="text-sm break-words">{val2}</span>
-                          </Label>
-                          {showKeepBoth && (
-                            <Label
-                              htmlFor={`${key}-both`}
-                              className={cn(
-                                "flex items-start gap-2 rounded-md border p-3 cursor-pointer transition-colors",
-                                mergeState.fieldSelections[key] === 'both'
-                                  ? "border-primary bg-primary/5"
-                                  : "border-muted hover:border-muted-foreground/50"
-                              )}
-                            >
-                              <RadioGroupItem value="both" id={`${key}-both`} className="mt-0.5" />
-                              <span className="text-sm break-words font-medium">Keep Both</span>
-                            </Label>
-                          )}
-                        </RadioGroup>
-                      )}
-                    </div>
-                  )
-                })}
+                <FieldMergeUI
+                  fields={MERGEABLE_FIELDS.map(({ key, label }) => {
+                    const isEmail = key === 'email'
+                    return {
+                      key,
+                      label,
+                      val1: isEmail ? getEmailDisplay(mergeState.contact1) : getFieldValue(mergeState.contact1, key),
+                      val2: isEmail ? getEmailDisplay(mergeState.contact2) : getFieldValue(mergeState.contact2, key),
+                      allowBoth: isMultiValueField(key)
+                    }
+                  })}
+                  selections={mergeState.fieldSelections}
+                  onChange={(key, val) => setFieldSelection(key, val)}
+                />
 
                 <div className="border-t pt-4 mt-4">
                   <p className="text-sm text-muted-foreground">

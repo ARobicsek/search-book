@@ -353,14 +353,22 @@ export function ContactFormPage() {
     if (saving) { console.log('[CONTACT-SAVE] Skipped: manual save in progress'); return }
 
     // Check if there are any new company entries (not IDs)
-    const hasNewCompanies = data.companyEntries.some(entry =>
-      !companies.some(c => c.id.toString() === entry.value)
-    )
+    const hasNewCompanies = data.companyEntries.some(entry => {
+      const matchById = companies.some(c => c.id.toString() === entry.value)
+      if (matchById) return false
+      return !companies.some(c => c.name.toLowerCase().trim() === entry.value.toLowerCase().trim())
+    })
 
     // Only include company entries that are existing IDs
     const existingCompanyEntries = data.companyEntries
-      .filter(entry => companies.some(c => c.id.toString() === entry.value))
-      .map(entry => ({ id: parseInt(entry.value), isCurrent: entry.isCurrent }))
+      .map(entry => {
+        let existing = companies.find(c => c.id.toString() === entry.value)
+        if (!existing) {
+          existing = companies.find(c => c.name.toLowerCase().trim() === entry.value.toLowerCase().trim())
+        }
+        return existing ? { id: existing.id, isCurrent: entry.isCurrent } : null
+      })
+      .filter((entry): entry is { id: number, isCurrent: boolean } => entry !== null)
 
     const payload = formToPayload(data, existingCompanyEntries)
 
@@ -400,7 +408,11 @@ export function ContactFormPage() {
       // Resolve company entries to IDs (creating new companies for new names)
       const companyEntries: { id: number; isCurrent: boolean }[] = []
       for (const entry of form.companyEntries) {
-        const existingCompany = companies.find((c) => c.id.toString() === entry.value)
+        let existingCompany = companies.find((c) => c.id.toString() === entry.value)
+        if (!existingCompany) {
+          existingCompany = companies.find((c) => c.name.toLowerCase().trim() === entry.value.toLowerCase().trim())
+        }
+        
         if (existingCompany) {
           companyEntries.push({ id: existingCompany.id, isCurrent: entry.isCurrent })
         } else if (entry.value.trim()) {
@@ -1133,17 +1145,22 @@ export function ContactFormPage() {
             location: data.location !== undefined ? data.location : prev.location,
             linkedinUrl: data.linkedinUrl !== undefined ? data.linkedinUrl : prev.linkedinUrl,
             notes: data.about !== undefined ? data.about : prev.notes,
-            // Add company as a free-text entry if provided and not already present
+            // Add company and resolve to ID if possible to prevent duplicate text entries
             companyEntries: data.company
               ? (() => {
                   const newCompanyLower = data.company!.toLowerCase().trim()
-                  const alreadyExists = prev.companyEntries.some(entry => {
+                  const alreadyExistsInForm = prev.companyEntries.some(entry => {
                     const existingComp = companies.find(c => c.id.toString() === entry.value)
                     const name = existingComp ? existingComp.name : entry.value
                     return name.toLowerCase().trim() === newCompanyLower
                   })
-                  if (alreadyExists) return prev.companyEntries
-                  return [{ value: data.company, isCurrent: true }, ...prev.companyEntries]
+                  if (alreadyExistsInForm) return prev.companyEntries
+
+                  // Resolve to ID string if the company exists in the DB
+                  const dbMatch = companies.find(c => c.name.toLowerCase().trim() === newCompanyLower)
+                  const entryValue = dbMatch ? dbMatch.id.toString() : data.company!
+
+                  return [{ value: entryValue, isCurrent: true }, ...prev.companyEntries]
                 })()
               : prev.companyEntries,
           }))

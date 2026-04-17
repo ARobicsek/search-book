@@ -113,7 +113,7 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
           val2,
           allowBoth
         })
-        selections[key] = 2 // default to imported
+        selections[key] = 1 // default to existing data
       }
 
       checkField('name', 'Name')

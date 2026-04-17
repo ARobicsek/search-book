@@ -1133,9 +1133,18 @@ export function ContactFormPage() {
             location: data.location !== undefined ? data.location : prev.location,
             linkedinUrl: data.linkedinUrl !== undefined ? data.linkedinUrl : prev.linkedinUrl,
             notes: data.about !== undefined ? data.about : prev.notes,
-            // Add company as a free-text entry if provided
+            // Add company as a free-text entry if provided and not already present
             companyEntries: data.company
-              ? [{ value: data.company, isCurrent: true }, ...prev.companyEntries]
+              ? (() => {
+                  const newCompanyLower = data.company!.toLowerCase().trim()
+                  const alreadyExists = prev.companyEntries.some(entry => {
+                    const existingComp = companies.find(c => c.id.toString() === entry.value)
+                    const name = existingComp ? existingComp.name : entry.value
+                    return name.toLowerCase().trim() === newCompanyLower
+                  })
+                  if (alreadyExists) return prev.companyEntries
+                  return [{ value: data.company, isCurrent: true }, ...prev.companyEntries]
+                })()
               : prev.companyEntries,
           }))
           // Open collapsible sections that now have data

@@ -1,46 +1,18 @@
-## What Was Completed Last Session
+# Next Session Prompt
 
-### LinkedIn Import Enhancements & Deduplication (2026-04-17)
+This file serves as a handoff document for the next AI session. It summarizes what was just accomplished, what needs to be worked on next, and any open bugs or architectural context.
 
-1. **Importing into Existing Contacts**: Upgraded the "Import from LinkedIn" workflow so users can now import data into contacts that ALREADY exist in the CRM, not just new creations.
-2. **Generic Manual Merge UI**: Extracted the side-by-side radio selector component (`<FieldMergeUI>`) from the `duplicates.tsx` page so it can be used generically across the entire application. 
-3. **LinkedIn Conflict Resolution**: The `<FieldMergeUI>` was elegantly wedged directly into the `LinkedInImportDialog` as a new Step 3: if a user clicks "Use This Data" and the parsed data conflicts with any data currently on their screen, the UI now safely halts and forces the user to manually cherry-pick their preferred form values.
-   - Defaults to "Current Data" to prevent any possibility of accidental overrides. 
-   - Text "Notes" fields receive a "Keep Both" option. 
-4. **Company Deduplication Security**: Fixed a sweeping foundational API bug where raw string company names appended from scripts natively bypassed database ID validations during the `autoSave` and `handleSubmit` flows (which unintentionally spawned identical copycat company records). Replaced with robust `.toLowerCase().trim()` lookups that convert dynamically parsed strings to core DB IDs seamlessly.
+### What Was Just Completed
+- **LinkedIn Import Duplication Bug Fix:** Created a `normalizeCompanyName` utility to strip zero-width characters and gracefully match LinkedIn extractions directly to existing Database IDs, preventing phantom new string entries in the database.
+- **Company Deduplication Engine:** Fully deployed! 
+  - Added duplicate detection scanning (`GET /api/duplicates/companies`) using Levenshtein distance string similarity scoring, tailored specifically to ignore company suffix terms ("Inc.", "LLC").
+  - Executed profound relational migrations on backend (`POST /api/duplicates/companies/merge`), seamlessly shuttling Activities, Contacts (and their JSON-array multi-companies), Employment Histories, Preps, and Links to merged destinations safely.
+- **Duplicates UI Extension:** Transitioned `/duplicates` to a tabbed experience (Contacts vs Companies), complete with a localized "Dismiss False Positives" history saver (`searchbook_dismissed_company_dupes`) stored via `localStorage`.
 
-Relevant Files: `client/src/components/field-merge-ui.tsx`, `client/src/pages/duplicates.tsx`, `client/src/components/linkedin-import-dialog.tsx`, `client/src/pages/contacts/contact-form.tsx`
+### What's Next
+1. **Remove `resetPrisma()`:** In `server/src/app.ts`, we currently use a highly hackish pattern for SQLite stability during hot reloads or fast actions. Investigate replacing this with Prisma's native PrismaClient long-lived connection pattern (global hook in `server/src/db.ts`).
+2. **Review Auto-Save Strategy:** Investigate expanding the robust `useAutoSave` hook onto Prep Notes, Actions, and Company creation form.
+3. **Data Polish:** Scan the company database manually to execute deduplications natively and watch for any straggler sync issues on edge case fields.
 
----
-
-## Work for Next Session
-
-### 1. Company Deduplication Engine
-Currently, there is a dedicated engine (`client/src/pages/duplicates.tsx`) that intelligently detects and gracefully merges Duplicate Contacts natively in the UI. 
-The user has requested that this precise tooling be expanded to target **Companies** next. The current duplicate tool only scans for duplicate contact members. In the next session, we need to either expand `/pages/duplicates` or create a new dedicated engine that efficiently detects and merges fragmented company records (e.g. 6 database entries representing "NCQA" into a single source truth).
-
-### 2. Phase 8: Document Search
-See `.planning/ROADMAP.md` for details.
-
-### 3. Optional: Test removing `resetPrisma()` per-request pattern
-The per-request fresh PrismaClient was added for `@libsql/client@0.5.6` stale connections. With 0.17.2, it may no longer be needed. To test:
-1. Comment out the `resetPrisma()` middleware call in `app.ts` (line ~73)
-2. Deploy and monitor for any connection failures
-3. If stable, simplify `db.ts` to remove the Proxy pattern
-
----
-
-## Open Bugs
-
-None currently known. Deduplication scripts and strict Vercel deployment bugs have been resolved and typechecked cleanly. 
-
-## Current State of Resilience Layers
-- Per-request fresh PrismaClient in production (in `app.ts` middleware via `resetPrisma()`)
-- Server timeout: 12s for all routes EXCEPT `/api/linkedin` (exempt — AI calls need 15-25s)
-- Client timeout: 28s (in `client/src/lib/api.ts`)
-- Client auto-retry: GET requests retry once on 504, 500, or timeout
-- List endpoints use explicit `select` for performance (not a workaround)
-
-## Key Environment Variables
-- `OPENAI_API_KEY` — Required for LinkedIn import. Set in `server/.env` (local) and Vercel Environment Variables (prod). Must be synced manually.
-- `VAPID_PUBLIC_KEY` (Server) / `VITE_VAPID_PUBLIC_KEY` (Client) — Must be manually synchronized in Vercel Environment Variables.
+### Open Bugs
+- No blocking bugs. Data deduplication issues caused by early alpha input behavior have been structurally patched. 

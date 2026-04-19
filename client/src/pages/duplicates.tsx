@@ -116,6 +116,25 @@ function ContactsTab() {
   const [loadingManualMerge, setLoadingManualMerge] = useState(false)
   const [loadingMergeDetails, setLoadingMergeDetails] = useState(false)
 
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('searchbook_dismissed_contact_dupes')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+
+  function handleDismiss(id1: number, id2: number) {
+    const key = `${Math.min(id1, id2)}-${Math.max(id1, id2)}`
+    setDismissed(prev => {
+      const next = new Set(prev)
+      next.add(key)
+      localStorage.setItem('searchbook_dismissed_contact_dupes', JSON.stringify(Array.from(next)))
+      return next
+    })
+  }
+
   const loadDuplicates = useCallback(() => {
     setLoading(true)
     api
@@ -241,12 +260,17 @@ function ContactsTab() {
     return MULTI_VALUE_FIELDS.includes(field as typeof MULTI_VALUE_FIELDS[number])
   }
 
+  const visibleDuplicates = duplicates.filter(dup => {
+    const key = `${Math.min(dup.contact1.id, dup.contact2.id)}-${Math.max(dup.contact1.id, dup.contact2.id)}`
+    return !dismissed.has(key)
+  })
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {loading ? 'Scanning...' : `${duplicates.length} potential duplicate${duplicates.length !== 1 ? 's' : ''} found`}
+            {loading ? 'Scanning...' : `${visibleDuplicates.length} potential duplicate${visibleDuplicates.length !== 1 ? 's' : ''} found${duplicates.length > visibleDuplicates.length ? ` (${duplicates.length - visibleDuplicates.length} dismissed)` : ''}`}
           </p>
         </div>
         <Button variant="outline" onClick={loadDuplicates} disabled={loading}>
@@ -314,7 +338,7 @@ function ContactsTab() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : duplicates.length === 0 ? (
+      ) : visibleDuplicates.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Users className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -323,7 +347,7 @@ function ContactsTab() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {duplicates.map((dup, idx) => (
+          {visibleDuplicates.map((dup, idx) => (
             <Card key={idx}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -362,6 +386,9 @@ function ContactsTab() {
                   <Button size="sm" variant="outline" disabled={loadingMergeDetails} onClick={() => openMergeDialog(dup.contact1.id, dup.contact2.id, dup.contact2.id)}>
                     {loadingMergeDetails ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
                     Merge (keep {truncate(dup.contact2.name, 15)})
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground ml-auto" onClick={() => handleDismiss(dup.contact1.id, dup.contact2.id)}>
+                    Dismiss
                   </Button>
                 </div>
               </CardContent>
@@ -479,6 +506,25 @@ function CompaniesTab() {
   const [loadingManualMerge, setLoadingManualMerge] = useState(false)
   const [loadingMergeDetails, setLoadingMergeDetails] = useState(false)
 
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('searchbook_dismissed_company_dupes')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+
+  function handleDismiss(id1: number, id2: number) {
+    const key = `${Math.min(id1, id2)}-${Math.max(id1, id2)}`
+    setDismissed(prev => {
+      const next = new Set(prev)
+      next.add(key)
+      localStorage.setItem('searchbook_dismissed_company_dupes', JSON.stringify(Array.from(next)))
+      return next
+    })
+  }
+
   const loadDuplicates = useCallback(() => {
     setLoading(true)
     api
@@ -585,12 +631,17 @@ function CompaniesTab() {
     return COMPANY_MULTI_VALUE_FIELDS.includes(field as typeof COMPANY_MULTI_VALUE_FIELDS[number])
   }
 
+  const visibleDuplicates = duplicates.filter(dup => {
+    const key = `${Math.min(dup.company1.id, dup.company2.id)}-${Math.max(dup.company1.id, dup.company2.id)}`
+    return !dismissed.has(key)
+  })
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {loading ? 'Scanning...' : `${duplicates.length} potential duplicate${duplicates.length !== 1 ? 's' : ''} found`}
+            {loading ? 'Scanning...' : `${visibleDuplicates.length} potential duplicate${visibleDuplicates.length !== 1 ? 's' : ''} found${duplicates.length > visibleDuplicates.length ? ` (${duplicates.length - visibleDuplicates.length} dismissed)` : ''}`}
           </p>
         </div>
         <Button variant="outline" onClick={loadDuplicates} disabled={loading}>
@@ -648,7 +699,7 @@ function CompaniesTab() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : duplicates.length === 0 ? (
+      ) : visibleDuplicates.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Building2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -657,7 +708,7 @@ function CompaniesTab() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {duplicates.map((dup, idx) => (
+          {visibleDuplicates.map((dup, idx) => (
             <Card key={idx}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -694,6 +745,9 @@ function CompaniesTab() {
                   <Button size="sm" variant="outline" disabled={loadingMergeDetails} onClick={() => openMergeDialog(dup.company1.id, dup.company2.id, dup.company2.id)}>
                     {loadingMergeDetails ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
                     Merge (keep {truncate(dup.company2.name, 15)})
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground ml-auto" onClick={() => handleDismiss(dup.company1.id, dup.company2.id)}>
+                    Dismiss
                   </Button>
                 </div>
               </CardContent>

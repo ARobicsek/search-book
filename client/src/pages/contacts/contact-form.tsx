@@ -33,6 +33,7 @@ import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink,
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { LinkedInImportDialog } from '@/components/linkedin-import-dialog'
+import { normalizeCompanyName } from '@/lib/normalize'
 
 type CompanyEntry = {
   value: string // company ID (numeric string) or new name
@@ -356,7 +357,7 @@ export function ContactFormPage() {
     const hasNewCompanies = data.companyEntries.some(entry => {
       const matchById = companies.some(c => c.id.toString() === entry.value)
       if (matchById) return false
-      return !companies.some(c => c.name.toLowerCase().trim() === entry.value.toLowerCase().trim())
+      return !companies.some(c => normalizeCompanyName(c.name) === normalizeCompanyName(entry.value))
     })
 
     // Only include company entries that are existing IDs
@@ -364,7 +365,7 @@ export function ContactFormPage() {
       .map(entry => {
         let existing = companies.find(c => c.id.toString() === entry.value)
         if (!existing) {
-          existing = companies.find(c => c.name.toLowerCase().trim() === entry.value.toLowerCase().trim())
+          existing = companies.find(c => normalizeCompanyName(c.name) === normalizeCompanyName(entry.value))
         }
         return existing ? { id: existing.id, isCurrent: entry.isCurrent } : null
       })
@@ -410,7 +411,7 @@ export function ContactFormPage() {
       for (const entry of form.companyEntries) {
         let existingCompany = companies.find((c) => c.id.toString() === entry.value)
         if (!existingCompany) {
-          existingCompany = companies.find((c) => c.name.toLowerCase().trim() === entry.value.toLowerCase().trim())
+          existingCompany = companies.find((c) => normalizeCompanyName(c.name) === normalizeCompanyName(entry.value))
         }
         
         if (existingCompany) {
@@ -1148,16 +1149,16 @@ export function ContactFormPage() {
             // Add company and resolve to ID if possible to prevent duplicate text entries
             companyEntries: data.company
               ? (() => {
-                  const newCompanyLower = data.company!.toLowerCase().trim()
+                  const newCompanyLower = normalizeCompanyName(data.company!)
                   const alreadyExistsInForm = prev.companyEntries.some(entry => {
                     const existingComp = companies.find(c => c.id.toString() === entry.value)
                     const name = existingComp ? existingComp.name : entry.value
-                    return name.toLowerCase().trim() === newCompanyLower
+                    return normalizeCompanyName(name) === newCompanyLower
                   })
                   if (alreadyExistsInForm) return prev.companyEntries
 
                   // Resolve to ID string if the company exists in the DB
-                  const dbMatch = companies.find(c => c.name.toLowerCase().trim() === newCompanyLower)
+                  const dbMatch = companies.find(c => normalizeCompanyName(c.name) === newCompanyLower)
                   const entryValue = dbMatch ? dbMatch.id.toString() : data.company!
 
                   return [{ value: entryValue, isCurrent: true }, ...prev.companyEntries]

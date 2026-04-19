@@ -358,4 +358,255 @@ router.post('/merge', async (req: Request, res: Response) => {
   }
 });
 
+export function normalizeCompanyNameForDedupe(name: string): string {
+  let n = name.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  n = n.replace(/,(?=\s*(Inc\.?|LLC|Corp\.?|Corporation|Ltd\.?|Limited|Co\.?|Company|L\.L\.C\.|L\.P\.)$)/gi, '');
+  const suffixPattern = /\s+(Inc\.?|LLC|Corp\.?|Corporation|Ltd\.?|Limited|Co\.?|Company|L\.L\.C\.|L\.P\.)\s*$/gi;
+  n = n.replace(suffixPattern, '');
+  return n.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// GET /api/duplicates/companies — find potential duplicate companies
+router.get('/companies', async (_req: Request, res: Response) => {
+  try {
+    const companies = await prisma.company.findMany({
+      select: {
+        id: true, name: true, industry: true, size: true, status: true,
+      },
+    });
+
+    type SlimCompany = typeof companies[0];
+    const duplicates: Array<{
+      company1: SlimCompany;
+      company2: SlimCompany;
+      score: number;
+      reasons: string[];
+    }> = [];
+
+    const normalized = companies.map(c => normalizeCompanyNameForDedupe(c.name));
+    
+    for (let i = 0; i < companies.length; i++) {
+      for (let j = i + 1; j < companies.length; j++) {
+        const c1 = companies[i];
+        const c2 = companies[j];
+        const reasons: string[] = [];
+
+        const sim = similarity(normalized[i], normalized[j], 0.85);
+        if (sim > 0.85 || normalized[i] === normalized[j]) {
+          if (normalized[i] === normalized[j]) {
+            reasons.push('Same name (normalized)');
+          } else {
+            reasons.push(`Similar names (${Math.round(sim * 100)}%)`);
+          }
+          duplicates.push({ company1: c1, company2: c2, score: sim > 0.9 ? sim : 0.9, reasons });
+        }
+      }
+    }
+
+    duplicates.sort((a, b) => b.score - a.score);
+    res.json(duplicates);
+  } catch (error) {
+    console.error('Error finding company duplicates:', error);
+    res.status(500).json({ error: 'Failed to find company duplicates' });
+  }
+});
+
+interface CompanyFieldSelections {
+  name?: FieldSelection;
+  industry?: FieldSelection;
+  size?: FieldSelection;
+  website?: FieldSelection;
+  hqLocation?: FieldSelection;
+  status?: FieldSelection;
+  notes?: FieldSelection;
+}
+
+// POST /api/duplicates/companies/merge — merge two companies with field selection
+router.post('/companies/merge', async (req: Request, res: Response) => {
+  try {
+    const { keepId, removeId, fieldSelections } = req.body as {
+      keepId: number;
+      removeId: number;
+      fieldSelections?: CompanyFieldSelections;
+    };
+    if (!keepId || !removeId || keepId === removeId) {
+      res.status(400).json({ error: 'keepId and removeId are required and must be different' });
+      return;
+    }
+
+    const [keep, remove] = await Promise.all([
+      prisma.company.findUnique({ where: { id: keepId } }),
+      prisma.company.findUnique({ where: { id: removeId } }),
+    ]);
+
+    if (!keep || !remove) {
+      res.status(404).json({ error: 'One or both companies not found' });
+      return;
+    }
+
+    const company1 = keepId < removeId ? keep : remove;
+    const company2 = keepId < removeId ? remove : keep;
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Update Core Fields
+      if (fieldSelections) {
+        const updateData: Record<string, unknown> = {};
+        const selectableFields = ['name', 'industry', 'size', 'website', 'hqLocation', 'status', 'notes'] as const;
+
+        for (const field of selectableFields) {
+          const selection = fieldSelections[field];
+          if (!selection) continue;
+
+          if (field === 'notes' && selection === 'both') {
+            const notes = [company1.notes, company2.notes].filter(Boolean);
+            updateData.notes = notes.join('\n\n---\n\n') || null;
+          } else if (selection === 1 || selection === 2) {
+            const sourceCompany = selection === 1 ? company1 : company2;
+            updateData[field] = sourceCompany[field];
+          }
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await tx.company.update({
+            where: { id: keepId },
+            data: updateData,
+          });
+        }
+      }
+
+      // 2. Relational Migrations
+      
+      // Contact.companyId
+      await tx.contact.updateMany({
+        where: { companyId: removeId },
+        data: { companyId: keepId },
+      });
+
+      // Contact JSON Arrays (additionalCompanyIds, connectedCompanyIds)
+      const contactsWithJson = await tx.contact.findMany({
+        where: {
+          OR: [
+            { additionalCompanyIds: { contains: `${removeId}` } },
+            { connectedCompanyIds: { contains: `${removeId}` } }
+          ]
+        }
+      });
+
+      for (const c of contactsWithJson) {
+        let updated = false;
+        const data: any = {};
+        
+        if (c.additionalCompanyIds) {
+          try {
+            const parsed = JSON.parse(c.additionalCompanyIds);
+            if (Array.isArray(parsed)) {
+              let changed = false;
+              const newArr = parsed.map(item => {
+                if (typeof item === 'object' && item.id === removeId) {
+                  changed = true;
+                  return { ...item, id: keepId };
+                } else if (item === removeId) {
+                  changed = true;
+                  return keepId;
+                }
+                return item;
+              });
+              if (changed) {
+                const dedupedObjIds = new Set();
+                const finalArr = [];
+                for (const item of newArr) {
+                   const cid = typeof item === 'object' ? item.id : item;
+                   if (!dedupedObjIds.has(cid)) {
+                     dedupedObjIds.add(cid);
+                     finalArr.push(item);
+                   }
+                }
+                data.additionalCompanyIds = JSON.stringify(finalArr);
+                updated = true;
+              }
+            }
+          } catch {}
+        }
+        
+        if (c.connectedCompanyIds) {
+          try {
+            const parsed = JSON.parse(c.connectedCompanyIds);
+            if (Array.isArray(parsed)) {
+               const idx = parsed.indexOf(removeId);
+               if (idx !== -1) {
+                  parsed[idx] = keepId;
+                  data.connectedCompanyIds = JSON.stringify([...new Set(parsed)]);
+                  updated = true;
+               }
+            }
+          } catch {}
+        }
+        
+        if (updated) {
+          await tx.contact.update({ where: { id: c.id }, data });
+        }
+      }
+
+      // ActionCompany
+      const removeActionCos = await tx.actionCompany.findMany({ where: { companyId: removeId }});
+      const keepActionCos = await tx.actionCompany.findMany({ where: { companyId: keepId }});
+      const keepActionIds = new Set(keepActionCos.map(x => x.actionId));
+      for (const rec of removeActionCos) {
+        if (!keepActionIds.has(rec.actionId)) {
+          await tx.actionCompany.create({ data: { actionId: rec.actionId, companyId: keepId } });
+        }
+      }
+      await tx.actionCompany.deleteMany({ where: { companyId: removeId } });
+
+      // ConversationCompany
+      const removeConvCos = await tx.conversationCompany.findMany({ where: { companyId: removeId }});
+      const keepConvCos = await tx.conversationCompany.findMany({ where: { companyId: keepId }});
+      const keepConvIds = new Set(keepConvCos.map(x => x.conversationId));
+      for (const rec of removeConvCos) {
+        if (!keepConvIds.has(rec.conversationId)) {
+          await tx.conversationCompany.create({ data: { conversationId: rec.conversationId, companyId: keepId } });
+        }
+      }
+      await tx.conversationCompany.deleteMany({ where: { companyId: removeId } });
+      
+      // IdeaCompany
+      const removeIdeaCos = await tx.ideaCompany.findMany({ where: { companyId: removeId }});
+      const keepIdeaCos = await tx.ideaCompany.findMany({ where: { companyId: keepId }});
+      const keepIdeaIds = new Set(keepIdeaCos.map(x => x.ideaId));
+      for (const rec of removeIdeaCos) {
+        if (!keepIdeaIds.has(rec.ideaId)) {
+          await tx.ideaCompany.create({ data: { ideaId: rec.ideaId, companyId: keepId } });
+        }
+      }
+      await tx.ideaCompany.deleteMany({ where: { companyId: removeId } });
+
+      // CompanyTag
+      const removeTagCos = await tx.companyTag.findMany({ where: { companyId: removeId }});
+      const keepTagCos = await tx.companyTag.findMany({ where: { companyId: keepId }});
+      const keepTagIds = new Set(keepTagCos.map(x => x.tagId));
+      for (const rec of removeTagCos) {
+        if (!keepTagIds.has(rec.tagId)) {
+          await tx.companyTag.create({ data: { tagId: rec.tagId, companyId: keepId } });
+        }
+      }
+      await tx.companyTag.deleteMany({ where: { companyId: removeId } });
+
+      // Flat relational tables safely bulk updated
+      await tx.employmentHistory.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+      await tx.companyActivity.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+      await tx.companyPrepNote.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+      await tx.companyStatusHistory.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+      await tx.link.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+
+      // Finally, delete the duplicate company
+      await tx.company.delete({ where: { id: removeId } });
+    });
+
+    res.json({ message: 'Companies merged successfully' });
+  } catch (error) {
+    console.error('Error merging companies:', error);
+    res.status(500).json({ error: 'Failed to merge companies' });
+  }
+});
+
 export default router;

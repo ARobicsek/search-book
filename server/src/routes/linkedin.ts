@@ -103,7 +103,9 @@ General rules:
       : `Profile text:\n${processedText}`;
 
     const response = await openai.chat.completions.create({
-      model: 'o4-mini',
+      model: 'gpt-4o-mini',
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },

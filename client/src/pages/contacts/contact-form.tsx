@@ -491,15 +491,20 @@ export function ContactFormPage() {
         // Parallel inserts are safe — each row is independent.
         if (pendingEmploymentHistory.length > 0) {
           const failures: string[] = []
+          const successes: string[] = []
           await Promise.all(pendingEmploymentHistory.map(async (eh) => {
             try {
               await api.post('/employment-history', { contactId: created.id, companyId: eh.companyId, title: eh.title })
+              successes.push(eh.title)
             } catch {
               failures.push(eh.title)
             }
           }))
           if (failures.length > 0) {
             toast.error(`Failed to save ${failures.length} past role(s) — you can add them manually.`)
+          }
+          if (successes.length > 0) {
+            toast.success(`Saved ${successes.length} past role${successes.length === 1 ? '' : 's'}`)
           }
         }
         if (draftId) {
@@ -788,6 +793,38 @@ export function ContactFormPage() {
                 )}
               </div>
             </div>
+
+            {!isEdit && pendingEmploymentHistory.length > 0 && (
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Past Roles</Label>
+                <p className="text-xs text-muted-foreground">
+                  These will be saved to the contact's history when you click Create Contact.
+                </p>
+                <ul className="space-y-1.5">
+                  {pendingEmploymentHistory.map((eh, i) => {
+                    const company = companies.find((c) => c.id === eh.companyId)
+                    return (
+                      <li key={i} className="flex items-center gap-2 text-sm">
+                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
+                        <span className="truncate">
+                          <span className="font-medium">{eh.title}</span>
+                          {company && <span className="text-muted-foreground"> at {company.name}</span>}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 h-7 w-7 ml-auto"
+                          onClick={() => setPendingEmploymentHistory((prev) => prev.filter((_, idx) => idx !== i))}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
 
             <div className="space-y-2 sm:col-span-2">
               <Label>Emails</Label>
@@ -1280,15 +1317,20 @@ export function ContactFormPage() {
                 const seen = new Set(existing.map(h => dedupKey(h.companyId ?? 0, h.title ?? '')))
                 const toCreate = pastRoles.filter(r => !seen.has(dedupKey(r.companyId, r.title)))
                 const failures: string[] = []
+                const successes: string[] = []
                 await Promise.all(toCreate.map(async r => {
                   try {
                     await api.post('/employment-history', { contactId: parseInt(id), companyId: r.companyId, title: r.title })
+                    successes.push(r.title)
                   } catch {
                     failures.push(r.title)
                   }
                 }))
                 if (failures.length > 0) {
                   toast.error(`Failed to save ${failures.length} past role(s).`)
+                }
+                if (successes.length > 0) {
+                  toast.success(`Saved ${successes.length} past role${successes.length === 1 ? '' : 's'}`)
                 }
               } catch {
                 toast.error('Failed to update employment history.')

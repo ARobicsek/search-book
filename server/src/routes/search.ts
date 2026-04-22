@@ -16,26 +16,6 @@ router.get('/', async (req: Request, res: Response) => {
     const maxResults = Math.min(parseInt(limit as string) || 10, 50);
     const fetchRelated = includeRelated === 'true';
 
-    // Search contacts
-    const contacts = await prisma.contact.findMany({
-      where: {
-        OR: [
-          { name: { contains: searchTerm } },
-          { title: { contains: searchTerm } },
-          { email: { contains: searchTerm } },
-          { notes: { contains: searchTerm } },
-          { roleDescription: { contains: searchTerm } },
-          { location: { contains: searchTerm } },
-          { mutualConnections: { contains: searchTerm } },
-        ],
-      },
-      include: {
-        company: { select: { id: true, name: true } },
-      },
-      take: maxResults,
-      orderBy: { updatedAt: 'desc' },
-    });
-
     // Search companies
     const companies = await prisma.company.findMany({
       where: {
@@ -45,6 +25,41 @@ router.get('/', async (req: Request, res: Response) => {
           { hqLocation: { contains: searchTerm } },
           { notes: { contains: searchTerm } },
         ],
+      },
+      take: maxResults,
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const companyIds = companies.map(c => c.id);
+    const contactOrClauses: any[] = [
+      { name: { contains: searchTerm } },
+      { title: { contains: searchTerm } },
+      { email: { contains: searchTerm } },
+      { notes: { contains: searchTerm } },
+      { roleDescription: { contains: searchTerm } },
+      { location: { contains: searchTerm } },
+      { mutualConnections: { contains: searchTerm } },
+      { companyName: { contains: searchTerm } },
+      { company: { name: { contains: searchTerm } } },
+      { employmentHistory: { some: { companyName: { contains: searchTerm } } } },
+      { employmentHistory: { some: { company: { name: { contains: searchTerm } } } } },
+    ];
+
+    if (companyIds.length > 0) {
+      for (const id of companyIds) {
+        contactOrClauses.push({ additionalCompanyIds: { contains: `"${id}"` } });
+        contactOrClauses.push({ additionalCompanyIds: { contains: `${id}` } });
+        contactOrClauses.push({ connectedCompanyIds: { contains: `${id}` } });
+      }
+    }
+
+    // Search contacts
+    const contacts = await prisma.contact.findMany({
+      where: {
+        OR: contactOrClauses,
+      },
+      include: {
+        company: { select: { id: true, name: true } },
       },
       take: maxResults,
       orderBy: { updatedAt: 'desc' },

@@ -189,7 +189,8 @@ function buildColumns(
               </Badge>
               <Link
                 to={`/contacts/new?draftId=${row.original.draftId}`}
-                className="font-medium text-amber-900 hover:underline"
+                className="font-medium text-amber-900 hover:underline block max-w-[150px] truncate sm:max-w-[200px]"
+                title={row.original.name || 'Unnamed Draft'}
               >
                 {row.original.name || 'Unnamed Draft'}
               </Link>
@@ -199,7 +200,8 @@ function buildColumns(
         return (
           <Link
             to={`/contacts/${row.original.id}`}
-            className="font-medium text-foreground hover:underline"
+            className="font-medium text-foreground hover:underline block max-w-[150px] truncate sm:max-w-[200px]"
+            title={row.original.name}
           >
             {row.original.name}
           </Link>
@@ -219,7 +221,7 @@ function buildColumns(
         </Button>
       ),
       cell: ({ getValue }) => (
-        <span className="text-muted-foreground block max-w-[300px] truncate" title={(getValue() as string) ?? ''}>
+        <span className="text-muted-foreground block max-w-[150px] truncate sm:max-w-[200px]" title={(getValue() as string) ?? ''}>
           {(getValue() as string) ?? '—'}
         </span>
       ),
@@ -243,14 +245,22 @@ function buildColumns(
           return (
             <Link
               to={`/companies/${contact.company.id}`}
-              className="hover:underline"
+              className="hover:underline block max-w-[150px] truncate sm:max-w-[200px]"
+              title={contact.company.name}
               onClick={(e) => e.stopPropagation()}
             >
               {contact.company.name}
             </Link>
           )
         }
-        return <span className="text-muted-foreground">{contact.companyName ?? '—'}</span>
+        return (
+          <span 
+            className="text-muted-foreground block max-w-[150px] truncate sm:max-w-[200px]"
+            title={contact.companyName ?? ''}
+          >
+            {contact.companyName ?? '—'}
+          </span>
+        )
       },
     },
     {
@@ -368,7 +378,9 @@ function buildColumns(
         </Button>
       ),
       cell: ({ getValue }) => (
-        <span className="text-muted-foreground">{(getValue() as string) ?? '—'}</span>
+        <span className="text-muted-foreground block max-w-[120px] truncate sm:max-w-[150px]" title={(getValue() as string) ?? ''}>
+          {(getValue() as string) ?? '—'}
+        </span>
       ),
     },
     {

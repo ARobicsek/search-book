@@ -37,6 +37,7 @@ export type LinkedInParsedData = {
   linkedinUrl?: string
   skills?: string
   experience?: LinkedInExperienceEntry[]
+  warning?: string
 }
 
 export type LinkedInImportExistingData = {
@@ -285,6 +286,11 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
 
         {step === 'preview' && parsed && (
           <div className="space-y-4">
+            {parsed.warning && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <strong className="font-semibold">Heads up:</strong> {parsed.warning}
+              </div>
+            )}
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
               {parsed.name && (
                 <div>

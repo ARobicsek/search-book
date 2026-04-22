@@ -3,6 +3,43 @@ import OpenAI from 'openai';
 
 const router = Router();
 
+// LinkedIn pastes often contain a huge Activity/Featured-posts block between About and
+// Experience — hundreds of lines of posts that confuse the model and waste API time even when
+// they fit in the context window. We always drop that block: keep the header (name, headline,
+// location, About) and, if the user copied the Experience section, append it through just
+// before the "More profiles for you" footer. If Experience wasn't copied, we still strip the
+// Activity block so the model sees a clean header.
+function extractRelevantLinkedInSections(text: string, maxChars: number): string {
+  const expMatch = text.match(/\n\s*Experience\s*\n/);
+  const activityMarker = text.match(/\n\s*(Featured|Activity)\s*\n/);
+  const activityIdx = activityMarker && activityMarker.index !== undefined ? activityMarker.index : -1;
+  const expIdx = expMatch && expMatch.index !== undefined ? expMatch.index : -1;
+
+  // Case 1: no Activity block to strip — either a short profile (Trevor-style) or a paste with
+  // no noise between header and Experience. Pass through (clipping only if oversized).
+  if (activityIdx < 0 || (expIdx >= 0 && activityIdx >= expIdx)) {
+    return text.length <= maxChars ? text : text.slice(0, maxChars);
+  }
+
+  // Case 2: Activity block exists. Header = everything up to the Activity marker.
+  const header = text.slice(0, activityIdx);
+  const separator = '\n\n[Activity and Featured sections omitted]\n\n';
+
+  // Case 2a: Experience section is in the paste — append it through the footer.
+  if (expIdx >= 0) {
+    const footerMatch = text.slice(expIdx).match(/\n\s*More profiles for you\s*\n/);
+    const tailEnd = footerMatch && footerMatch.index !== undefined ? expIdx + footerMatch.index : text.length;
+    const availableForTail = Math.max(0, maxChars - header.length - separator.length);
+    const tail = text.slice(expIdx, expIdx + Math.min(tailEnd - expIdx, availableForTail));
+    return header + separator + tail;
+  }
+
+  // Case 2b: No Experience section was copied. Return just the cleaned header — the model
+  // will extract name / headline / about / location, and we'll flag the missing Experience
+  // section to the user so they can re-paste.
+  return header.length <= maxChars ? header : header.slice(0, maxChars);
+}
+
 // POST /api/linkedin/parse — extract structured contact data from pasted LinkedIn text
 router.post('/parse', async (req: Request, res: Response) => {
   try {
@@ -55,9 +92,15 @@ General rules:
 - Ignore everything after "More profiles for you", "People you may know", or footer sections — that's suggestions, posts, and chrome. The Experience section itself is the only source of truth for roles.
 - Do NOT invent or hallucinate data that isn't in the provided text.`;
 
+    const processedText = extractRelevantLinkedInSections(text, 30000);
+    const pasteHasExperienceSection = /\n\s*Experience\s*\n/.test(text);
+    console.log(
+      `[LinkedIn Parse] Input ${text.length} chars, sent ${processedText.length} chars, experienceSection:${pasteHasExperienceSection}`,
+    );
+
     const userMessage = profileUrl
-      ? `LinkedIn Profile URL: ${profileUrl}\n\nProfile text:\n${text.slice(0, 15000)}`
-      : `Profile text:\n${text.slice(0, 15000)}`;
+      ? `LinkedIn Profile URL: ${profileUrl}\n\nProfile text:\n${processedText}`
+      : `Profile text:\n${processedText}`;
 
     const response = await openai.chat.completions.create({
       model: 'o4-mini',
@@ -105,6 +148,14 @@ General rules:
     // Add the profile URL if provided
     if (profileUrl && !parsed.linkedinUrl) {
       parsed.linkedinUrl = profileUrl;
+    }
+
+    // If the paste didn't include the Experience section header, tell the user so they can
+    // re-copy. This is a very common mistake: LinkedIn's Experience list is collapsed behind
+    // a "Show all N experiences" button and not included in Ctrl+A unless expanded.
+    if (!pasteHasExperienceSection) {
+      parsed.warning =
+        "No Experience section was found in your paste. On LinkedIn, scroll down and click \"Show all experiences\" to expand the list, then Select All and copy again.";
     }
 
     console.log('[LinkedIn Parse] Extracted:', Object.keys(parsed).join(', '), `(${parsed.experience.length} roles)`);

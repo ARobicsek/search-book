@@ -4,32 +4,34 @@ This file serves as a handoff document for the next AI session. It summarizes wh
 
 ### What Was Just Completed
 
-**LinkedIn Import — Full Career History (all 7 phases per [.planning/LINKEDIN-IMPORT-ENHANCEMENT-PLAN.md](.planning/LINKEDIN-IMPORT-ENHANCEMENT-PLAN.md))**
+**LinkedIn Import — Profile payload preprocessing + missing-Experience diagnostics**
 
-The LinkedIn import now captures every role from a profile's Experience section — current and past, including board seats and advisory positions — and writes them as real `Company` + `EmploymentHistory` rows so a company's detail page surfaces past employees as well as current ones.
+Fixed two import failures from the prior session (Sendak and Singal returning 0 roles) and added a user-facing warning when the paste is missing the Experience section.
 
-- **Backend prompt** ([server/src/routes/linkedin.ts](server/src/routes/linkedin.ts)): Returns an `experience[]` array of `{company, title, isCurrent}`. Skips student roles and "Various"-style placeholders. Preserves nested same-company roles. Char cap raised 8000 → 15000. Top-level `company` derived server-side from the first current entry (back-compat).
-- **Client normalize util** ([client/src/lib/normalize.ts](client/src/lib/normalize.ts)): Added `normalizeCompanyNameForDedupe` mirroring the server's suffix-stripping logic ("Inc.", "LLC", etc.) so LinkedIn-extracted names match existing DB rows.
-- **Import dialog** ([client/src/components/linkedin-import-dialog.tsx](client/src/components/linkedin-import-dialog.tsx)): Preview step now shows a collapsible Experience checklist with Current/Past badges, a "✓ matched" indicator for companies already in the DB, and a header summary ("12 roles — 5 current, 7 past"). `onImport` is awaited so the dialog shows "Importing..." while the parent does async work.
-- **Commit logic** ([client/src/pages/contacts/contact-form.tsx](client/src/pages/contacts/contact-form.tsx)): `onImport` resolves/creates Company rows in parallel (using the dedup normalizer), partitions roles into current vs past, appends current to `companyEntries`, and writes past roles to `EmploymentHistory` — immediately in edit mode, buffered in `pendingEmploymentHistory` state and flushed after `handleSubmit` creates the contact in create mode. Re-import dedupes against existing roles by `companyId + title` (case-insensitive).
-- **Contact detail** ([client/src/pages/contacts/contact-detail.tsx](client/src/pages/contacts/contact-detail.tsx)): "Previous Companies" card renamed to "Past Companies". The existing date-range condition already hides the tail gracefully when both dates are null.
-- **Company detail** ([server/src/routes/companies.ts](server/src/routes/companies.ts) + [client/src/pages/companies/company-detail.tsx](client/src/pages/companies/company-detail.tsx)): The `/companies/:id` endpoint now returns a `pastContacts` array sourced from `EmploymentHistory` and deduped against `employedContacts`. The UI renders a new "Past" subsection inside the Contacts card.
+- **Root cause of Singal failure** (fixed): the raw paste was 23,807 chars but the `Experience` section started at char 16,365 — past the old 15,000-char `text.slice(0, 15000)` cap in [server/src/routes/linkedin.ts](server/src/routes/linkedin.ts). The slice threw away every role before the model ever saw it.
+- **Root cause of Sendak failure** (fixed): even with a larger cap the paste contained ~560 lines of Activity/Featured posts between About and Experience. The model got buried under that noise (24s+ round trips, close to the 28s client timeout) and sometimes returned an empty `experience[]`.
+- **New preprocessor** ([server/src/routes/linkedin.ts:12-41](server/src/routes/linkedin.ts#L12-L41)): `extractRelevantLinkedInSections` always drops the Activity/Featured block. It keeps the header (name, headline, location, About) up to the first `\nFeatured\n` or `\nActivity\n` marker, then — if `\nExperience\n` is present — appends from Experience through just before `More profiles for you`. Short profiles with no Activity block (Trevor-style) pass through unchanged. Cap raised to 30,000 chars as a safety net.
+  - Sendak full .txt: 29,777 → 7,695 chars
+  - Singal full .txt: 23,807 → 7,636 chars
+  - Engelhard full .txt: 27,674 → 12,266 chars
+  - Trevor full .txt: 7,991 → 7,991 chars (unchanged)
+- **"Experience section missing" warning**: when the paste doesn't contain a `Experience` header (a very common mistake because LinkedIn collapses Experience behind a "Show all N experiences" button that Ctrl+A doesn't expand), the server attaches a `warning` field to the response ([server/src/routes/linkedin.ts:117-121](server/src/routes/linkedin.ts#L117-L121)) and the dialog renders it as an amber banner above the preview ([client/src/components/linkedin-import-dialog.tsx:290-294](client/src/components/linkedin-import-dialog.tsx#L290-L294)). Added `warning?: string` to `LinkedInParsedData`.
+- **Dev-only log** in the parse route shows input/output char counts and whether the Experience section was detected in the paste — useful for future triage.
 
-Manual QA: **Trevor's profile imported correctly** (American Rivers as current, Prep for Prep / Foundation Medicine as past, student role skipped). **Gaurav's profile did NOT import correctly** — see open bugs below.
+Manual QA: Sendak now imports cleanly with all 5 roles (3 current + 2 past at Duke Institute for Health Innovation) surfaced in the preview dialog, with the "matched" indicator firing on every one.
 
 ### What's Next
 
-1. **Debug the Gaurav LinkedIn import failure.** Trevor worked end-to-end but Gaurav's profile (see [Singal.txt](Singal.txt)) did not import as expected. Likely investigation paths:
-   - Capture the raw `experience[]` JSON the AI returned for Gaurav (server log line: `[LinkedIn Parse] Extracted: ... (N roles)`).
-   - Gaurav's profile has unusual structure: a "Various" entry (should be skipped per prompt rule), a Mass General Brigham "Innovation Growth Board" entry without a "Present" date but appears current, and **two nested roles at Harvard Medical School** (Attending Physician + Faculty/Board of Advisors) where the company name appears once at the top followed by a year-range header. The model may be mis-extracting the nested-role pattern.
-   - Verify the prompt rule about nested roles ("emit each as its own entry sharing the same `company` name") fires correctly on this layout. May need to add a more concrete example to the prompt.
-   - Check whether the `isCurrent` heuristic correctly identifies "Innovation Growth Board" (date range "2025 - Present").
-2. **Stretch from the plan §2.2 / §7:** Consider adding `isBoardRole: Boolean @default(false)` to `EmploymentHistory` schema if the user finds the missing distinction painful in practice.
-3. **Carry-over from previous session** (still pending):
+1. **Bug: past roles don't appear in the contact detail UI.** After importing Sendak, the import dialog preview correctly shows all 5 roles — 3 current + 2 past Duke roles ("Population Health & Data Science Lead", "Clinical Informatics Analyst"). The 3 current roles appear in the `Companies` section of the contact edit form. The 2 past roles do not appear anywhere visible in the contact detail page. Need to investigate:
+   - Are past roles actually being written to `EmploymentHistory` rows? (Check commit logic in [client/src/pages/contacts/contact-form.tsx](client/src/pages/contacts/contact-form.tsx) — look for the `pendingEmploymentHistory` flush path for create mode and the immediate POST path for edit mode.)
+   - If they are written, is the "Past Companies" card on [client/src/pages/contacts/contact-detail.tsx](client/src/pages/contacts/contact-detail.tsx) rendering them? The previous session renamed "Previous Companies" → "Past Companies"; verify the card actually shows up when EmploymentHistory rows exist.
+   - Check the network tab during a fresh import to confirm the `POST /employment-history` calls are firing with the expected `{contactId, companyId, title, startDate: null, endDate: null}` payloads.
+2. **Carry-over from previous session** (still pending):
    - Replace `resetPrisma()` hack in [server/src/app.ts](server/src/app.ts) with a long-lived PrismaClient pattern.
    - Expand `useAutoSave` hook to Prep Notes, Actions, and Company create form.
    - Manual data polish: scan company database for stragglers needing dedup.
+   - Stretch from the LinkedIn plan §2.2 / §7: consider adding `isBoardRole: Boolean @default(false)` to `EmploymentHistory` schema if the missing distinction becomes painful in practice.
 
 ### Open Bugs
 
-- **Gaurav LinkedIn import does not work as expected.** Trevor's profile imports cleanly; Gaurav's does not. Symptom unspecified — needs reproduction next session with server logs to see the raw extracted `experience[]`. Strong suspect: the nested-roles-at-same-company pattern in Gaurav's Harvard Medical School block.
+- **Past roles from LinkedIn import don't render in the contact detail UI.** Import dialog preview shows them (current + past), and the current ones populate the Companies section of the form, but the past ones appear to vanish. Most likely one of: (a) the commit logic in the contact form isn't writing `EmploymentHistory` rows, (b) it is writing them but contact-detail isn't fetching/rendering the "Past Companies" card, or (c) a schema/endpoint mismatch. See investigation checklist in "What's Next" item 1.

@@ -4,14 +4,11 @@ This file serves as a handoff document for the next AI session. It summarizes wh
 
 ### What Was Just Completed
 
-**LinkedIn Import — Past roles now visible in the form and reliably persisted; parser migrated off the slow `o4-mini` reasoning model.**
+**Global Search Bug Fix — The main search bar now successfully resolves and returns contacts based on their company relationships.**
 
-Two bugs carried over from the prior session were closed out:
-
-1. **Parse endpoint was timing out client-side.** The OpenAI `o4-mini` reasoning model was consistently taking 14–35s to extract roles from a processed Sendak paste (~7.5k chars) — regularly exceeding the 28s client timeout in [client/src/lib/api.ts](client/src/lib/api.ts) and the 30s Vercel Hobby limit. Switched to `gpt-4o-mini` with `temperature: 0.1` and `response_format: { type: 'json_object' }` in [server/src/routes/linkedin.ts:105-113](server/src/routes/linkedin.ts#L105-L113). Now parses Sendak in ~12–14s reliably, with all 5 roles correctly partitioned (3 current + 2 past). The prior session only survived by luck — its timings were right at the cliff edge.
-2. **Past roles from LinkedIn import weren't visible on the new-contact form.** On edit-mode imports, past roles POST directly to `/employment-history` so they show up on the detail page immediately. On create-mode imports, however, past roles were stashed in an invisible `pendingEmploymentHistory` buffer that only flushed on "Create Contact" click — so the user saw past roles in the import preview but nothing on the form, leaving them (reasonably) convinced the past roles had been dropped. Added a new **"Past Roles"** section to the create form in [client/src/pages/contacts/contact-form.tsx:800-830](client/src/pages/contacts/contact-form.tsx#L800-L830) that renders `pendingEmploymentHistory` with role title + company name and a per-row trash button. Also added success toasts in both the create-mode flush and the edit-mode direct-POST paths so successful saves give visible confirmation ("Saved 2 past roles"). Manual QA on Sendak: 5 roles parsed → 3 currents visible in Companies section, 2 pasts visible in new Past Roles section → Create Contact → "Past Companies" card on detail page shows both Duke roles correctly.
-
-Also cleaned up: removed the untracked/tracked LinkedIn paste test files from the repo root (`Engelhard.txt`, `Rudish.txt`, `Singal.txt`, `sendak.txt`, `trevor.txt`, `trevor`). These were scratch inputs for the prior session's debugging.
+1. **Global search was missing connected contacts.** Previously, the `/api/search` endpoint only checked text fields directly on the `Contact` model (like `name`, `title`, or `notes`). If a contact was purely linked to a company via `companyId` or `additionalCompanyIds` without the company name explicitly in their text fields, they were omitted from search results. 
+2. **The Fix:** Updated `server/src/routes/search.ts` to make the contact search "company-aware." The API now searches for matching Companies first. If companies match the search term, it grabs their IDs and includes them in the Contact search query, dynamically checking if a contact is linked via `additionalCompanyIds`, `connectedCompanyIds`, `companyId`, or even past roles in `EmploymentHistory`. 
+3. **Housekeeping:** Added `dev-dist` to `client/.gitignore` and untracked `client/dev-dist/sw.js` to stop it from cluttering up the git status on every dev build.
 
 ### What's Next
 
@@ -25,6 +22,4 @@ Carry-over items that are still pending from prior sessions:
 
 ### Open Bugs
 
-None currently known. Both import failures (Sendak / Singal timing out, past roles disappearing) are closed.
-
-Potential latent risk: `client/dev-dist/sw.js` keeps showing up as modified because Vite PWA regenerates it on each dev build. Worth adding `client/dev-dist/` to `.gitignore` and untracking it to clear that noise — but it's cosmetic, not a bug.
+None currently known. Both the LinkedIn import issues and the global search bugs have been resolved.

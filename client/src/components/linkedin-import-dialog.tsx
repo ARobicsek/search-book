@@ -1,9 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogContent,
@@ -12,7 +19,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Loader2, Linkedin, Check, RotateCcw, Sparkles } from 'lucide-react'
+import { Loader2, Linkedin, Check, ChevronDown, RotateCcw, Sparkles } from 'lucide-react'
+import { normalizeCompanyNameForDedupe } from '@/lib/normalize'
+
+export type LinkedInExperienceEntry = {
+  company: string
+  title: string
+  isCurrent: boolean
+}
 
 export type LinkedInParsedData = {
   name?: string
@@ -22,6 +36,7 @@ export type LinkedInParsedData = {
   about?: string
   linkedinUrl?: string
   skills?: string
+  experience?: LinkedInExperienceEntry[]
 }
 
 export type LinkedInImportExistingData = {
@@ -35,21 +50,45 @@ export type LinkedInImportExistingData = {
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onImport: (data: LinkedInParsedData) => void
+  // Returning a promise lets the parent perform async work (e.g. creating
+  // Company rows + EmploymentHistory rows for the experience[] payload) before
+  // the dialog closes and the success toast fires.
+  onImport: (data: LinkedInParsedData) => void | Promise<void>
   existingData?: LinkedInImportExistingData
+  /**
+   * Optional list of all known companies in the DB. Used to display a "✓ matched"
+   * indicator next to imported experience entries whose company already exists,
+   * so the user knows no duplicate Company will be created on commit.
+   */
+  knownCompanies?: { id: number; name: string }[]
 }
 
 import { FieldMergeUI, type FieldMergeItem, type FieldSelection } from '@/components/field-merge-ui'
 
-export function LinkedInImportDialog({ open, onOpenChange, onImport, existingData }: Props) {
+export function LinkedInImportDialog({ open, onOpenChange, onImport, existingData, knownCompanies }: Props) {
   const [step, setStep] = useState<'input' | 'preview' | 'merge'>('input')
   const [text, setText] = useState('')
   const [profileUrl, setProfileUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [parsed, setParsed] = useState<LinkedInParsedData | null>(null)
-  
+
+  // One boolean per experience entry, keyed by index. Default: all checked.
+  const [experienceSelected, setExperienceSelected] = useState<boolean[]>([])
+  const [experienceOpen, setExperienceOpen] = useState(true)
+  const [importing, setImporting] = useState(false)
+
   const [mergeFields, setMergeFields] = useState<FieldMergeItem[]>([])
   const [mergeSelections, setMergeSelections] = useState<Record<string, FieldSelection>>({})
+
+  // Pre-compute which experience entries map to an existing Company so we can
+  // render a "matched" badge in the preview without re-normalizing on every render.
+  const knownCompanyIndex = useMemo(() => {
+    const map = new Map<string, { id: number; name: string }>()
+    for (const c of knownCompanies ?? []) {
+      map.set(normalizeCompanyNameForDedupe(c.name), c)
+    }
+    return map
+  }, [knownCompanies])
 
   function reset() {
     setStep('input')
@@ -57,6 +96,8 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
     setProfileUrl('')
     setParsed(null)
     setLoading(false)
+    setExperienceSelected([])
+    setExperienceOpen(true)
     setMergeFields([])
     setMergeSelections({})
   }
@@ -79,6 +120,7 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
         profileUrl: profileUrl.trim() || undefined,
       })
       setParsed(result)
+      setExperienceSelected((result.experience ?? []).map(() => true))
       setStep('preview')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse LinkedIn profile')
@@ -87,11 +129,15 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
     }
   }
 
-  function handleUseData() {
+  async function handleUseData() {
     if (!parsed) return
     const finalParsed = { ...parsed }
     if (profileUrl.trim() && !finalParsed.linkedinUrl) {
       finalParsed.linkedinUrl = profileUrl.trim()
+    }
+    // Apply user's per-row checkbox choices to the experience array.
+    if (parsed.experience && parsed.experience.length > 0) {
+      finalParsed.experience = parsed.experience.filter((_, i) => experienceSelected[i])
     }
 
     if (existingData) {
@@ -100,8 +146,9 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
 
       const checkField = (key: keyof LinkedInImportExistingData, label: string, parsedKey: keyof LinkedInParsedData = key as any, allowBoth = false) => {
         const val1 = existingData[key]?.trim() || ''
-        const val2 = finalParsed[parsedKey]?.trim() || ''
-        
+        const val2Raw = finalParsed[parsedKey]
+        const val2 = typeof val2Raw === 'string' ? val2Raw.trim() : ''
+
         if (!val2) return // Nothing to import
         if (!val1) return // Nothing to conflict with
         if (val1 === val2) return // No conflict
@@ -131,16 +178,23 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
       }
     }
 
-    onImport(finalParsed)
-    handleClose(false)
-    toast.success('LinkedIn data imported into form')
+    setImporting(true)
+    try {
+      await onImport(finalParsed)
+      handleClose(false)
+      toast.success('LinkedIn data imported into form')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to apply LinkedIn data')
+    } finally {
+      setImporting(false)
+    }
   }
 
-  function handleCompleteMerge() {
+  async function handleCompleteMerge() {
     if (!parsed) return
-    
+
     const mergedData = { ...parsed }
-    
+
     mergeFields.forEach((conflict) => {
       const sel = mergeSelections[conflict.key]
       if (sel === 1) {
@@ -150,9 +204,16 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
       }
     })
 
-    onImport(mergedData)
-    handleClose(false)
-    toast.success('LinkedIn data imported into form')
+    setImporting(true)
+    try {
+      await onImport(mergedData)
+      handleClose(false)
+      toast.success('LinkedIn data imported into form')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to apply LinkedIn data')
+    } finally {
+      setImporting(false)
+    }
   }
 
   return (
@@ -270,7 +331,67 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
                 </div>
               )}
 
-              {!parsed.name && !parsed.title && !parsed.company && (
+              {parsed.experience && parsed.experience.length > 0 && (() => {
+                const total = parsed.experience.length
+                const currentCount = parsed.experience.filter(e => e.isCurrent).length
+                const pastCount = total - currentCount
+                const selectedCount = experienceSelected.filter(Boolean).length
+                return (
+                  <Collapsible open={experienceOpen} onOpenChange={setExperienceOpen}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between text-left">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Experience ({total} {total === 1 ? 'role' : 'roles'} — {currentCount} current, {pastCount} past
+                        {selectedCount !== total ? `; ${selectedCount} selected` : ''})
+                      </span>
+                      <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${experienceOpen ? 'rotate-180' : ''}`} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2 space-y-1.5">
+                      {parsed.experience.map((entry, i) => {
+                        const matched = knownCompanyIndex.get(normalizeCompanyNameForDedupe(entry.company))
+                        return (
+                          <label
+                            key={i}
+                            className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60 cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={experienceSelected[i] ?? true}
+                              onCheckedChange={(checked) => {
+                                setExperienceSelected(prev => {
+                                  const next = [...prev]
+                                  next[i] = checked === true
+                                  return next
+                                })
+                              }}
+                              className="mt-0.5"
+                            />
+                            <div className="flex-1 min-w-0 text-sm">
+                              <span className="font-medium">{entry.title}</span>
+                              <span className="text-muted-foreground"> at </span>
+                              <span>{entry.company}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] py-0 px-1.5 ${entry.isCurrent ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}
+                              >
+                                {entry.isCurrent ? 'Current' : 'Past'}
+                              </Badge>
+                              {matched && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700" title={`Matched to existing company: ${matched.name}`}>
+                                  <Check className="h-3 w-3" />
+                                  matched
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )
+              })()}
+
+              {!parsed.name && !parsed.title && !parsed.company && (!parsed.experience || parsed.experience.length === 0) && (
                 <p className="text-sm text-muted-foreground italic">
                   No data could be extracted. Try pasting more text from the profile.
                 </p>
@@ -278,13 +399,22 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
             </div>
 
             <div className="flex justify-between">
-              <Button variant="outline" size="sm" onClick={() => { setStep('input'); setParsed(null) }}>
+              <Button variant="outline" size="sm" onClick={() => { setStep('input'); setParsed(null) }} disabled={importing}>
                 <RotateCcw className="mr-2 h-3 w-3" />
                 Try Again
               </Button>
-              <Button onClick={handleUseData} disabled={!parsed.name}>
-                <Check className="mr-2 h-4 w-4" />
-                Use This Data
+              <Button onClick={handleUseData} disabled={!parsed.name || importing}>
+                {importing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Use This Data
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -305,13 +435,22 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
               />
             </div>
             <div className="flex justify-between">
-              <Button variant="outline" size="sm" onClick={() => setStep('preview')}>
+              <Button variant="outline" size="sm" onClick={() => setStep('preview')} disabled={importing}>
                 <RotateCcw className="mr-2 h-3 w-3" />
                 Back to Preview
               </Button>
-              <Button onClick={handleCompleteMerge}>
-                <Check className="mr-2 h-4 w-4" />
-                Confirm & Import
+              <Button onClick={handleCompleteMerge} disabled={importing}>
+                {importing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Confirm & Import
+                  </>
+                )}
               </Button>
             </div>
           </div>

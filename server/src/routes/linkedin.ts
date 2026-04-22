@@ -30,23 +30,34 @@ Extract the following fields and return them as a JSON object. Only include fiel
 Fields to extract:
 - "name": Full name. Remove credential suffixes (MD, MBA, MHA, PhD, etc.) from the name itself.
 - "title": Their headline — the descriptive line right below their name (e.g. "Repeat Founder | Healthcare Tech Executive | Healthcare AI Ops"). Use the FULL headline text, not just the first part.
-- "company": Their current primary company/organization. Look for the company name that appears near the top of the profile (after location, before education). If they list multiple, pick the most prominent current one.
 - "location": Geographic location (e.g. "Greater Boston" or "New York, New York, United States")
 - "about": The complete "About" section text (their bio/summary). This appears after a line that just says "About". Include the full text, not truncated. Stop before "Top skills" or "Activity" or "Featured" sections.
 - "skills": Top skills as a comma-separated string (appears after "Top skills" header)
+- "experience": An ARRAY of every role in the Experience section. Each entry is an object with three keys:
+    - "company": the organization name exactly as shown on LinkedIn (no suffix changes, no rewriting)
+    - "title": the role title (e.g. "Chief Data Officer", "Member Board of Directors", "Co-Founder")
+    - "isCurrent": true if the role's date range ends in "Present" or has no end date; false otherwise
 
-Rules:
+Rules for the experience array:
+- Include EVERY role from the Experience section, current AND past, board seats AND advisory roles AND volunteer positions AND regular jobs — they are all "roles at a company."
+- SKIP any role whose title contains "Student", "Graduate Student", "Undergraduate", "MS Candidate", "PhD Candidate", or similar pure-student descriptors.
+- SKIP any entry whose company is "Various", "Self-Employed", "Freelance", "Independent", or any other clearly non-organizational placeholder. Real organization names only.
+- A single company may host multiple nested roles (e.g. Harvard Medical School with both "Attending Physician" and "Faculty and Member of the Board of Advisors"). Emit each nested role as its own entry, all sharing the same "company" name.
+- Preserve LinkedIn's top-to-bottom order — order matters for downstream processing.
+- Do NOT include date strings in the entries. Just the boolean isCurrent.
+
+General rules:
 - Return ONLY a valid JSON object, no markdown formatting, no code fences.
 - If a field is not found in the text, omit it from the response entirely.
 - The profile text typically starts with LinkedIn navigation noise ("Home", "My Network", "Jobs", etc.) — skip all of that.
 - The person's name and headline usually appear twice near the top — once in a header area and once in the detail area. They are the same person.
 - Ignore "· 1st", "· 2nd", "· 3rd" connection indicators.
-- Ignore everything after "Activity" or "More profiles for you" sections — that's posts, suggestions, and footer.
+- Ignore everything after "More profiles for you", "People you may know", or footer sections — that's suggestions, posts, and chrome. The Experience section itself is the only source of truth for roles.
 - Do NOT invent or hallucinate data that isn't in the provided text.`;
 
     const userMessage = profileUrl
-      ? `LinkedIn Profile URL: ${profileUrl}\n\nProfile text:\n${text.slice(0, 8000)}`
-      : `Profile text:\n${text.slice(0, 8000)}`;
+      ? `LinkedIn Profile URL: ${profileUrl}\n\nProfile text:\n${text.slice(0, 15000)}`
+      : `Profile text:\n${text.slice(0, 15000)}`;
 
     const response = await openai.chat.completions.create({
       model: 'o4-mini',
@@ -63,7 +74,7 @@ Rules:
     }
 
     // Parse the JSON response — strip markdown fences if the model adds them
-    let parsed: Record<string, string>;
+    let parsed: Record<string, any>;
     try {
       const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       parsed = JSON.parse(cleaned);
@@ -73,12 +84,30 @@ Rules:
       return;
     }
 
+    // Sanitize experience[] — keep only well-formed entries with non-empty company + title.
+    // Then derive the top-level `company` field (back-compat) from the first current entry.
+    if (Array.isArray(parsed.experience)) {
+      parsed.experience = parsed.experience
+        .filter((e: any) => e && typeof e.company === 'string' && typeof e.title === 'string' && e.company.trim() && e.title.trim())
+        .map((e: any) => ({
+          company: e.company.trim(),
+          title: e.title.trim(),
+          isCurrent: e.isCurrent === true,
+        }));
+      const firstCurrent = parsed.experience.find((e: any) => e.isCurrent);
+      if (firstCurrent && !parsed.company) {
+        parsed.company = firstCurrent.company;
+      }
+    } else {
+      parsed.experience = [];
+    }
+
     // Add the profile URL if provided
     if (profileUrl && !parsed.linkedinUrl) {
       parsed.linkedinUrl = profileUrl;
     }
 
-    console.log('[LinkedIn Parse] Extracted:', Object.keys(parsed).join(', '));
+    console.log('[LinkedIn Parse] Extracted:', Object.keys(parsed).join(', '), `(${parsed.experience.length} roles)`);
     if (!res.headersSent) res.json(parsed);
   } catch (error: any) {
     console.error('[LinkedIn Parse] Error:', error.message);

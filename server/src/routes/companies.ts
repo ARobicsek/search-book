@@ -109,11 +109,48 @@ router.get('/:id', async (req: Request, res: Response) => {
       if (isConnected) connectedContacts.push(c);
     }
 
+    // Past contacts — anyone with an EmploymentHistory row pointing at this
+    // company. We exclude anyone already in `employedContacts` so a contact
+    // who is currently employed AND has a past role at the same company
+    // doesn't double-list (they'll appear under "Employed").
+    const employedIds = new Set(employedContacts.map(c => c.id));
+    const employmentHistoryRows = await prisma.employmentHistory.findMany({
+      where: { companyId: companyId },
+      select: {
+        title: true,
+        contact: {
+          select: { id: true, name: true, title: true, ecosystem: true, status: true },
+        },
+      },
+    });
+    const pastContactsMap = new Map<number, {
+      id: number;
+      name: string;
+      title: string | null;
+      ecosystem: string;
+      status: string;
+      pastTitle: string | null;
+    }>();
+    for (const row of employmentHistoryRows) {
+      if (!row.contact) continue;
+      if (employedIds.has(row.contact.id)) continue;
+      // De-dupe contacts who appear in multiple history rows for the same company
+      // (e.g. nested roles at Harvard). Keep the first encountered title for display.
+      if (!pastContactsMap.has(row.contact.id)) {
+        pastContactsMap.set(row.contact.id, {
+          ...row.contact,
+          pastTitle: row.title ?? null,
+        });
+      }
+    }
+    const pastContacts = Array.from(pastContactsMap.values());
+
     res.json({
       ...company,
       contacts: employedContacts,
       employedContacts,
       connectedContacts,
+      pastContacts,
     });
   } catch (error) {
     console.error('Error fetching company:', error);

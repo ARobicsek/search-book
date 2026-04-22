@@ -121,9 +121,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 // Extend Company to include joined relations from the new API
+type PastContact = {
+  id: number;
+  name: string;
+  title: string | null;
+  ecosystem: Contact['ecosystem'];
+  status: Contact['status'];
+  pastTitle: string | null;
+}
+
 type CompanyWithRelations = Company & {
   employedContacts?: Contact[];
   connectedContacts?: Contact[];
+  pastContacts?: PastContact[];
 }
 
 export function CompanyDetailPage() {
@@ -736,6 +746,41 @@ export function CompanyDetailPage() {
                   <p className="text-sm text-muted-foreground">No connected contacts listed.</p>
                 )}
               </div>
+
+              {/* Past Contacts — anyone with an EmploymentHistory row at this company */}
+              {company.pastContacts && company.pastContacts.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Past</h3>
+                    <div className="space-y-3">
+                      {company.pastContacts.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between">
+                          <div>
+                            <Link
+                              to={`/contacts/${c.id}`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              {c.name}
+                            </Link>
+                            {c.pastTitle && (
+                              <span className="ml-2 text-sm text-muted-foreground">{c.pastTitle}</span>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
+                              {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
+                            </Badge>
+                            <Badge variant="outline" className={contactStatusColors[c.status]}>
+                              {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 

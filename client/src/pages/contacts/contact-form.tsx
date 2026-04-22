@@ -33,7 +33,8 @@ import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink,
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { LinkedInImportDialog } from '@/components/linkedin-import-dialog'
-import { normalizeCompanyName } from '@/lib/normalize'
+import { normalizeCompanyName, normalizeCompanyNameForDedupe } from '@/lib/normalize'
+import type { EmploymentHistory } from '@/lib/types'
 
 type CompanyEntry = {
   value: string // company ID (numeric string) or new name
@@ -205,6 +206,13 @@ export function ContactFormPage() {
   const [pendingLinks, setPendingLinks] = useState<{ url: string; title: string }[]>([])
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [newLinkTitle, setNewLinkTitle] = useState('')
+
+  // Past-role buffer for create mode: in edit mode the LinkedIn import writes
+  // EmploymentHistory rows immediately, but in create mode the contact doesn't
+  // exist yet so we stash past roles here and POST them after handleSubmit creates
+  // the contact. Each entry is { companyId, title } — dates are intentionally null
+  // because the LinkedIn extractor doesn't capture them (see plan §2.1).
+  const [pendingEmploymentHistory, setPendingEmploymentHistory] = useState<{ companyId: number; title: string }[]>([])
 
   function loadLinks() {
     if (id) {
@@ -478,6 +486,21 @@ export function ContactFormPage() {
           try {
             await api.post('/links', { url: link.url, title: link.title, contactId: created.id })
           } catch { /* ignore individual link failures */ }
+        }
+        // Persist any past roles buffered from a LinkedIn import (create mode only).
+        // Parallel inserts are safe — each row is independent.
+        if (pendingEmploymentHistory.length > 0) {
+          const failures: string[] = []
+          await Promise.all(pendingEmploymentHistory.map(async (eh) => {
+            try {
+              await api.post('/employment-history', { contactId: created.id, companyId: eh.companyId, title: eh.title })
+            } catch {
+              failures.push(eh.title)
+            }
+          }))
+          if (failures.length > 0) {
+            toast.error(`Failed to save ${failures.length} past role(s) — you can add them manually.`)
+          }
         }
         if (draftId) {
           localStorage.removeItem(`draft_new_contact_${draftId}`)
@@ -1131,6 +1154,7 @@ export function ContactFormPage() {
       <LinkedInImportDialog
         open={linkedinImportOpen}
         onOpenChange={setLinkedinImportOpen}
+        knownCompanies={companies}
         existingData={{
           name: form.name,
           title: form.title,
@@ -1138,7 +1162,9 @@ export function ContactFormPage() {
           notes: form.notes,
           linkedinUrl: form.linkedinUrl
         }}
-        onImport={(data: import('@/components/linkedin-import-dialog').LinkedInParsedData) => {
+        onImport={async (data: import('@/components/linkedin-import-dialog').LinkedInParsedData) => {
+          // 1) Apply scalar fields immediately so the form updates even if company
+          //    resolution below fails for any reason.
           setForm((prev) => ({
             ...prev,
             name: data.name !== undefined ? data.name : prev.name,
@@ -1146,28 +1172,142 @@ export function ContactFormPage() {
             location: data.location !== undefined ? data.location : prev.location,
             linkedinUrl: data.linkedinUrl !== undefined ? data.linkedinUrl : prev.linkedinUrl,
             notes: data.about !== undefined ? data.about : prev.notes,
-            // Add company and resolve to ID if possible to prevent duplicate text entries
-            companyEntries: data.company
-              ? (() => {
-                  const newCompanyLower = normalizeCompanyName(data.company!)
-                  const alreadyExistsInForm = prev.companyEntries.some(entry => {
-                    const existingComp = companies.find(c => c.id.toString() === entry.value)
-                    const name = existingComp ? existingComp.name : entry.value
-                    return normalizeCompanyName(name) === newCompanyLower
-                  })
-                  if (alreadyExistsInForm) return prev.companyEntries
-
-                  // Resolve to ID string if the company exists in the DB
-                  const dbMatch = companies.find(c => normalizeCompanyName(c.name) === newCompanyLower)
-                  const entryValue = dbMatch ? dbMatch.id.toString() : data.company!
-
-                  return [{ value: entryValue, isCurrent: true }, ...prev.companyEntries]
-                })()
-              : prev.companyEntries,
           }))
-          // Open collapsible sections that now have data
           if (data.linkedinUrl || form.linkedinUrl) setContactDetailsOpen(true)
           if (data.about || form.notes) setResearchOpen(true)
+
+          // 2) Resolve / create a Company row for every experience entry. We build
+          //    a per-import id map keyed by normalized name so duplicate company
+          //    references in the experience array (e.g. Harvard Medical School with
+          //    nested roles) only create one DB row.
+          const experience = data.experience ?? []
+          if (experience.length === 0) {
+            // Backwards-compat fallback: if for some reason experience is empty
+            // but a top-level company name slipped through, treat it as a single
+            // current role and apply the old logic.
+            if (data.company) {
+              setForm((prev) => {
+                const norm = normalizeCompanyNameForDedupe(data.company!)
+                const already = prev.companyEntries.some(entry => {
+                  const existingComp = companies.find(c => c.id.toString() === entry.value)
+                  const name = existingComp ? existingComp.name : entry.value
+                  return normalizeCompanyNameForDedupe(name) === norm
+                })
+                if (already) return prev
+                const dbMatch = companies.find(c => normalizeCompanyNameForDedupe(c.name) === norm)
+                const entryValue = dbMatch ? dbMatch.id.toString() : data.company!
+                return { ...prev, companyEntries: [{ value: entryValue, isCurrent: true }, ...prev.companyEntries] }
+              })
+            }
+            return
+          }
+
+          const uniqueByNorm = new Map<string, string>() // norm -> original casing
+          for (const e of experience) {
+            const norm = normalizeCompanyNameForDedupe(e.company)
+            if (norm && !uniqueByNorm.has(norm)) uniqueByNorm.set(norm, e.company)
+          }
+
+          const idByNorm = new Map<string, number>()
+          const newlyCreated: { id: number; name: string }[] = []
+          await Promise.all(Array.from(uniqueByNorm.entries()).map(async ([norm, originalName]) => {
+            const existing = companies.find(c => normalizeCompanyNameForDedupe(c.name) === norm)
+            if (existing) {
+              idByNorm.set(norm, existing.id)
+              return
+            }
+            try {
+              const created = await api.post<Company>('/companies', { name: originalName.trim(), status: 'RESEARCHING' })
+              idByNorm.set(norm, created.id)
+              newlyCreated.push({ id: created.id, name: created.name })
+            } catch (err) {
+              console.error('[LinkedIn import] Failed to create company:', originalName, err)
+            }
+          }))
+          if (newlyCreated.length > 0) {
+            setCompanies((prev) => [...prev, ...newlyCreated])
+          }
+
+          // 3) Build resolved entries in LinkedIn order; partition into current vs past.
+          //    The "first non-student current role" naturally becomes the primary
+          //    company because we prepend in iteration order.
+          type Resolved = { companyId: number; title: string; isCurrent: boolean }
+          const resolved: Resolved[] = []
+          for (const e of experience) {
+            const cid = idByNorm.get(normalizeCompanyNameForDedupe(e.company))
+            if (!cid) continue
+            resolved.push({ companyId: cid, title: e.title, isCurrent: e.isCurrent })
+          }
+
+          const currentRoles = resolved.filter(r => r.isCurrent)
+          const pastRoles = resolved.filter(r => !r.isCurrent)
+
+          // 4) Add current roles to companyEntries, deduping against entries already
+          //    in the form (covers re-import and entries the user pre-filled).
+          if (currentRoles.length > 0) {
+            setForm((prev) => {
+              const existingIds = new Set<number>()
+              for (const entry of prev.companyEntries) {
+                const idMatch = parseInt(entry.value)
+                if (!isNaN(idMatch)) {
+                  existingIds.add(idMatch)
+                  continue
+                }
+                const norm = normalizeCompanyNameForDedupe(entry.value)
+                const match = companies.find(c => normalizeCompanyNameForDedupe(c.name) === norm)
+                  ?? newlyCreated.find(c => normalizeCompanyNameForDedupe(c.name) === norm)
+                if (match) existingIds.add(match.id)
+              }
+              const additions = currentRoles
+                .filter(r => !existingIds.has(r.companyId))
+                .map(r => ({ value: r.companyId.toString(), isCurrent: true }))
+              if (additions.length === 0) return prev
+              return { ...prev, companyEntries: [...prev.companyEntries, ...additions] }
+            })
+          }
+
+          // 5) Past roles → EmploymentHistory.
+          //    Edit mode: write rows immediately, deduping against the contact's
+          //    existing history. Create mode: buffer until handleSubmit creates
+          //    the contact, then flush from the buffer.
+          if (pastRoles.length > 0) {
+            const dedupKey = (companyId: number, title: string) =>
+              `${companyId}|${title.toLowerCase().trim()}`
+
+            if (isEdit && id) {
+              try {
+                const existing = await api.get<EmploymentHistory[]>(`/employment-history?contactId=${id}`)
+                const seen = new Set(existing.map(h => dedupKey(h.companyId ?? 0, h.title ?? '')))
+                const toCreate = pastRoles.filter(r => !seen.has(dedupKey(r.companyId, r.title)))
+                const failures: string[] = []
+                await Promise.all(toCreate.map(async r => {
+                  try {
+                    await api.post('/employment-history', { contactId: parseInt(id), companyId: r.companyId, title: r.title })
+                  } catch {
+                    failures.push(r.title)
+                  }
+                }))
+                if (failures.length > 0) {
+                  toast.error(`Failed to save ${failures.length} past role(s).`)
+                }
+              } catch {
+                toast.error('Failed to update employment history.')
+              }
+            } else {
+              setPendingEmploymentHistory((prev) => {
+                const seen = new Set(prev.map(p => dedupKey(p.companyId, p.title)))
+                const merged = [...prev]
+                for (const r of pastRoles) {
+                  const k = dedupKey(r.companyId, r.title)
+                  if (!seen.has(k)) {
+                    seen.add(k)
+                    merged.push({ companyId: r.companyId, title: r.title })
+                  }
+                }
+                return merged
+              })
+            }
+          }
         }}
       />
     </div>

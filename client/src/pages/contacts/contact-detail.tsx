@@ -751,11 +751,11 @@ export function ContactDetailPage() {
             </Card>
           )}
 
-          {/* Previous Companies */}
+          {/* Past Companies */}
           {employmentHistory.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Previous Companies</CardTitle>
+                <CardTitle>Past Companies</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">

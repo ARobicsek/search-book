@@ -1,7 +1,7 @@
 # SearchBook — Production Hardening Plan
 
 **Created:** 2026-06-02
-**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. **Phase 1 IN PROGRESS (2026-06-03).** Task 19 relocated from Phase 2 into Phase 1. **Done & pushed to main:** Tasks 19, 14, 11, 7, 12, 13 (all typecheck-clean). **Remaining (auto-save cluster — needs local + mobile 390px testing before prod):** Tasks 8, 9, 10. See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
+**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. **Phase 1 IN PROGRESS (2026-06-03).** Task 19 relocated from Phase 2 into Phase 1. **Done & pushed to main:** Tasks 19, 14, 11, 7, 12, 13, **9, 10** (all typecheck-clean). **On branch `claude/festive-brown-RIaoq` awaiting preview test + merge:** Task 8 (optimistic concurrency). See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
 **Why this exists:** The owner was hired as Chief Medical Officer at NCQA and will rely on SearchBook for heavy professional networking. The app must move from "personal tool" to "near-100% uptime, never lose data." A full review (4 subagents: security, data-integrity, backup/DR, frontend resilience) produced the findings below. The app works functionally — every item here is about operational armor, not features.
 
 ---
@@ -307,6 +307,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 **Acceptance:** A stale save returns 409 and the user is told + reloaded; no silent overwrite.
 
 **Commit:** `feat(data): optimistic concurrency on contact/company/action saves`
+
+**STATUS: 🟡 IMPLEMENTED on branch `claude/festive-brown-RIaoq` (commit e29f580), NOT yet on main.** Auto-save sends `_expectedUpdatedAt`; server does an atomic compare-and-set (updateMany guard for contacts/companies; row-claim for actions) → 409 on stale; client advances its expected updatedAt after each save and reloads on 409 (the unsaved edit survives as a Task 10 draft). Backward-compatible (guard only engages when the field is present). **Needs verification before merge to main:** (1) the updatedAt ISO round-trip matches exactly through the Turso/libsql adapter; (2) repeated auto-saves don't self-409; (3) a genuine two-tab/two-device edit yields the 409 + reload; (4) mobile 390px. Test via the Vercel preview for this branch, then merge.
 
 ---
 

@@ -1,7 +1,7 @@
 # SearchBook — Production Hardening Plan
 
 **Created:** 2026-06-02
-**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. **Phase 1 IN PROGRESS (2026-06-03).** Task 19 relocated from Phase 2 into Phase 1. **Done & pushed to main:** Tasks 19, 14, 11, 7, 12, 13, 9, 10 (all typecheck-clean). **On branch `claude/festive-brown-RIaoq`, awaiting Vercel-preview test + merge:** Task 8 (optimistic concurrency). See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
+**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. The Turso token rotation (Task 2) was completed in a prior session. **Phase 1 COMPLETE (2026-06-03):** all of Tasks 7–14 + 19 are on `main` and deployed. Task 8 was verified on a Vercel preview (two-tab conflict → 409 + reload; no false positives on single-tab editing) and merged via PR #1. See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
 **Why this exists:** The owner was hired as Chief Medical Officer at NCQA and will rely on SearchBook for heavy professional networking. The app must move from "personal tool" to "near-100% uptime, never lose data." A full review (4 subagents: security, data-integrity, backup/DR, frontend resilience) produced the findings below. The app works functionally — every item here is about operational armor, not features.
 
 ---
@@ -130,7 +130,7 @@ Goal of Phase 0: after these tasks, nobody can read/steal/destroy the data witho
 
 **Commit:** `feat(security): remove debug/credential leaks and harden error output`
 
-**STATUS: ✅ DONE in code (commit 1461df3). [USER ACTION] token rotation is manual.**
+**STATUS: ✅ DONE in code (commit 1461df3). [USER ACTION] Turso token rotation COMPLETED in a prior session — the old (possibly-exposed) token is invalidated and prod runs on the rotated token.**
 
 ---
 
@@ -308,7 +308,7 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `feat(data): optimistic concurrency on contact/company/action saves`
 
-**STATUS: 🟡 IMPLEMENTED on branch `claude/festive-brown-RIaoq` (commit e29f580), NOT yet merged to main.** Server: atomic compare-and-set (updateMany guard for contacts/companies; row-claim for actions) → 409 on stale. Client: auto-save sends `_expectedUpdatedAt`, advances it after each save, and on 409 warns + reloads (the unsaved edit survives as a Task 10 draft). Backward-compatible (guard only engages when the field is present). **Verify on the branch's Vercel preview before merge:** (1) updatedAt ISO round-trip matches exactly through the Turso/libsql adapter; (2) repeated auto-saves don't self-409; (3) a real two-tab/two-device edit yields 409 + reload; (4) mobile 390px.
+**STATUS: ✅ DONE (commit e29f580, merged to main via PR #1).** Server: atomic compare-and-set (updateMany guard for contacts/companies; row-claim for actions) → 409 on stale. Client: auto-save sends `_expectedUpdatedAt`, advances it after each save, and on 409 warns + reloads (the unsaved edit survives as a Task 10 draft). Backward-compatible (guard only engages when the field is present). **Verified on the Vercel preview:** a real two-tab edit produced the 409 + reload (loser tab refreshed to the saved truth); single-tab repeated editing produced no false conflicts. Known nicety not done: in an exact collision the loser's draft-restore offer may be skipped (timestamp judged stale) — core safety (no silent overwrite + reload) holds. The 409 warning toast is brief (~1.5s before reload) and easy to miss — could be made more prominent later.
 
 ---
 

@@ -16,8 +16,9 @@ This file serves as a handoff document for the next AI session. It summarizes wh
   - **Task 13** (`b5dcfd0`) — delete-confirm dialogs now show cascade impact counts via new `/…/:id/delete-impact` endpoints.
   - **Task 9** (`279d949`) — `useAutoSaveGuard`: flush pending auto-save on unmount (covers back/Cancel/sidebar nav) + `beforeunload` guard. (`useBlocker` avoided — app uses classic `BrowserRouter`.)
   - **Task 10** (`cc5a139`) — `useEditDraft`: edit-mode localStorage drafts with restore-on-reload + bounded auto-retry of failed idempotent saves.
-- **Phase 1 — ON BRANCH `claude/festive-brown-RIaoq`, awaiting Vercel-preview test then merge to main:**
-  - **Task 8** (`e29f580`) — optimistic concurrency (409 on stale `_expectedUpdatedAt`) on Contact/Company/Action saves. Server uses an atomic compare-and-set (updateMany guard; row-claim for actions); client advances its expected `updatedAt` after every save and reloads on 409 (the unsaved edit survives as a Task 10 draft). **Before merging, test on the branch's Vercel preview:** (1) the `updatedAt` ISO round-trip matches exactly through the Turso/libsql adapter; (2) repeated auto-saves don't self-409; (3) a real two-tab/two-device edit produces the 409 + reload; (4) mobile 390px. Then `git merge` the branch into main (it's already rebased on the latest main).
+- **Task 8** (`e29f580`, merged via PR #1) — optimistic concurrency (409 on stale `_expectedUpdatedAt`) on Contact/Company/Action saves. Server uses an atomic compare-and-set (updateMany guard; row-claim for actions); client advances its expected `updatedAt` after every save and reloads on 409 (the unsaved edit survives as a Task 10 draft). **Verified on the Vercel preview:** two-tab conflict produced the 409 + reload; single-tab repeated editing produced no false conflicts.
+
+**Phase 1 is now COMPLETE.** Phase 2 (Tasks 15–18, 20–25) remains as lower-urgency hardening. Outstanding [USER ACTION]s: UptimeRobot on `/api/health`, and confirming the Turso PITR window. (Turso token rotation is already done.)
 
 ---
 

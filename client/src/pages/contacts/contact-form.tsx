@@ -32,6 +32,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink, Linkedin } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { useAutoSaveGuard } from '@/hooks/use-autosave-guard'
+import { useEditDraft } from '@/hooks/use-edit-draft'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { LinkedInImportDialog } from '@/components/linkedin-import-dialog'
 import { normalizeCompanyName, normalizeCompanyNameForDedupe } from '@/lib/normalize'
@@ -198,6 +199,7 @@ export function ContactFormPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null)
 
   // LinkedIn import dialog
   const [linkedinImportOpen, setLinkedinImportOpen] = useState(false)
@@ -279,6 +281,7 @@ export function ContactFormPage() {
           const f = contactToForm(contact)
           setForm(f)
           setOriginalForm(f)
+          setServerUpdatedAt((contact as { updatedAt?: string }).updatedAt ?? null)
           // Open sections that have data
           if (f.phone || f.linkedinUrl) setContactDetailsOpen(true)
           if (f.howConnected || f.mutualConnections.length > 0) setConnectionDetailsOpen(true)
@@ -413,6 +416,15 @@ export function ContactFormPage() {
     hasUnsavedChanges: autoSave.hasUnsavedChanges,
     isSaving: autoSave.status === 'saving',
     save: autoSave.save,
+  })
+
+  // Task 10: persist edit-mode drafts and offer to restore unsaved edits on reload.
+  useEditDraft<FormData>({
+    storageKey: isEdit && id ? `draft_edit_contact_${id}` : null,
+    data: form,
+    hasUnsavedChanges: autoSave.hasUnsavedChanges,
+    serverUpdatedAt,
+    onRestore: setForm,
   })
 
   async function handleSubmit(e?: React.FormEvent) {

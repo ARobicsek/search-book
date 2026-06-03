@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, Loader2, RotateCcw } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { useAutoSaveGuard } from '@/hooks/use-autosave-guard'
+import { useEditDraft } from '@/hooks/use-edit-draft'
 import { SaveStatusIndicator } from '@/components/save-status'
 
 type FormData = {
@@ -78,6 +79,7 @@ export function CompanyFormPage() {
 
   const [form, setForm] = useState<FormData>(emptyForm)
   const [originalForm, setOriginalForm] = useState<FormData | null>(null)
+  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -90,6 +92,7 @@ export function CompanyFormPage() {
           const formData = companyToForm(company)
           setForm(formData)
           setOriginalForm(formData)
+          setServerUpdatedAt((company as { updatedAt?: string }).updatedAt ?? null)
         })
         .catch((err) => {
           toast.error(err.message)
@@ -130,6 +133,15 @@ export function CompanyFormPage() {
     hasUnsavedChanges: autoSave.hasUnsavedChanges,
     isSaving: autoSave.status === 'saving',
     save: autoSave.save,
+  })
+
+  // Task 10: persist edit-mode drafts and offer to restore unsaved edits on reload.
+  useEditDraft<FormData>({
+    storageKey: isEdit && id ? `draft_edit_company_${id}` : null,
+    data: form,
+    hasUnsavedChanges: autoSave.hasUnsavedChanges,
+    serverUpdatedAt,
+    onRestore: setForm,
   })
 
   async function handleSubmit(e: React.FormEvent) {

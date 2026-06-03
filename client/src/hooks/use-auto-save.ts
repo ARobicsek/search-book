@@ -57,6 +57,11 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return true
 }
 
+// Task 10: bounded auto-retry of failed saves. Safe because auto-save uses an
+// idempotent PUT (replays the same full record) — never a POST.
+const MAX_SAVE_RETRIES = 2
+const RETRY_BASE_MS = 3000
+
 export function useAutoSave<T>({
   data,
   originalData,
@@ -69,6 +74,8 @@ export function useAutoSave<T>({
   const [status, setStatus] = useState<SaveStatus>('idle')
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryCountRef = useRef(0)
   const isSavingRef = useRef(false)
   const lastSavedDataRef = useRef<T | null>(null)
 
@@ -97,6 +104,7 @@ export function useAutoSave<T>({
     try {
       await onSave(data)
       lastSavedDataRef.current = data
+      retryCountRef.current = 0
       setStatus('saved')
       console.log('[AUTO-SAVE] Save succeeded')
 
@@ -110,11 +118,30 @@ export function useAutoSave<T>({
     } catch (error) {
       setStatus('error')
       console.error('[AUTO-SAVE] Save failed:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to save')
+
+      // Task 10: bounded auto-retry of the (idempotent) save before giving up, so a
+      // transient network/phone hiccup self-heals instead of silently losing the edit.
+      if (retryCountRef.current < MAX_SAVE_RETRIES) {
+        retryCountRef.current += 1
+        const delay = RETRY_BASE_MS * retryCountRef.current
+        console.log(`[AUTO-SAVE] Scheduling retry ${retryCountRef.current}/${MAX_SAVE_RETRIES} in ${delay}ms`)
+        if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = setTimeout(() => {
+          performSaveRef.current()
+        }, delay)
+      } else {
+        toast.error(error instanceof Error ? error.message : 'Failed to save')
+      }
     } finally {
       isSavingRef.current = false
     }
   }, [data, enabled, hasNewChanges, onSave, originalData, validate])
+
+  // Keep a live ref to performSave so the retry timeout always runs the latest version.
+  const performSaveRef = useRef(performSave)
+  useEffect(() => {
+    performSaveRef.current = performSave
+  })
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -125,6 +152,12 @@ export function useAutoSave<T>({
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
+    // A fresh edit supersedes any in-flight retry and resets the retry budget.
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current)
+      retryTimeoutRef.current = null
+    }
+    retryCountRef.current = 0
 
     // Set new debounced save
     timeoutRef.current = setTimeout(() => {
@@ -143,6 +176,7 @@ export function useAutoSave<T>({
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current)
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
     }
   }, [])
 

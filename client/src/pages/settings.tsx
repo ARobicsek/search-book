@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { exportViaTurso, importViaTurso, type BackupProgress } from '@/lib/backup'
+import { buildPhotosZip } from '@/lib/photo-backup'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -52,6 +53,7 @@ export function SettingsPage() {
   const [loadingBackups, setLoadingBackups] = useState(true)
   const [backingUpNow, setBackingUpNow] = useState(false)
   const [showAllBackups, setShowAllBackups] = useState(false)
+  const [photoProgress, setPhotoProgress] = useState<{ done: number; total: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function loadBackups() {
@@ -86,6 +88,17 @@ export function SettingsPage() {
     }
   }
 
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   async function handleBackup() {
     setBackingUp(true)
     setBackupProgress(null)
@@ -102,22 +115,39 @@ export function SettingsPage() {
       api.post('/backup/save-local', data).catch(() => {})
 
       const json = JSON.stringify(data, null, 2)
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `searchbook-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      downloadBlob(
+        new Blob([json], { type: 'application/json' }),
+        `searchbook-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`,
+      )
       toast.success('Backup downloaded')
       setShowSaveReminder(true)
+
+      // Bundle the actual photo files into a single ZIP you keep locally and
+      // overwrite each time (kept out of the daily cloud backup on purpose).
+      setBackupProgress(null)
+      setPhotoProgress({ done: 0, total: 0 })
+      const photos = await buildPhotosZip(data, (done, total) =>
+        setPhotoProgress({ done, total }),
+      )
+      if (photos.zip) {
+        // cast: fflate returns Uint8Array<ArrayBufferLike>, which the DOM lib's
+        // BlobPart type (ArrayBufferView<ArrayBuffer>) rejects; safe at runtime.
+        downloadBlob(
+          new Blob([photos.zip as unknown as BlobPart], { type: 'application/zip' }),
+          'searchbook-photos.zip',
+        )
+        const mb = (photos.bytes / 1_048_576).toFixed(1)
+        const skipped = photos.skipped ? `, ${photos.skipped} skipped` : ''
+        toast.success(`Photos backed up: ${photos.saved} files (${mb} MB)${skipped}`)
+      } else {
+        toast.message('No photos to back up')
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Backup failed')
     } finally {
       setBackingUp(false)
       setBackupProgress(null)
+      setPhotoProgress(null)
     }
   }
 
@@ -178,7 +208,9 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>Create Backup</CardTitle>
           <CardDescription>
-            Download a full backup of your database as JSON.
+            Downloads a full backup of your database as JSON, plus a{' '}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">searchbook-photos.zip</code>{' '}
+            of the actual photo files. Keep both locally and overwrite the ZIP each time.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -186,7 +218,9 @@ export function SettingsPage() {
             {backingUp ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {formatProgress(backupProgress, 'Starting backup...')}
+                {photoProgress
+                  ? `Backing up photos (${photoProgress.done}/${photoProgress.total})...`
+                  : formatProgress(backupProgress, 'Starting backup...')}
               </>
             ) : (
               <>

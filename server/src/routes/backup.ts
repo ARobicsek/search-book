@@ -419,10 +419,12 @@ router.post('/import', async (req: Request, res: Response) => {
       // Insert contacts without self-references first
       const contacts = transformRecords(data.Contact).map((c: any) => ({ ...c, referredById: null }));
       await prisma.contact.createMany({ data: contacts });
-      // Restore self-references
+      // Restore self-references via raw SQL so Prisma's @updatedAt does NOT fire —
+      // otherwise every referred contact gets a fresh updatedAt on each restore.
+      // (The browser-direct Turso path already uses raw UPDATE for the same reason.)
       for (const c of data.Contact) {
         if (c.referredById) {
-          await prisma.contact.update({ where: { id: c.id as number }, data: { referredById: c.referredById as number } });
+          await prisma.$executeRaw`UPDATE "Contact" SET "referredById" = ${c.referredById as number} WHERE "id" = ${c.id as number}`;
         }
       }
     }

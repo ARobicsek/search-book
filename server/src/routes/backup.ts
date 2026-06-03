@@ -30,6 +30,8 @@ router.get('/export', async (_req: Request, res: Response) => {
       conversations, conversationContacts, conversationCompanies,
       actions, actionContacts, actionCompanies,
       ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
+      contactStatusHistory, companyStatusHistory, companyActivities,
+      companyPrepNotes, conversationParticipants,
     ] = await Promise.all([
       prisma.contact.findMany(),
       prisma.company.findMany(),
@@ -49,10 +51,15 @@ router.get('/export', async (_req: Request, res: Response) => {
       prisma.link.findMany(),
       prisma.prepNote.findMany(),
       prisma.relationship.findMany(),
+      prisma.contactStatusHistory.findMany(),
+      prisma.companyStatusHistory.findMany(),
+      prisma.companyActivity.findMany(),
+      prisma.companyPrepNote.findMany(),
+      prisma.conversationParticipant.findMany(),
     ]);
 
     const data = {
-      _meta: { exportedAt: new Date().toISOString(), version: 1 },
+      _meta: { exportedAt: new Date().toISOString(), version: 2 },
       Contact: contacts,
       Company: companies,
       EmploymentHistory: employmentHistory,
@@ -71,6 +78,12 @@ router.get('/export', async (_req: Request, res: Response) => {
       Link: links,
       PrepNote: prepNotes,
       Relationship: relationships,
+      // Task 3: previously-missing tables (real user content + history)
+      ContactStatusHistory: contactStatusHistory,
+      CompanyStatusHistory: companyStatusHistory,
+      CompanyActivity: companyActivities,
+      CompanyPrepNote: companyPrepNotes,
+      ConversationParticipant: conversationParticipants,
     };
 
     // Handle BigInt serialization (Prisma/libsql may return BigInt for integers)
@@ -283,6 +296,12 @@ router.post('/import', async (req: Request, res: Response) => {
     }
 
     // Delete all data in child-first order (FK safety)
+    // Task 3: leaf children — delete before their parents (Contact/Company/Conversation)
+    await prisma.contactStatusHistory.deleteMany();
+    await prisma.companyStatusHistory.deleteMany();
+    await prisma.companyActivity.deleteMany();
+    await prisma.companyPrepNote.deleteMany();
+    await prisma.conversationParticipant.deleteMany();
     await prisma.conversationContact.deleteMany();
     await prisma.conversationCompany.deleteMany();
     await prisma.contactTag.deleteMany();
@@ -333,6 +352,12 @@ router.post('/import', async (req: Request, res: Response) => {
     if (data.Link?.length) await prisma.link.createMany({ data: transformRecords(data.Link) });
     if (data.PrepNote?.length) await prisma.prepNote.createMany({ data: transformRecords(data.PrepNote) });
     if (data.Relationship?.length) await prisma.relationship.createMany({ data: transformRecords(data.Relationship) });
+    // Task 3: previously-missing tables (parents already inserted above)
+    if (data.ContactStatusHistory?.length) await prisma.contactStatusHistory.createMany({ data: transformRecords(data.ContactStatusHistory) });
+    if (data.CompanyStatusHistory?.length) await prisma.companyStatusHistory.createMany({ data: transformRecords(data.CompanyStatusHistory) });
+    if (data.CompanyActivity?.length) await prisma.companyActivity.createMany({ data: transformRecords(data.CompanyActivity) });
+    if (data.CompanyPrepNote?.length) await prisma.companyPrepNote.createMany({ data: transformRecords(data.CompanyPrepNote) });
+    if (data.ConversationParticipant?.length) await prisma.conversationParticipant.createMany({ data: transformRecords(data.ConversationParticipant) });
 
     res.json({ message: 'Import completed successfully' });
   } catch (error: any) {

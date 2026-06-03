@@ -9,6 +9,11 @@ const TABLES_PARENT_FIRST = [
   'ActionContact', 'ActionCompany',
   'IdeaContact', 'IdeaCompany',
   'Link', 'PrepNote', 'Relationship',
+  // Task 3: leaf children of Company/Contact/Conversation — safe to append
+  // (parents already appear earlier, so inserts stay FK-safe; reverse handles deletes)
+  'CompanyActivity', 'CompanyPrepNote',
+  'ContactStatusHistory', 'CompanyStatusHistory',
+  'ConversationParticipant',
 ] as const;
 
 /** Reverse order for deletes (children first). */
@@ -62,7 +67,7 @@ export async function exportViaTurso(
 
   try {
     const data: Record<string, unknown> = {
-      _meta: { exportedAt: new Date().toISOString(), version: 1 },
+      _meta: { exportedAt: new Date().toISOString(), version: 2 },
     };
 
     for (let i = 0; i < TABLES_PARENT_FIRST.length; i++) {

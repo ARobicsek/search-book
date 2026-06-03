@@ -37,6 +37,9 @@ function formatBackupDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+// How many automatic backups to show before the "Show all" expander.
+const VISIBLE_BACKUPS = 5
+
 export function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false)
   const [backupProgress, setBackupProgress] = useState<BackupProgress | null>(null)
@@ -48,6 +51,7 @@ export function SettingsPage() {
   const [autoBackups, setAutoBackups] = useState<AutoBackup[]>([])
   const [loadingBackups, setLoadingBackups] = useState(true)
   const [backingUpNow, setBackingUpNow] = useState(false)
+  const [showAllBackups, setShowAllBackups] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function loadBackups() {
@@ -225,26 +229,38 @@ export function SettingsPage() {
               backup has run (or after you use “Back up now”).
             </p>
           ) : (
-            <ul className="divide-y rounded-md border">
-              {autoBackups.map((b) => (
-                <li
-                  key={b.name}
-                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{formatBackupDate(b.uploadedAt)}</p>
-                    <p className="text-xs text-muted-foreground">{formatBytes(b.size)}</p>
-                  </div>
-                  <a
-                    href={b.url}
-                    className="shrink-0 text-primary hover:underline"
-                    download
+            <>
+              <ul className="divide-y rounded-md border">
+                {(showAllBackups ? autoBackups : autoBackups.slice(0, VISIBLE_BACKUPS)).map((b) => (
+                  <li
+                    key={b.name}
+                    className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
                   >
-                    Download
-                  </a>
-                </li>
-              ))}
-            </ul>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{formatBackupDate(b.uploadedAt)}</p>
+                      <p className="text-xs text-muted-foreground">{formatBytes(b.size)}</p>
+                    </div>
+                    <a
+                      href={b.url}
+                      className="shrink-0 text-primary hover:underline"
+                      download
+                    >
+                      Download
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              {autoBackups.length > VISIBLE_BACKUPS && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setShowAllBackups((v) => !v)}
+                >
+                  {showAllBackups ? 'Show fewer' : `Show all ${autoBackups.length}`}
+                </Button>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

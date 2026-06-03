@@ -31,6 +31,7 @@ import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
 import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink, Linkedin } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
+import { useAutoSaveGuard } from '@/hooks/use-autosave-guard'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { LinkedInImportDialog } from '@/components/linkedin-import-dialog'
 import { normalizeCompanyName, normalizeCompanyNameForDedupe } from '@/lib/normalize'
@@ -404,6 +405,14 @@ export function ContactFormPage() {
     validate: (data) => validate(data),
     enabled: isEdit && !saving,
     onRevert: setForm,
+  })
+
+  // Task 9: flush pending saves on navigation + warn on unload while dirty.
+  useAutoSaveGuard({
+    active: isEdit && !saving,
+    hasUnsavedChanges: autoSave.hasUnsavedChanges,
+    isSaving: autoSave.status === 'saving',
+    save: autoSave.save,
   })
 
   async function handleSubmit(e?: React.FormEvent) {

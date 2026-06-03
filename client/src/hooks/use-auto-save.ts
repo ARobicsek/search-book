@@ -33,6 +33,8 @@ interface UseAutoSaveReturn<T> {
   cancel: () => void
   /** Original data reference */
   originalData: T | null
+  /** True when there are edits not yet persisted (differs from last successful save) */
+  hasUnsavedChanges: boolean
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -167,6 +169,16 @@ export function useAutoSave<T>({
     }
   }, [])
 
+  // True when the current data hasn't been persisted yet (vs the last successful save,
+  // or vs original before any save). Recomputed on render; setStatus after a save
+  // triggers the re-render that flips this back to false.
+  const hasUnsavedChanges =
+    enabled &&
+    originalData !== null &&
+    (lastSavedDataRef.current === null
+      ? isDirty
+      : !deepEqual(data, lastSavedDataRef.current))
+
   return {
     status,
     isDirty,
@@ -174,5 +186,6 @@ export function useAutoSave<T>({
     save,
     cancel,
     originalData,
+    hasUnsavedChanges,
   }
 }

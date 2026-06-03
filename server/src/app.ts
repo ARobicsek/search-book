@@ -3,7 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
-import { resetPrisma } from './db';
+import prisma, { resetPrisma } from './db';
 import path from 'path';
 import contactsRouter from './routes/contacts';
 import companiesRouter from './routes/companies';
@@ -123,9 +123,15 @@ if (process.env.NODE_ENV !== 'production') {
   app.use('/photos', express.static(path.join(process.cwd(), 'data', 'photos')));
 }
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check — verifies DB connectivity so the uptime monitor catches
+// Turso outages, not just whether the web server is up. Returns no secrets.
+app.get('/api/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'error', db: 'down' });
+  }
 });
 
 // Auth check — sits behind the gate above, so the login screen can validate a

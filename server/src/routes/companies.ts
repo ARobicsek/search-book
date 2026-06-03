@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
 
 const router = Router();
 
@@ -302,26 +303,39 @@ router.put('/:id', async (req: Request, res: Response) => {
       }
       req.body.name = req.body.name.trim();
     }
+    // Task 8: optimistic-concurrency guard (only when the client sends _expectedUpdatedAt).
+    const expectedUpdatedAt = parseExpectedUpdatedAt(req.body._expectedUpdatedAt);
+    const { _expectedUpdatedAt, ...data } = req.body;
+    void _expectedUpdatedAt;
     // Task 12: update the company and record any status change atomically.
     const company = await prisma.$transaction(async (tx) => {
-      const updated = await tx.company.update({
-        where: { id },
-        data: req.body,
-      });
-      if (req.body.status && req.body.status !== existing.status) {
+      if (expectedUpdatedAt) {
+        const guard = await tx.company.updateMany({
+          where: { id, updatedAt: expectedUpdatedAt },
+          data,
+        });
+        if (guard.count === 0) throw new StaleWriteError();
+      } else {
+        await tx.company.update({ where: { id }, data });
+      }
+      if (data.status && data.status !== existing.status) {
         await tx.companyStatusHistory.create({
           data: {
-            companyId: updated.id,
+            companyId: id,
             oldStatus: existing.status,
-            newStatus: updated.status,
+            newStatus: data.status,
           },
         });
       }
-      return updated;
+      return tx.company.findUnique({ where: { id } });
     });
 
     res.json(company);
   } catch (error) {
+    if (error instanceof StaleWriteError) {
+      res.status(409).json({ error: CONFLICT_MESSAGE });
+      return;
+    }
     console.error('Error updating company:', error);
     res.status(500).json({ error: 'Failed to update company' });
   }

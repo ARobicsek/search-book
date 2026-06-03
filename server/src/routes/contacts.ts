@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
 
 const router = Router();
 
@@ -301,6 +302,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       return;
     }
     const data = processFormData(req.body) as any;
+    // Task 8: optimistic-concurrency guard (only when the client sends _expectedUpdatedAt).
+    const expectedUpdatedAt = parseExpectedUpdatedAt(data._expectedUpdatedAt);
+    delete data._expectedUpdatedAt;
     if (data.name !== undefined) {
       if (typeof data.name !== 'string' || data.name.trim().length === 0) {
         res.status(400).json({ error: 'Name cannot be empty' });
@@ -310,25 +314,37 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     // Task 12: update the contact and record any status change atomically.
     const contact = await prisma.$transaction(async (tx) => {
-      const updated = await tx.contact.update({
-        where: { id },
-        data,
-        include: { company: { select: { id: true, name: true } } },
-      });
+      if (expectedUpdatedAt) {
+        // Atomic compare-and-set: updates only if updatedAt still matches the client's copy.
+        const guard = await tx.contact.updateMany({
+          where: { id, updatedAt: expectedUpdatedAt },
+          data,
+        });
+        if (guard.count === 0) throw new StaleWriteError();
+      } else {
+        await tx.contact.update({ where: { id }, data });
+      }
       if (data.status && data.status !== existing.status) {
         await tx.contactStatusHistory.create({
           data: {
-            contactId: updated.id,
+            contactId: id,
             oldStatus: existing.status,
-            newStatus: updated.status,
+            newStatus: data.status,
           },
         });
       }
-      return updated;
+      return tx.contact.findUnique({
+        where: { id },
+        include: { company: { select: { id: true, name: true } } },
+      });
     });
 
     res.json(contact);
   } catch (error) {
+    if (error instanceof StaleWriteError) {
+      res.status(409).json({ error: CONFLICT_MESSAGE });
+      return;
+    }
     console.error('Error updating contact:', error);
     res.status(500).json({ error: 'Failed to update contact' });
   }

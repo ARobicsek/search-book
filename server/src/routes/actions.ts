@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
 
 const router = Router();
 
@@ -162,7 +163,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       req.body.title = req.body.title.trim();
     }
 
-    const { contactIds, companyIds, ...rest } = req.body;
+    const { contactIds, companyIds, _expectedUpdatedAt, ...rest } = req.body;
+    // Task 8: optimistic-concurrency guard (only when the client sends _expectedUpdatedAt).
+    const expectedUpdatedAt = parseExpectedUpdatedAt(_expectedUpdatedAt);
 
     // If contactIds or companyIds provided, update junction tables
     const junctionUpdates: Record<string, unknown> = {};
@@ -179,13 +182,29 @@ router.put('/:id', async (req: Request, res: Response) => {
       };
     }
 
-    const action = await prisma.action.update({
-      where: { id },
-      data: { ...rest, ...junctionUpdates },
-      include: actionIncludes,
+    // The action update uses nested junction writes, so we can't compare-and-set in one
+    // updateMany. Instead, inside a transaction, atomically "claim" the row by bumping its
+    // updatedAt only if it still matches the client's copy; a 0-count claim means it's stale.
+    const action = await prisma.$transaction(async (tx) => {
+      if (expectedUpdatedAt) {
+        const guard = await tx.action.updateMany({
+          where: { id, updatedAt: expectedUpdatedAt },
+          data: { updatedAt: new Date() },
+        });
+        if (guard.count === 0) throw new StaleWriteError();
+      }
+      return tx.action.update({
+        where: { id },
+        data: { ...rest, ...junctionUpdates },
+        include: actionIncludes,
+      });
     });
     res.json(action);
   } catch (error) {
+    if (error instanceof StaleWriteError) {
+      res.status(409).json({ error: CONFLICT_MESSAGE });
+      return;
+    }
     console.error('Error updating action:', error);
     res.status(500).json({ error: 'Failed to update action' });
   }

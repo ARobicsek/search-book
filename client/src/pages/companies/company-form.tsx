@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import type { Company } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -80,6 +80,8 @@ export function CompanyFormPage() {
   const [form, setForm] = useState<FormData>(emptyForm)
   const [originalForm, setOriginalForm] = useState<FormData | null>(null)
   const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null)
+  // Task 8: expected server updatedAt, advanced after each successful save.
+  const expectedUpdatedAtRef = useRef<string | null>(null)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -92,7 +94,11 @@ export function CompanyFormPage() {
           const formData = companyToForm(company)
           setForm(formData)
           setOriginalForm(formData)
-          setServerUpdatedAt((company as { updatedAt?: string }).updatedAt ?? null)
+          {
+            const loadedUpdatedAt = (company as { updatedAt?: string }).updatedAt ?? null
+            setServerUpdatedAt(loadedUpdatedAt)
+            expectedUpdatedAtRef.current = loadedUpdatedAt
+          }
         })
         .catch((err) => {
           toast.error(err.message)
@@ -113,8 +119,21 @@ export function CompanyFormPage() {
 
   // Auto-save handler for edit mode
   const handleAutoSave = useCallback(async (data: FormData) => {
-    const payload = formToPayload(data)
-    await api.put(`/companies/${id}`, payload)
+    const payload = formToPayload(data) as Record<string, unknown>
+    // Task 8: optimistic concurrency — reject (409) a stale save instead of clobbering a
+    // change made on another device/tab.
+    payload._expectedUpdatedAt = expectedUpdatedAtRef.current
+    try {
+      const saved = await api.put<Company>(`/companies/${id}`, payload)
+      if (saved?.updatedAt) expectedUpdatedAtRef.current = saved.updatedAt
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast.error('This company was changed on another device — reloading the latest version.')
+        setTimeout(() => window.location.reload(), 1500)
+        return
+      }
+      throw err
+    }
   }, [id])
 
   // Use auto-save hook (only in edit mode)

@@ -5,6 +5,16 @@ export const PASSWORD_STORAGE_KEY = 'searchbook_password';
 
 const TIMEOUT_MS = 28000;
 
+/** Error carrying the HTTP status, so callers can react to specifics (e.g. 409 conflict). */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -37,7 +47,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
       window.dispatchEvent(new CustomEvent('searchbook:unauthorized'));
     }
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed with status ${response.status}`);
+    throw new ApiError(response.status, body.error || `Request failed with status ${response.status}`);
   }
   if (response.status === 204) return undefined as T;
   return response.json();

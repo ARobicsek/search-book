@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import type { Contact, Company, LinkRecord } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -200,6 +200,9 @@ export function ContactFormPage() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null)
+  // Task 8: the updatedAt we expect the server record to still have. Advanced after every
+  // successful save so repeated auto-saves don't conflict with themselves.
+  const expectedUpdatedAtRef = useRef<string | null>(null)
 
   // LinkedIn import dialog
   const [linkedinImportOpen, setLinkedinImportOpen] = useState(false)
@@ -281,7 +284,9 @@ export function ContactFormPage() {
           const f = contactToForm(contact)
           setForm(f)
           setOriginalForm(f)
-          setServerUpdatedAt((contact as { updatedAt?: string }).updatedAt ?? null)
+          const loadedUpdatedAt = (contact as { updatedAt?: string }).updatedAt ?? null
+          setServerUpdatedAt(loadedUpdatedAt)
+          expectedUpdatedAtRef.current = loadedUpdatedAt
           // Open sections that have data
           if (f.phone || f.linkedinUrl) setContactDetailsOpen(true)
           if (f.howConnected || f.mutualConnections.length > 0) setConnectionDetailsOpen(true)
@@ -395,9 +400,26 @@ export function ContactFormPage() {
     // Remove referredByName for auto-save (don't auto-create)
     delete (payload as { referredByName?: string | null }).referredByName
 
+    // Task 8: include the expected updatedAt so a stale save is rejected (409) instead of
+    // silently clobbering a change made on another device/tab.
+    ;(payload as { _expectedUpdatedAt?: string | null })._expectedUpdatedAt =
+      expectedUpdatedAtRef.current
+
     console.log('[CONTACT-SAVE] Sending PUT /contacts/' + id, { fields: Object.keys(payload) })
-    await api.put(`/contacts/${id}`, payload)
-    console.log('[CONTACT-SAVE] PUT succeeded')
+    try {
+      const saved = await api.put<Contact>(`/contacts/${id}`, payload)
+      if (saved?.updatedAt) expectedUpdatedAtRef.current = saved.updatedAt
+      console.log('[CONTACT-SAVE] PUT succeeded')
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // Resolve by reloading the latest server copy. The unsaved edit is preserved as a
+        // localStorage draft (Task 10), which the reload will offer to restore.
+        toast.error('This contact was changed on another device — reloading the latest version.')
+        setTimeout(() => window.location.reload(), 1500)
+        return
+      }
+      throw err
+    }
   }, [id, companies, saving])
 
   // Use auto-save hook (only in edit mode)

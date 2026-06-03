@@ -1,14 +1,21 @@
 const API_BASE = '/api';
 
+// Shared-password gate (Task 1): every request carries the stored password.
+export const PASSWORD_STORAGE_KEY = 'searchbook_password';
 
 const TIMEOUT_MS = 28000;
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  // Attach the shared password header to every request (all verbs + uploadFile).
+  const headers: Record<string, string> = { ...(options.headers as Record<string, string> | undefined) };
+  const pw = localStorage.getItem(PASSWORD_STORAGE_KEY);
+  if (pw) headers['x-app-password'] = pw;
   try {
     const response = await fetch(url, {
       ...options,
+      headers,
       signal: controller.signal,
     });
     clearTimeout(id);
@@ -24,6 +31,11 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}) {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    // Password missing/changed/wrong: clear it and re-prompt via the login gate.
+    if (response.status === 401) {
+      localStorage.removeItem(PASSWORD_STORAGE_KEY);
+      window.dispatchEvent(new CustomEvent('searchbook:unauthorized'));
+    }
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error || `Request failed with status ${response.status}`);
   }

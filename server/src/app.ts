@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import prisma, { resetPrisma } from './db';
 import path from 'path';
 import contactsRouter from './routes/contacts';
@@ -50,7 +51,8 @@ app.use(cors({
 
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'x-app-password']
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -90,6 +92,32 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// ---- Shared-password auth gate over all /api routes ----
+// Single-user app: one shared password closes the "anyone with the URL" hole.
+// NOT high-security (the client bundle is public, the password lives in localStorage),
+// but the right cost/benefit for a single-user CRM. Pairs with rate limiting (Task 16).
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+// Fail closed in production if the password isn't configured.
+if (process.env.NODE_ENV === 'production' && !process.env.APP_PASSWORD) {
+  throw new Error('APP_PASSWORD must be set in production');
+}
+
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();        // open for uptime monitor (Task 5)
+  if (req.path === '/backup/cron') return next();   // CRON_SECRET-gated instead (Task 4)
+  const expected = process.env.APP_PASSWORD;
+  if (!expected) return next();                     // dev convenience when unset
+  const provided = req.header('x-app-password') || '';
+  if (timingSafeEqualStr(provided, expected)) return next();
+  return res.status(401).json({ error: 'Unauthorized' });
+});
+
 // Serve uploaded photos statically (for local dev - Vercel will use Blob storage)
 if (process.env.NODE_ENV !== 'production') {
   app.use('/photos', express.static(path.join(process.cwd(), 'data', 'photos')));
@@ -98,6 +126,12 @@ if (process.env.NODE_ENV !== 'production') {
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Auth check — sits behind the gate above, so the login screen can validate a
+// password: correct header → 200, wrong/missing → 401 (returned by the gate).
+app.get('/api/auth/check', (_req, res) => {
+  res.json({ ok: true });
 });
 
 // Debug endpoint to test database connection

@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import { PWAUpdatePrompt } from '@/components/pwa-update-prompt'
+import { LoginGate } from '@/components/login-gate'
+import { PASSWORD_STORAGE_KEY } from '@/lib/api'
 import { Layout } from '@/components/layout'
 import { DashboardPage } from '@/pages/dashboard'
 import { ContactListPage } from '@/pages/contacts/contact-list'
@@ -21,6 +24,22 @@ import { SearchPage } from '@/pages/search'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
 
 function App() {
+  const [authed, setAuthed] = useState<boolean>(
+    () => !!localStorage.getItem(PASSWORD_STORAGE_KEY)
+  )
+
+  // A 401 anywhere clears the stored password (in api.ts) and fires this event —
+  // drop back to the login gate so the user can re-enter it.
+  useEffect(() => {
+    const onUnauthorized = () => setAuthed(false)
+    window.addEventListener('searchbook:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('searchbook:unauthorized', onUnauthorized)
+  }, [])
+
+  if (!authed) {
+    return <LoginGate onSuccess={() => setAuthed(true)} />
+  }
+
   return (
     <BrowserRouter>
       <Routes>

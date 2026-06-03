@@ -4,7 +4,25 @@ This file serves as a handoff document for the next AI session. It summarizes wh
 
 ### What Was Just Completed
 
-**Backup & Security Hardening phase — closed out with restore verification and photo-file backup.** (See ROADMAP "Phase 7.5".)
+**Production Hardening Plan — Phase 0 done; Phase 1 mostly done.** See `.planning/PRODUCTION-HARDENING-PLAN.md` (now committed) for the full task list and per-task STATUS lines.
+
+- **Phase 0 (Tasks 1–6):** complete and deployed (password gate, debug/credential leak removal, all-23-table backup, daily Vercel Blob backup, DB-health endpoint, recovery runbook). Outstanding **[USER ACTION]s**: set up UptimeRobot on `/api/health`, rotate the Turso token, confirm the Turso PITR window, adopt the weekly off-platform backup habit.
+- **Phase 1 — done & pushed to main (typecheck-clean):**
+  - **Task 19** (`daa7fc5`) — tags list no longer uses the `_count` include that hangs Turso; uses `groupBy`.
+  - **Task 14** (`6ad6f11`) — `build:vercel` runs prisma generate → full typecheck → build, so type errors now fail the deploy.
+  - **Task 11** (`1326423`) — React `ErrorBoundary` around `<App/>` with a reload fallback.
+  - **Task 7** (`e59e456`) — atomic restore: browser-direct path downloads a pre-restore safety snapshot then runs wipe+reinsert in a libsql interactive transaction; server `/import` wrapped in `$transaction`.
+  - **Task 12** (`5e65697`) — multi-write endpoints (conversations, contacts/companies + StatusHistory, batch-action, prepnotes) wrapped in transactions.
+  - **Task 13** (`b5dcfd0`) — delete-confirm dialogs now show cascade impact counts via new `/…/:id/delete-impact` endpoints.
+- **Phase 1 — REMAINING (the auto-save cluster; needs local + mobile 390px testing before prod):**
+  - **Task 8** — optimistic concurrency (409 on stale `_expectedUpdatedAt`) on Contact/Company/Action saves. ⚠️ Highest care: auto-save fires repeatedly, so the client must track and advance the expected `updatedAt` after every save or it will self-409. Test with two tabs/devices.
+  - **Task 9** — flush pending auto-save on navigation + `beforeunload`/`useBlocker` unsaved-changes guard.
+  - **Task 10** — edit-mode localStorage drafts + bounded retry on failed idempotent PUTs.
+  These were intentionally NOT pushed blind to the single prod instance; do them on a branch with a Vercel preview + mobile test, then merge.
+
+---
+
+#### Earlier context — Backup & Security Hardening (ROADMAP "Phase 7.5")
 
 This phase (across several sessions) added: a shared-password gate over all `/api` routes, removal of debug/credential leaks, an automated **daily backup to Vercel Blob** (`/api/backup/cron`, 08:00 UTC, newest 30 retained), a DB-connectivity `/health` check, and a fix to include all 23 tables in export/import. The final session focused on **trusting restore** and **backing up photo files**:
 

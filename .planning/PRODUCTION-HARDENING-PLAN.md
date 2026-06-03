@@ -1,7 +1,7 @@
 # SearchBook — Production Hardening Plan
 
 **Created:** 2026-06-02
-**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. **Phase 1 IN PROGRESS (2026-06-03).** Task 19 has been relocated from Phase 2 into Phase 1 (highest-value/lowest-effort Turso-stability fix). See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
+**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. **Phase 1 IN PROGRESS (2026-06-03).** Task 19 relocated from Phase 2 into Phase 1. **Done & pushed to main:** Tasks 19, 14, 11, 7, 12, 13 (all typecheck-clean). **Remaining (auto-save cluster — needs local + mobile 390px testing before prod):** Tasks 8, 9, 10. See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
 **Why this exists:** The owner was hired as Chief Medical Officer at NCQA and will rely on SearchBook for heavy professional networking. The app must move from "personal tool" to "near-100% uptime, never lose data." A full review (4 subagents: security, data-integrity, backup/DR, frontend resilience) produced the findings below. The app works functionally — every item here is about operational armor, not features.
 
 ---
@@ -290,6 +290,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `fix(backup): make restore atomic (transaction + pre-restore safety export)`
 
+**STATUS: ✅ DONE (commit e59e456).** Browser-direct restore downloads a pre-restore safety snapshot and wraps wipe+reinsert in a libsql interactive transaction; server `/import` wrapped in `prisma.$transaction`. Not yet exercised against live Turso — verify on next manual restore.
+
 ---
 
 ## Task 8 — Optimistic concurrency to stop silent cross-device overwrites  ⚠️ HIGH
@@ -348,6 +350,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `feat(resilience): add React error boundary with reload fallback`
 
+**STATUS: ✅ DONE (commit 1326423).** `ErrorBoundary` wraps `<App/>` in `main.tsx`; reload preserves the URL.
+
 ---
 
 ## Task 12 — Wrap remaining multi-write operations in transactions  ⚠️ HIGH/MED
@@ -363,6 +367,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `fix(data): wrap multi-write operations in transactions`
 
+**STATUS: ✅ DONE (commit 5e65697).** conversations POST/PUT, contacts/companies POST/PUT (+ StatusHistory), contacts batch-action, prepnotes import-dossier (converted to callback form) + reorder all wrapped.
+
 ---
 
 ## Task 13 — Safer deletes: show impact, consider soft-delete  ⚠️ HIGH
@@ -375,6 +381,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 **Acceptance:** The delete confirm tells the user exactly what else will be destroyed.
 
 **Commit:** `feat(safety): show cascade impact counts before delete`
+
+**STATUS: ✅ DONE (commit b5dcfd0).** Added `/contacts/:id/delete-impact` and `/companies/:id/delete-impact`; both detail-page delete dialogs fetch and list the blast radius on open.
 
 ---
 
@@ -391,6 +399,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `chore(ci): gate production build on typecheck`
 
+**STATUS: ✅ DONE in code (commit 6ad6f11).** `build:vercel` now runs prisma generate → full typecheck → client build, so a type error fails the Vercel deploy. [USER ACTION] branch→preview→merge workflow + locating Instant Rollback still up to the user.
+
 ---
 
 ## Task 19 — Fix `tags` `_count` hang risk  ⚠️ HIGH  *(relocated from Phase 2 → Phase 1, 2026-06-03)*
@@ -406,6 +416,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 **Acceptance:** `tags.ts` no longer uses the `include: { _count }` pattern; `/api/tags` returns identical data and does not risk hanging the Turso adapter.
 
 **Commit:** `fix(tags): replace _count include with groupBy to avoid Turso adapter hang`
+
+**STATUS: ✅ DONE (commit daa7fc5).** Replaced with parallel `groupBy` counts merged client-side; response shape unchanged.
 
 ---
 

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { exportViaTurso, importViaTurso, type BackupProgress } from '@/lib/backup'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,24 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Download, Upload, Loader2, FolderOpen, X } from 'lucide-react'
+import { Download, Upload, Loader2, FolderOpen, X, Cloud } from 'lucide-react'
+
+interface AutoBackup {
+  name: string
+  url: string
+  size: number
+  uploadedAt: string
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatBackupDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
 
 export function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false)
@@ -28,7 +45,42 @@ export function SettingsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [showSaveReminder, setShowSaveReminder] = useState(false)
+  const [autoBackups, setAutoBackups] = useState<AutoBackup[]>([])
+  const [loadingBackups, setLoadingBackups] = useState(true)
+  const [backingUpNow, setBackingUpNow] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function loadBackups() {
+    setLoadingBackups(true)
+    try {
+      setAutoBackups(await api.get<AutoBackup[]>('/backup/list'))
+    } catch {
+      // non-fatal — list just stays empty
+    } finally {
+      setLoadingBackups(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBackups()
+  }, [])
+
+  async function handleBackupNow() {
+    setBackingUpNow(true)
+    try {
+      const res = await api.get<{ ok: boolean; reason?: string }>('/backup/cron')
+      if (res.ok) {
+        toast.success('Backup saved to cloud storage')
+        await loadBackups()
+      } else {
+        toast.message(res.reason || 'Automatic backups are only available in production')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Backup failed')
+    } finally {
+      setBackingUpNow(false)
+    }
+  }
 
   async function handleBackup() {
     setBackingUp(true)
@@ -139,6 +191,61 @@ export function SettingsPage() {
               </>
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Automatic backups</CardTitle>
+          <CardDescription>
+            A complete backup is saved to secure cloud storage automatically every day. The 30
+            most recent are kept and available to download here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button variant="outline" onClick={handleBackupNow} disabled={backingUpNow}>
+            {backingUpNow ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Backing up...
+              </>
+            ) : (
+              <>
+                <Cloud className="mr-2 h-4 w-4" />
+                Back up now
+              </>
+            )}
+          </Button>
+
+          {loadingBackups ? (
+            <p className="text-sm text-muted-foreground">Loading backups...</p>
+          ) : autoBackups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No automatic backups yet. They appear here once the app is deployed and the daily
+              backup has run (or after you use “Back up now”).
+            </p>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {autoBackups.map((b) => (
+                <li
+                  key={b.name}
+                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{formatBackupDate(b.uploadedAt)}</p>
+                    <p className="text-xs text-muted-foreground">{formatBytes(b.size)}</p>
+                  </div>
+                  <a
+                    href={b.url}
+                    className="shrink-0 text-primary hover:underline"
+                    download
+                  >
+                    Download
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

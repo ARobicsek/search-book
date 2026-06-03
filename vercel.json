@@ -18,5 +18,8 @@
       "memory": 1024,
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/backup/cron", "schedule": "0 8 * * *" }
+  ]
 }

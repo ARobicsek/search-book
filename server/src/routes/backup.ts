@@ -1,9 +1,89 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import prisma from '../db';
 
 const router = Router();
+
+// Number of automatic backups to retain in Vercel Blob.
+const BACKUP_RETENTION = 30;
+
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+// Prisma/libsql may return BigInt for integers — coerce for JSON.
+function bigintReplacer(_key: string, value: unknown): unknown {
+  return typeof value === 'bigint' ? Number(value) : value;
+}
+
+// Build the full 23-table export object. Shared by /export and /cron.
+async function buildExport() {
+  const [
+    contacts, companies, employmentHistory, tags, contactTags, companyTags,
+    conversations, conversationContacts, conversationCompanies,
+    actions, actionContacts, actionCompanies,
+    ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
+    contactStatusHistory, companyStatusHistory, companyActivities,
+    companyPrepNotes, conversationParticipants,
+  ] = await Promise.all([
+    prisma.contact.findMany(),
+    prisma.company.findMany(),
+    prisma.employmentHistory.findMany(),
+    prisma.tag.findMany(),
+    prisma.contactTag.findMany(),
+    prisma.companyTag.findMany(),
+    prisma.conversation.findMany(),
+    prisma.conversationContact.findMany(),
+    prisma.conversationCompany.findMany(),
+    prisma.action.findMany(),
+    prisma.actionContact.findMany(),
+    prisma.actionCompany.findMany(),
+    prisma.idea.findMany(),
+    prisma.ideaContact.findMany(),
+    prisma.ideaCompany.findMany(),
+    prisma.link.findMany(),
+    prisma.prepNote.findMany(),
+    prisma.relationship.findMany(),
+    prisma.contactStatusHistory.findMany(),
+    prisma.companyStatusHistory.findMany(),
+    prisma.companyActivity.findMany(),
+    prisma.companyPrepNote.findMany(),
+    prisma.conversationParticipant.findMany(),
+  ]);
+
+  return {
+    _meta: { exportedAt: new Date().toISOString(), version: 2 },
+    Contact: contacts,
+    Company: companies,
+    EmploymentHistory: employmentHistory,
+    Tag: tags,
+    ContactTag: contactTags,
+    CompanyTag: companyTags,
+    Conversation: conversations,
+    ConversationContact: conversationContacts,
+    ConversationCompany: conversationCompanies,
+    Action: actions,
+    ActionContact: actionContacts,
+    ActionCompany: actionCompanies,
+    Idea: ideas,
+    IdeaContact: ideaContacts,
+    IdeaCompany: ideaCompanies,
+    Link: links,
+    PrepNote: prepNotes,
+    Relationship: relationships,
+    // Task 3: previously-missing tables (real user content + history)
+    ContactStatusHistory: contactStatusHistory,
+    CompanyStatusHistory: companyStatusHistory,
+    CompanyActivity: companyActivities,
+    CompanyPrepNote: companyPrepNotes,
+    ConversationParticipant: conversationParticipants,
+  };
+}
 
 // GET /api/backup/credentials — return Turso credentials for browser-direct backup/restore.
 // SECURITY: this returns the live Turso URL + auth token, so it MUST stay behind the
@@ -25,74 +105,84 @@ router.get('/credentials', (_req: Request, res: Response) => {
 // GET /api/backup/export — returns all data as JSON using Prisma findMany (proven with Turso)
 router.get('/export', async (_req: Request, res: Response) => {
   try {
-    const [
-      contacts, companies, employmentHistory, tags, contactTags, companyTags,
-      conversations, conversationContacts, conversationCompanies,
-      actions, actionContacts, actionCompanies,
-      ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
-      contactStatusHistory, companyStatusHistory, companyActivities,
-      companyPrepNotes, conversationParticipants,
-    ] = await Promise.all([
-      prisma.contact.findMany(),
-      prisma.company.findMany(),
-      prisma.employmentHistory.findMany(),
-      prisma.tag.findMany(),
-      prisma.contactTag.findMany(),
-      prisma.companyTag.findMany(),
-      prisma.conversation.findMany(),
-      prisma.conversationContact.findMany(),
-      prisma.conversationCompany.findMany(),
-      prisma.action.findMany(),
-      prisma.actionContact.findMany(),
-      prisma.actionCompany.findMany(),
-      prisma.idea.findMany(),
-      prisma.ideaContact.findMany(),
-      prisma.ideaCompany.findMany(),
-      prisma.link.findMany(),
-      prisma.prepNote.findMany(),
-      prisma.relationship.findMany(),
-      prisma.contactStatusHistory.findMany(),
-      prisma.companyStatusHistory.findMany(),
-      prisma.companyActivity.findMany(),
-      prisma.companyPrepNote.findMany(),
-      prisma.conversationParticipant.findMany(),
-    ]);
-
-    const data = {
-      _meta: { exportedAt: new Date().toISOString(), version: 2 },
-      Contact: contacts,
-      Company: companies,
-      EmploymentHistory: employmentHistory,
-      Tag: tags,
-      ContactTag: contactTags,
-      CompanyTag: companyTags,
-      Conversation: conversations,
-      ConversationContact: conversationContacts,
-      ConversationCompany: conversationCompanies,
-      Action: actions,
-      ActionContact: actionContacts,
-      ActionCompany: actionCompanies,
-      Idea: ideas,
-      IdeaContact: ideaContacts,
-      IdeaCompany: ideaCompanies,
-      Link: links,
-      PrepNote: prepNotes,
-      Relationship: relationships,
-      // Task 3: previously-missing tables (real user content + history)
-      ContactStatusHistory: contactStatusHistory,
-      CompanyStatusHistory: companyStatusHistory,
-      CompanyActivity: companyActivities,
-      CompanyPrepNote: companyPrepNotes,
-      ConversationParticipant: conversationParticipants,
-    };
-
-    // Handle BigInt serialization (Prisma/libsql may return BigInt for integers)
-    const json = JSON.stringify(data, (_, v) => typeof v === 'bigint' ? Number(v) : v, 2);
+    const data = await buildExport();
+    const json = JSON.stringify(data, bigintReplacer, 2);
     res.setHeader('Content-Type', 'application/json');
     res.send(json);
   } catch (error) {
     console.error('Backup export error:', error);
     res.status(500).json({ error: 'Failed to export data' });
+  }
+});
+
+// GET /api/backup/cron — automated daily backup to Vercel Blob.
+// EXEMPT from the global password gate (server/src/app.ts), so it self-authenticates:
+// accepts either Vercel cron's `Authorization: Bearer ${CRON_SECRET}` OR the app password
+// header (for the "Back up now" button). Writes the full 23-table export to Blob and prunes
+// to the newest BACKUP_RETENTION files.
+router.get('/cron', async (req: Request, res: Response) => {
+  const cronSecret = process.env.CRON_SECRET;
+  const appPassword = process.env.APP_PASSWORD;
+  const authHeader = req.header('authorization') || '';
+  const cronOk = !!cronSecret && timingSafeEqualStr(authHeader, `Bearer ${cronSecret}`);
+  const pwOk = !!appPassword && timingSafeEqualStr(req.header('x-app-password') || '', appPassword);
+  if (!cronOk && !pwOk) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  // Blob is only available where BLOB_READ_WRITE_TOKEN is set (production).
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    res.json({ ok: false, skipped: true, reason: 'Blob storage not configured (local dev)' });
+    return;
+  }
+
+  try {
+    const { put, list, del } = await import('@vercel/blob');
+    const data = await buildExport();
+    const json = JSON.stringify(data, bigintReplacer);
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const name = `backups/searchbook-backup-${stamp}.json`;
+    await put(name, json, { access: 'public', contentType: 'application/json', addRandomSuffix: false });
+
+    // Prune: keep only the newest BACKUP_RETENTION backups.
+    const { blobs } = await list({ prefix: 'backups/' });
+    const sorted = blobs.sort(
+      (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+    );
+    const toDelete = sorted.slice(BACKUP_RETENTION);
+    if (toDelete.length) await del(toDelete.map((b) => b.url));
+
+    res.json({ ok: true, name, tables: 23, pruned: toDelete.length });
+  } catch (error: any) {
+    console.error('Cron backup error:', error?.message || error);
+    res.status(500).json({ error: 'Failed to write backup to Blob' });
+  }
+});
+
+// GET /api/backup/list — list automatic backups in Blob (newest first), for Settings UI.
+// Behind the global password gate. Returns [] in local dev (no Blob).
+router.get('/list', async (_req: Request, res: Response) => {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    res.json([]);
+    return;
+  }
+  try {
+    const { list } = await import('@vercel/blob');
+    const { blobs } = await list({ prefix: 'backups/' });
+    const result = blobs
+      .map((b) => ({
+        name: b.pathname.replace(/^backups\//, ''),
+        url: b.downloadUrl || b.url,
+        size: b.size,
+        uploadedAt: b.uploadedAt,
+      }))
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    res.json(result);
+  } catch (error: any) {
+    console.error('Backup list error:', error?.message || error);
+    res.status(500).json({ error: 'Failed to list backups' });
   }
 });
 

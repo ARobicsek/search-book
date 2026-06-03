@@ -385,71 +385,76 @@ router.post('/import', async (req: Request, res: Response) => {
       return;
     }
 
-    // Delete all data in child-first order (FK safety)
-    // Task 3: leaf children — delete before their parents (Contact/Company/Conversation)
-    await prisma.contactStatusHistory.deleteMany();
-    await prisma.companyStatusHistory.deleteMany();
-    await prisma.companyActivity.deleteMany();
-    await prisma.companyPrepNote.deleteMany();
-    await prisma.conversationParticipant.deleteMany();
-    await prisma.conversationContact.deleteMany();
-    await prisma.conversationCompany.deleteMany();
-    await prisma.contactTag.deleteMany();
-    await prisma.companyTag.deleteMany();
-    await prisma.ideaContact.deleteMany();
-    await prisma.ideaCompany.deleteMany();
-    await prisma.link.deleteMany();
-    await prisma.prepNote.deleteMany();
-    await prisma.relationship.deleteMany();
-    await prisma.actionContact.deleteMany();
-    await prisma.actionCompany.deleteMany();
-    await prisma.action.deleteMany();
-    await prisma.conversation.deleteMany();
-    await prisma.employmentHistory.deleteMany();
-    await prisma.idea.deleteMany();
-    await prisma.tag.deleteMany();
-    // Clear self-references before deleting contacts
-    await prisma.contact.updateMany({ data: { referredById: null } });
-    await prisma.contact.deleteMany();
-    await prisma.company.deleteMany();
+    // Task 7: wrap the entire wipe + reinsert in a transaction so an interrupted or failing
+    // restore rolls back to the original data instead of leaving a half-wiped database.
+    // (This is the local-dev fallback path; the production restore is browser-direct.)
+    await prisma.$transaction(async (tx) => {
+      // Delete all data in child-first order (FK safety)
+      // Task 3: leaf children — delete before their parents (Contact/Company/Conversation)
+      await tx.contactStatusHistory.deleteMany();
+      await tx.companyStatusHistory.deleteMany();
+      await tx.companyActivity.deleteMany();
+      await tx.companyPrepNote.deleteMany();
+      await tx.conversationParticipant.deleteMany();
+      await tx.conversationContact.deleteMany();
+      await tx.conversationCompany.deleteMany();
+      await tx.contactTag.deleteMany();
+      await tx.companyTag.deleteMany();
+      await tx.ideaContact.deleteMany();
+      await tx.ideaCompany.deleteMany();
+      await tx.link.deleteMany();
+      await tx.prepNote.deleteMany();
+      await tx.relationship.deleteMany();
+      await tx.actionContact.deleteMany();
+      await tx.actionCompany.deleteMany();
+      await tx.action.deleteMany();
+      await tx.conversation.deleteMany();
+      await tx.employmentHistory.deleteMany();
+      await tx.idea.deleteMany();
+      await tx.tag.deleteMany();
+      // Clear self-references before deleting contacts
+      await tx.contact.updateMany({ data: { referredById: null } });
+      await tx.contact.deleteMany();
+      await tx.company.deleteMany();
 
-    // Insert in parent-first order (transformRecords handles date/boolean conversion)
-    if (data.Company?.length) await prisma.company.createMany({ data: transformRecords(data.Company) });
-    if (data.Contact?.length) {
-      // Insert contacts without self-references first
-      const contacts = transformRecords(data.Contact).map((c: any) => ({ ...c, referredById: null }));
-      await prisma.contact.createMany({ data: contacts });
-      // Restore self-references via raw SQL so Prisma's @updatedAt does NOT fire —
-      // otherwise every referred contact gets a fresh updatedAt on each restore.
-      // (The browser-direct Turso path already uses raw UPDATE for the same reason.)
-      for (const c of data.Contact) {
-        if (c.referredById) {
-          await prisma.$executeRaw`UPDATE "Contact" SET "referredById" = ${c.referredById as number} WHERE "id" = ${c.id as number}`;
+      // Insert in parent-first order (transformRecords handles date/boolean conversion)
+      if (data.Company?.length) await tx.company.createMany({ data: transformRecords(data.Company) });
+      if (data.Contact?.length) {
+        // Insert contacts without self-references first
+        const contacts = transformRecords(data.Contact).map((c: any) => ({ ...c, referredById: null }));
+        await tx.contact.createMany({ data: contacts });
+        // Restore self-references via raw SQL so Prisma's @updatedAt does NOT fire —
+        // otherwise every referred contact gets a fresh updatedAt on each restore.
+        // (The browser-direct Turso path already uses raw UPDATE for the same reason.)
+        for (const c of data.Contact) {
+          if (c.referredById) {
+            await tx.$executeRaw`UPDATE "Contact" SET "referredById" = ${c.referredById as number} WHERE "id" = ${c.id as number}`;
+          }
         }
       }
-    }
-    if (data.Tag?.length) await prisma.tag.createMany({ data: transformRecords(data.Tag) });
-    if (data.Idea?.length) await prisma.idea.createMany({ data: transformRecords(data.Idea) });
-    if (data.EmploymentHistory?.length) await prisma.employmentHistory.createMany({ data: transformRecords(data.EmploymentHistory) });
-    if (data.Conversation?.length) await prisma.conversation.createMany({ data: transformRecords(data.Conversation) });
-    if (data.Action?.length) await prisma.action.createMany({ data: transformRecords(data.Action) });
-    if (data.ActionContact?.length) await prisma.actionContact.createMany({ data: transformRecords(data.ActionContact) });
-    if (data.ActionCompany?.length) await prisma.actionCompany.createMany({ data: transformRecords(data.ActionCompany) });
-    if (data.ContactTag?.length) await prisma.contactTag.createMany({ data: transformRecords(data.ContactTag) });
-    if (data.CompanyTag?.length) await prisma.companyTag.createMany({ data: transformRecords(data.CompanyTag) });
-    if (data.ConversationContact?.length) await prisma.conversationContact.createMany({ data: transformRecords(data.ConversationContact) });
-    if (data.ConversationCompany?.length) await prisma.conversationCompany.createMany({ data: transformRecords(data.ConversationCompany) });
-    if (data.IdeaContact?.length) await prisma.ideaContact.createMany({ data: transformRecords(data.IdeaContact) });
-    if (data.IdeaCompany?.length) await prisma.ideaCompany.createMany({ data: transformRecords(data.IdeaCompany) });
-    if (data.Link?.length) await prisma.link.createMany({ data: transformRecords(data.Link) });
-    if (data.PrepNote?.length) await prisma.prepNote.createMany({ data: transformRecords(data.PrepNote) });
-    if (data.Relationship?.length) await prisma.relationship.createMany({ data: transformRecords(data.Relationship) });
-    // Task 3: previously-missing tables (parents already inserted above)
-    if (data.ContactStatusHistory?.length) await prisma.contactStatusHistory.createMany({ data: transformRecords(data.ContactStatusHistory) });
-    if (data.CompanyStatusHistory?.length) await prisma.companyStatusHistory.createMany({ data: transformRecords(data.CompanyStatusHistory) });
-    if (data.CompanyActivity?.length) await prisma.companyActivity.createMany({ data: transformRecords(data.CompanyActivity) });
-    if (data.CompanyPrepNote?.length) await prisma.companyPrepNote.createMany({ data: transformRecords(data.CompanyPrepNote) });
-    if (data.ConversationParticipant?.length) await prisma.conversationParticipant.createMany({ data: transformRecords(data.ConversationParticipant) });
+      if (data.Tag?.length) await tx.tag.createMany({ data: transformRecords(data.Tag) });
+      if (data.Idea?.length) await tx.idea.createMany({ data: transformRecords(data.Idea) });
+      if (data.EmploymentHistory?.length) await tx.employmentHistory.createMany({ data: transformRecords(data.EmploymentHistory) });
+      if (data.Conversation?.length) await tx.conversation.createMany({ data: transformRecords(data.Conversation) });
+      if (data.Action?.length) await tx.action.createMany({ data: transformRecords(data.Action) });
+      if (data.ActionContact?.length) await tx.actionContact.createMany({ data: transformRecords(data.ActionContact) });
+      if (data.ActionCompany?.length) await tx.actionCompany.createMany({ data: transformRecords(data.ActionCompany) });
+      if (data.ContactTag?.length) await tx.contactTag.createMany({ data: transformRecords(data.ContactTag) });
+      if (data.CompanyTag?.length) await tx.companyTag.createMany({ data: transformRecords(data.CompanyTag) });
+      if (data.ConversationContact?.length) await tx.conversationContact.createMany({ data: transformRecords(data.ConversationContact) });
+      if (data.ConversationCompany?.length) await tx.conversationCompany.createMany({ data: transformRecords(data.ConversationCompany) });
+      if (data.IdeaContact?.length) await tx.ideaContact.createMany({ data: transformRecords(data.IdeaContact) });
+      if (data.IdeaCompany?.length) await tx.ideaCompany.createMany({ data: transformRecords(data.IdeaCompany) });
+      if (data.Link?.length) await tx.link.createMany({ data: transformRecords(data.Link) });
+      if (data.PrepNote?.length) await tx.prepNote.createMany({ data: transformRecords(data.PrepNote) });
+      if (data.Relationship?.length) await tx.relationship.createMany({ data: transformRecords(data.Relationship) });
+      // Task 3: previously-missing tables (parents already inserted above)
+      if (data.ContactStatusHistory?.length) await tx.contactStatusHistory.createMany({ data: transformRecords(data.ContactStatusHistory) });
+      if (data.CompanyStatusHistory?.length) await tx.companyStatusHistory.createMany({ data: transformRecords(data.CompanyStatusHistory) });
+      if (data.CompanyActivity?.length) await tx.companyActivity.createMany({ data: transformRecords(data.CompanyActivity) });
+      if (data.CompanyPrepNote?.length) await tx.companyPrepNote.createMany({ data: transformRecords(data.CompanyPrepNote) });
+      if (data.ConversationParticipant?.length) await tx.conversationParticipant.createMany({ data: transformRecords(data.ConversationParticipant) });
+    });
 
     res.json({ message: 'Import completed successfully' });
   } catch (error: any) {

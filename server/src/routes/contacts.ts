@@ -268,18 +268,20 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Name is required' });
       return;
     }
-    const contact = await prisma.contact.create({
-      data: { name: (name as string).trim(), ...rest } as any,
-      include: { company: { select: { id: true, name: true } } },
-    });
-
-    // Record initial status in history
-    await prisma.contactStatusHistory.create({
-      data: {
-        contactId: contact.id,
-        oldStatus: null,
-        newStatus: contact.status,
-      }
+    // Task 12: create the contact and its initial status-history row atomically.
+    const contact = await prisma.$transaction(async (tx) => {
+      const created = await tx.contact.create({
+        data: { name: (name as string).trim(), ...rest } as any,
+        include: { company: { select: { id: true, name: true } } },
+      });
+      await tx.contactStatusHistory.create({
+        data: {
+          contactId: created.id,
+          oldStatus: null,
+          newStatus: created.status,
+        },
+      });
+      return created;
     });
 
     res.status(201).json(contact);
@@ -306,22 +308,24 @@ router.put('/:id', async (req: Request, res: Response) => {
       }
       data.name = data.name.trim();
     }
-    const contact = await prisma.contact.update({
-      where: { id },
-      data,
-      include: { company: { select: { id: true, name: true } } },
-    });
-
-    // Record status change if it changed
-    if (data.status && data.status !== existing.status) {
-      await prisma.contactStatusHistory.create({
-        data: {
-          contactId: contact.id,
-          oldStatus: existing.status,
-          newStatus: contact.status,
-        }
+    // Task 12: update the contact and record any status change atomically.
+    const contact = await prisma.$transaction(async (tx) => {
+      const updated = await tx.contact.update({
+        where: { id },
+        data,
+        include: { company: { select: { id: true, name: true } } },
       });
-    }
+      if (data.status && data.status !== existing.status) {
+        await tx.contactStatusHistory.create({
+          data: {
+            contactId: updated.id,
+            oldStatus: existing.status,
+            newStatus: updated.status,
+          },
+        });
+      }
+      return updated;
+    });
 
     res.json(contact);
   } catch (error) {
@@ -364,9 +368,11 @@ router.post('/batch-action', async (req: Request, res: Response) => {
       return;
     }
 
-    const actions = await Promise.all(
-      contactIds.map((contactId: number) =>
-        prisma.action.create({
+    // Task 12: create one action per contact and clear their flags atomically.
+    const created = await prisma.$transaction(async (tx) => {
+      let count = 0;
+      for (const contactId of contactIds as number[]) {
+        await tx.action.create({
           data: {
             title: actionData.title,
             type: actionData.type || 'OTHER',
@@ -374,17 +380,18 @@ router.post('/batch-action', async (req: Request, res: Response) => {
             dueDate: actionData.dueDate || null,
             contactId,
           },
-        })
-      )
-    );
-
-    // Clear flags on the contacts
-    await prisma.contact.updateMany({
-      where: { id: { in: contactIds } },
-      data: { flagged: false },
+        });
+        count++;
+      }
+      // Clear flags on the contacts
+      await tx.contact.updateMany({
+        where: { id: { in: contactIds } },
+        data: { flagged: false },
+      });
+      return count;
     });
 
-    res.status(201).json({ created: actions.length });
+    res.status(201).json({ created });
   } catch (error) {
     console.error('Error creating batch actions:', error);
     res.status(500).json({ error: 'Failed to create batch actions' });

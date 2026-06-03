@@ -91,24 +91,23 @@ router.post('/import-dossier', async (req: Request, res: Response) => {
     });
     let nextOrdering = (maxOrdering._max.ordering ?? -1) + 1;
 
-    // Create new prep notes
-    const creates = companyNotes.map(cn => {
-      const ord = nextOrdering++;
-      return prisma.prepNote.create({
-        data: {
-          content: cn.content,
-          url: cn.url,
-          urlTitle: cn.urlTitle,
-          date: cn.date,
-          ordering: ord,
-          contactId,
-        }
-      });
+    // Task 12: create all imported notes inside a callback transaction (all-or-nothing).
+    await prisma.$transaction(async (tx) => {
+      for (const cn of companyNotes) {
+        await tx.prepNote.create({
+          data: {
+            content: cn.content,
+            url: cn.url,
+            urlTitle: cn.urlTitle,
+            date: cn.date,
+            ordering: nextOrdering++,
+            contactId,
+          },
+        });
+      }
     });
 
-    await prisma.$transaction(creates);
-
-    res.json({ count: creates.length });
+    res.json({ count: companyNotes.length });
   } catch (error) {
     console.error('Error importing dossier:', error);
     res.status(500).json({ error: 'Failed to import dossier' });
@@ -124,15 +123,15 @@ router.post('/reorder', async (req: Request, res: Response) => {
       return;
     }
 
-    // Update ordering for each note based on array position
-    await Promise.all(
-      noteIds.map((id: number, index: number) =>
-        prisma.prepNote.update({
-          where: { id },
+    // Task 12: reorder atomically so a partial failure can't scramble the ordering.
+    await prisma.$transaction(async (tx) => {
+      for (let index = 0; index < noteIds.length; index++) {
+        await tx.prepNote.update({
+          where: { id: noteIds[index] as number },
           data: { ordering: index },
-        })
-      )
-    );
+        });
+      }
+    });
 
     res.json({ success: true });
   } catch (error) {

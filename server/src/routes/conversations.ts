@@ -80,93 +80,100 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const conversation = await prisma.conversation.create({
-      data: {
-        contactId,
-        date,
-        datePrecision: datePrecision || 'DAY',
-        type: type || 'OTHER',
-        summary: summary || null,
-        notes: notes || null,
-        nextSteps: nextSteps || null,
-        photoFile: photoFile || null,
-        contactsDiscussed: contactsDiscussed?.length
-          ? {
-            create: (contactsDiscussed as number[]).map((cId) => ({
-              contactId: cId,
-            })),
-          }
-          : undefined,
-        participants: participantIds?.length
-          ? {
-            create: (participantIds as number[]).map((cId) => ({
-              contactId: cId,
-            })),
-          }
-          : undefined,
-        companiesDiscussed: companiesDiscussed?.length
-          ? {
-            create: (companiesDiscussed as number[]).map((cId) => ({
-              companyId: cId,
-            })),
-          }
-          : undefined,
-      },
-      include: conversationIncludes,
-    });
-
-    // Create multiple follow-up actions
-    const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];
-    // Legacy support: single createAction
-    if (createAction?.title?.trim()) {
-      actionsToCreate.push(createAction);
-    }
-
-    for (const action of actionsToCreate) {
-      await prisma.action.create({
+    // Task 12: create the conversation and all its follow-ups (actions, link-ups, status
+    // flip, links, contact bump) in one transaction so a partial failure can't leave a
+    // logged call without its follow-up tasks.
+    const conversation = await prisma.$transaction(async (tx) => {
+      const created = await tx.conversation.create({
         data: {
-          title: action.title.trim(),
-          type: action.type || 'FOLLOW_UP',
-          dueDate: action.dueDate || null,
-          priority: action.priority || 'MEDIUM',
           contactId,
-          conversationId: conversation.id,
+          date,
+          datePrecision: datePrecision || 'DAY',
+          type: type || 'OTHER',
+          summary: summary || null,
+          notes: notes || null,
+          nextSteps: nextSteps || null,
+          photoFile: photoFile || null,
+          contactsDiscussed: contactsDiscussed?.length
+            ? {
+              create: (contactsDiscussed as number[]).map((cId) => ({
+                contactId: cId,
+              })),
+            }
+            : undefined,
+          participants: participantIds?.length
+            ? {
+              create: (participantIds as number[]).map((cId) => ({
+                contactId: cId,
+              })),
+            }
+            : undefined,
+          companiesDiscussed: companiesDiscussed?.length
+            ? {
+              create: (companiesDiscussed as number[]).map((cId) => ({
+                companyId: cId,
+              })),
+            }
+            : undefined,
         },
+        include: conversationIncludes,
       });
-    }
 
-    if (linkActionIds?.length) {
-      await prisma.action.updateMany({
-        where: { id: { in: linkActionIds as number[] } },
-        data: { conversationId: conversation.id },
-      });
-    }
+      // Create multiple follow-up actions
+      const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];
+      // Legacy support: single createAction
+      if (createAction?.title?.trim()) {
+        actionsToCreate.push(createAction);
+      }
 
-    // Auto-update contact status to CONNECTED if currently NEW
-    const relatedContact = await prisma.contact.findUnique({ where: { id: contactId }, select: { status: true } });
-    if (relatedContact && relatedContact.status === 'NEW') {
-      await prisma.contact.update({ where: { id: contactId }, data: { status: 'CONNECTED' } });
-    }
+      for (const action of actionsToCreate) {
+        await tx.action.create({
+          data: {
+            title: action.title.trim(),
+            type: action.type || 'FOLLOW_UP',
+            dueDate: action.dueDate || null,
+            priority: action.priority || 'MEDIUM',
+            contactId,
+            conversationId: created.id,
+          },
+        });
+      }
 
-    // Save links if provided
-    if (links?.length) {
-      for (const link of links as { url: string; title: string }[]) {
-        if (link.url?.trim()) {
-          await prisma.link.create({
-            data: {
-              url: link.url.trim(),
-              title: link.title?.trim() || link.url.trim(),
-              contactId,
-            },
-          });
+      if (linkActionIds?.length) {
+        await tx.action.updateMany({
+          where: { id: { in: linkActionIds as number[] } },
+          data: { conversationId: created.id },
+        });
+      }
+
+      // Auto-update contact status to CONNECTED if currently NEW
+      const relatedContact = await tx.contact.findUnique({ where: { id: contactId }, select: { status: true } });
+      if (relatedContact && relatedContact.status === 'NEW') {
+        await tx.contact.update({ where: { id: contactId }, data: { status: 'CONNECTED' } });
+      }
+
+      // Save links if provided
+      if (links?.length) {
+        for (const link of links as { url: string; title: string }[]) {
+          if (link.url?.trim()) {
+            await tx.link.create({
+              data: {
+                url: link.url.trim(),
+                title: link.title?.trim() || link.url.trim(),
+                contactId,
+              },
+            });
+          }
         }
       }
-    }
 
-    // Update Contact.updatedAt to bubble up in "Recent Activity" sort
-    await prisma.contact.update({
-      where: { id: contactId },
-      data: { updatedAt: new Date() },
+      // Update Contact.updatedAt to bubble up in "Recent Activity" sort
+      await tx.contact.update({
+        where: { id: contactId },
+        data: { updatedAt: new Date() },
+      });
+
+      return created;
     });
 
     // Re-fetch to include the actions
@@ -203,7 +210,8 @@ router.put('/:id', async (req: Request, res: Response) => {
       ...data
     } = req.body;
 
-    // Update conversation and replace junction records
+    // Task 12: update conversation, replace junctions, and create follow-ups all in one
+    // transaction so an update can't half-apply (junctions replaced but follow-ups lost).
     await prisma.$transaction(async (tx) => {
       // Delete existing junctions
       await tx.conversationContact.deleteMany({ where: { conversationId: id } });
@@ -238,38 +246,38 @@ router.put('/:id', async (req: Request, res: Response) => {
             : undefined,
         },
       });
-    });
 
-    // Create follow-up actions if provided
-    const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];
-    if (createAction?.title?.trim()) {
-      actionsToCreate.push(createAction);
-    }
+      // Create follow-up actions if provided
+      const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];
+      if (createAction?.title?.trim()) {
+        actionsToCreate.push(createAction);
+      }
 
-    for (const action of actionsToCreate) {
-      await prisma.action.create({
-        data: {
-          title: action.title.trim(),
-          type: action.type || 'FOLLOW_UP',
-          dueDate: action.dueDate || null,
-          priority: action.priority || 'MEDIUM',
-          contactId: existing.contactId,
-          conversationId: id,
-        },
+      for (const action of actionsToCreate) {
+        await tx.action.create({
+          data: {
+            title: action.title.trim(),
+            type: action.type || 'FOLLOW_UP',
+            dueDate: action.dueDate || null,
+            priority: action.priority || 'MEDIUM',
+            contactId: existing.contactId,
+            conversationId: id,
+          },
+        });
+      }
+
+      if (linkActionIds?.length) {
+        await tx.action.updateMany({
+          where: { id: { in: linkActionIds as number[] } },
+          data: { conversationId: id },
+        });
+      }
+
+      // Update Contact.updatedAt
+      await tx.contact.update({
+        where: { id: existing.contactId },
+        data: { updatedAt: new Date() },
       });
-    }
-
-    if (linkActionIds?.length) {
-      await prisma.action.updateMany({
-        where: { id: { in: linkActionIds as number[] } },
-        data: { conversationId: id },
-      });
-    }
-
-    // Update Contact.updatedAt
-    await prisma.contact.update({
-      where: { id: existing.contactId },
-      data: { updatedAt: new Date() },
     });
 
     const result = await prisma.conversation.findUnique({

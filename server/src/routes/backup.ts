@@ -5,7 +5,11 @@ import prisma from '../db';
 
 const router = Router();
 
-// GET /api/backup/credentials — return Turso credentials for browser-direct backup/restore
+// GET /api/backup/credentials — return Turso credentials for browser-direct backup/restore.
+// SECURITY: this returns the live Turso URL + auth token, so it MUST stay behind the
+// shared-password gate (server/src/app.ts). Never add it to the gate's exemption list.
+// Residual risk: the token is exposed to the authenticated browser session during
+// backup/restore — acceptable for this single-user app; documented in the hardening plan.
 router.get('/credentials', (_req: Request, res: Response) => {
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;

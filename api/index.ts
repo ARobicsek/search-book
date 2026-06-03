@@ -15,10 +15,11 @@ try {
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   if (initError) {
+    // Don't leak internals (message/stack) to clients in production.
+    const isProd = process.env.NODE_ENV === 'production';
     return res.status(500).json({
       error: 'Server initialization failed',
-      message: initError.message,
-      stack: initError.stack,
+      ...(isProd ? {} : { message: initError.message, stack: initError.stack }),
     });
   }
 

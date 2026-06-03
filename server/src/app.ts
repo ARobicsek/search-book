@@ -3,7 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
-import prisma, { resetPrisma } from './db';
+import { resetPrisma } from './db';
 import path from 'path';
 import contactsRouter from './routes/contacts';
 import companiesRouter from './routes/companies';
@@ -132,67 +132,6 @@ app.get('/api/health', (_req, res) => {
 // password: correct header → 200, wrong/missing → 401 (returned by the gate).
 app.get('/api/auth/check', (_req, res) => {
   res.json({ ok: true });
-});
-
-// Debug endpoint to test database connection
-app.get('/api/debug', async (_req, res) => {
-  const url = process.env.TURSO_DATABASE_URL || '';
-  const urlPreview = url ? `${url.substring(0, 20)}...${url.substring(url.length - 10)}` : 'not set';
-  try {
-    const count = await prisma.contact.count();
-    res.json({
-      status: 'ok',
-      tursoUrlPreview: urlPreview,
-      tursoUrlLength: url.length,
-      tursoToken: process.env.TURSO_AUTH_TOKEN ? 'set' : 'not set',
-      contactCount: count,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      status: 'error',
-      message: error.message,
-      tursoUrlPreview: urlPreview,
-      tursoUrlLength: url.length,
-      tursoUrlStartsWith: url.substring(0, 10),
-      tursoToken: process.env.TURSO_AUTH_TOKEN ? 'set' : 'not set',
-    });
-  }
-});
-
-// Debug endpoint to diagnose database timing
-app.get('/api/debug/companies', async (_req, res) => {
-  const results: Record<string, any> = {};
-
-  // Test 1: Raw SQL count
-  try {
-    const start1 = Date.now();
-    const rawCount = await prisma.$queryRawUnsafe('SELECT COUNT(*) as cnt FROM Company');
-    results.rawSqlCount = { ms: Date.now() - start1, result: rawCount };
-  } catch (e: any) {
-    results.rawSqlCount = { error: e.message };
-  }
-
-  // Test 2: Prisma count
-  try {
-    const start2 = Date.now();
-    const prismaCount = await prisma.company.count();
-    results.prismaCount = { ms: Date.now() - start2, result: prismaCount };
-  } catch (e: any) {
-    results.prismaCount = { error: e.message };
-  }
-
-  // Test 3: Prisma findMany (just names)
-  try {
-    const start3 = Date.now();
-    const names = await prisma.company.findMany({ select: { id: true, name: true } });
-    results.prismaFindNames = { ms: Date.now() - start3, count: names.length };
-  } catch (e: any) {
-    results.prismaFindNames = { error: e.message };
-  }
-
-  // NOTE: _count include removed — generates correlated subquery that hangs on Turso
-
-  res.json(results);
 });
 
 // Routes

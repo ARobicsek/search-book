@@ -4,15 +4,29 @@ import prisma from '../db';
 const router = Router();
 
 // GET /api/tags — list all tags
+// NOTE: deliberately avoids `include: { _count }` — that generates a correlated
+// subquery that hangs the Prisma-libsql adapter on Turso (see CLAUDE.md). Instead
+// we count via groupBy on the join tables and merge the counts client-side, while
+// preserving the same response shape (`_count: { contacts, companies }`).
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const tags = await prisma.tag.findMany({
-      include: {
-        _count: { select: { contacts: true, companies: true } },
+    const [tags, contactCounts, companyCounts] = await Promise.all([
+      prisma.tag.findMany({ orderBy: { name: 'asc' } }),
+      prisma.contactTag.groupBy({ by: ['tagId'], _count: { _all: true } }),
+      prisma.companyTag.groupBy({ by: ['tagId'], _count: { _all: true } }),
+    ]);
+
+    const contactByTag = new Map(contactCounts.map((c) => [c.tagId, c._count._all]));
+    const companyByTag = new Map(companyCounts.map((c) => [c.tagId, c._count._all]));
+
+    const result = tags.map((tag) => ({
+      ...tag,
+      _count: {
+        contacts: contactByTag.get(tag.id) ?? 0,
+        companies: companyByTag.get(tag.id) ?? 0,
       },
-      orderBy: { name: 'asc' },
-    });
-    res.json(tags);
+    }));
+    res.json(result);
   } catch (error) {
     console.error('Error fetching tags:', error);
     res.status(500).json({ error: 'Failed to fetch tags' });

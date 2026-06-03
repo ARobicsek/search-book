@@ -4,22 +4,43 @@ This file serves as a handoff document for the next AI session. It summarizes wh
 
 ### What Was Just Completed
 
-**Global Search Bug Fix — The main search bar now successfully resolves and returns contacts based on their company relationships.**
+**Backup & Security Hardening phase — closed out with restore verification and photo-file backup.** (See ROADMAP "Phase 7.5".)
 
-1. **Global search was missing connected contacts.** Previously, the `/api/search` endpoint only checked text fields directly on the `Contact` model (like `name`, `title`, or `notes`). If a contact was purely linked to a company via `companyId` or `additionalCompanyIds` without the company name explicitly in their text fields, they were omitted from search results. 
-2. **The Fix:** Updated `server/src/routes/search.ts` to make the contact search "company-aware." The API now searches for matching Companies first. If companies match the search term, it grabs their IDs and includes them in the Contact search query, dynamically checking if a contact is linked via `additionalCompanyIds`, `connectedCompanyIds`, `companyId`, or even past roles in `EmploymentHistory`. 
-3. **Housekeeping:** Added `dev-dist` to `client/.gitignore` and untracked `client/dev-dist/sw.js` to stop it from cluttering up the git status on every dev build.
+This phase (across several sessions) added: a shared-password gate over all `/api` routes, removal of debug/credential leaks, an automated **daily backup to Vercel Blob** (`/api/backup/cron`, 08:00 UTC, newest 30 retained), a DB-connectivity `/health` check, and a fix to include all 23 tables in export/import. The final session focused on **trusting restore** and **backing up photo files**:
 
-### What's Next
+1. **Verified restore works (DB).** Ran an isolated, production-safe round-trip against a throwaway local SQLite DB — seeded all 23 tables (including the FK-tricky cases: self-referential `Contact.referredById`, every junction table, status-history tables), then export → import → export. Result: **byte-identical across all 23 tables**, and restore is **idempotent** (safe to run twice).
+2. **Fixed an `updatedAt` bump on restore** (`ec777d4`). The server-side `/backup/import` relinked self-references via `prisma.contact.update()`, which tripped Prisma's `@updatedAt`. Switched to raw SQL, matching the browser-direct Turso path. This is what made the round-trip byte-identical.
+3. **Photo files now backed up** (`3875990`). The JSON backup only ever stored photo *references* (`photoUrl`/`photoFile`). The manual **"Create Backup"** button now *also* fetches the actual image **bytes** from those URLs (Vercel Blob in prod, `/photos/` locally) and downloads a single `searchbook-photos.zip` with a `manifest.json`. New module: [client/src/lib/photo-backup.ts](client/src/lib/photo-backup.ts), wired into [client/src/pages/settings.tsx](client/src/pages/settings.tsx). Uses `fflate` (store-only). **Intentionally NOT in the daily cron** — keeps Turso and cloud backups small; the user stores the ZIP locally and overwrites it each time. Unreachable/CORS-blocked URLs are skipped and reported, never fatal. Verified bytes round-trip intact via an HTTP-served test.
 
-Carry-over items that are still pending from prior sessions:
+### What's Next — Phase 8: Document Search
 
-1. **Replace `resetPrisma()` hack** in [server/src/app.ts](server/src/app.ts) with a long-lived PrismaClient pattern. Currently we create a fresh Prisma client + adapter per request in production to avoid stale HTTP connections on Turso. Works but is wasteful — worth revisiting when we have a stable connection reuse pattern.
-2. **Expand `useAutoSave` hook** coverage to Prep Notes, Actions, and the Company create form. Currently only the contact edit form and a few other places use it.
-3. **Company database polish**: scan for near-duplicate companies that should be merged (e.g. LinkedIn-variant suffix handling). The dedupe engine from session b887850 helps, but there may still be stragglers.
-4. **Stretch (LinkedIn plan §2.2 / §7)**: consider adding `isBoardRole: Boolean @default(false)` to `EmploymentHistory` schema if the board-vs-employee distinction becomes painful when browsing past roles. Not urgent — the current roll-up reads fine.
-5. **Consistency tweak (optional)**: the edit form doesn't display existing `EmploymentHistory` rows either. If the user wants symmetry with the new-contact "Past Roles" section, we could load and render them there too. Not a bug — just an asymmetry.
+The next planned phase is **Phase 8: Document Search** (see ROADMAP.md). Confirm scope with the user at session start, but the goal is full-text search across linked Google Drive documents:
+- Google Drive API integration to read document contents
+- Index linked documents for full-text search
+- Search results show document snippets with context
+- Search across all linked documents from contacts, companies, and actions
+- Results link back to the original document in Google Drive
 
-### Open Bugs
+### Deferred — DESKTOP-ONLY verification (a later phase, when the user is at their desktop)
 
-None currently known. Both the LinkedIn import issues and the global search bugs have been resolved.
+These two were explicitly parked until the user is at their desktop. **Do not attempt remotely** — they need a real Turso DB / browser environment:
+
+1. **End-to-end photo-ZIP test on the deployed app.** Run "Create Backup" against production and confirm the photos actually download (watch the toast: any "skipped" count points to a **CORS issue** fetching Vercel Blob URLs from the browser — the fallback would be to route the fetch through a small server proxy). This is the one unverified part of the photo feature.
+2. **Restore into a scratch Turso database.** The restore round-trip was proven against local SQLite, which exercises the same format/ordering logic but **not** the production browser-direct Turso transport (`importViaTurso`). To fully close this: create a throwaway DB in the Turso web dashboard, point a test/import at it (or hand the creds to the agent to run a libsql script), and confirm a full restore. This makes restore trustworthy end-to-end including the Turso path.
+
+### Other Carry-over Items (pending from prior sessions, lower priority)
+
+1. **Replace `resetPrisma()` hack** in [server/src/app.ts](server/src/app.ts) with a long-lived PrismaClient pattern. Fresh client+adapter per request in production avoids stale Turso HTTP connections — works but wasteful.
+2. **Expand `useAutoSave`** coverage to Prep Notes, Actions, and the Company create form.
+3. **Company database polish**: scan for near-duplicate companies that should be merged (LinkedIn-variant suffix handling).
+4. **Stretch (LinkedIn plan §2.2 / §7)**: consider `isBoardRole: Boolean @default(false)` on `EmploymentHistory` if the board-vs-employee distinction gets painful.
+5. **Consistency tweak (optional)**: the edit form doesn't render existing `EmploymentHistory` rows (the new-contact "Past Roles" section does).
+
+### Open Bugs / Known Caveats
+
+- **No confirmed bugs.** One caveat: the photo-ZIP feature depends on the browser being able to `fetch()` Vercel Blob URLs — unverified against the live store (see Deferred #1).
+- **Photo binaries are only in the manual ZIP**, not the daily cloud backup. DB restore re-links photo URLs, and the Blob `photos/` objects persist (retention only prunes `backups/`), but there is no automated offsite copy of the image bytes. By design.
+
+### Working branch
+
+`claude/sweet-planck-plokJ` — both final-session commits (`ec777d4`, `3875990`) are pushed there. Not yet merged to `main`.

@@ -20,6 +20,9 @@
 | Table library | TanStack Table (with shadcn DataTable recipe) | 2026-02-02 |
 | Dashboard | Daily view (home page), weekly stats in Analytics | 2026-02-03 |
 | Deployment | Vercel + Turso cloud DB for iPhone PWA access | 2026-02-05 |
+| API auth | Single shared-password gate over all `/api` routes (single-user app) | 2026-06-03 |
+| Cloud backup | Automated daily DB export to Vercel Blob (`/api/backup/cron`, 08:00 UTC, keep newest 30) | 2026-06-03 |
+| Photo backup | Actual photo *files* bundled into the **manual** backup ZIP only (not the daily cron, to keep Turso/cloud backups small) | 2026-06-03 |
 
 ## User Feedback Summary
 
@@ -52,3 +55,7 @@ For full history, see SESSION-HISTORY.md.
 | 2026-03-24 | **Query optimizations** — lighter action includes, analytics SQL aggregations, removed `_count` debug endpoint. Server timeout 25s→12s. Client retry on 500. |
 | 2026-03-24 | **Turso reliability FIXED.** Root cause: `@libsql/client@0.5.6` HTTP transport hangs on large responses (170+ rows × all columns). Fix: (1) per-request fresh PrismaClient via `resetPrisma()` middleware, (2) explicit `select` on all list endpoints excluding large text fields. All endpoints now <300ms. |
 | 2026-03-24 | **Prisma 6→7 upgrade.** `@libsql/client` 0.5.6→0.17.2. Adapter-based architecture (PrismaLibSql for Turso, PrismaBetterSqlite3 for local dev). Removed conditional select workaround in actions route. 171 actions now returned with full includes in production — no more response size limits. |
+| 2026-06-03 | **Security hardening.** Shared-password gate over all `/api` routes (`x-app-password`), removed debug/credential leaks, hardened error output. `/health` now verifies DB connectivity. |
+| 2026-06-03 | **Automated cloud backup.** Daily `/api/backup/cron` → Vercel Blob (`backups/` prefix, newest 30 kept), CRON_SECRET-gated. Settings UI lists/downloads them. Fixed export/import to cover all 23 tables (5 history/junction tables were missing). |
+| 2026-06-03 | **Restore verified + `updatedAt` fix.** Isolated round-trip (seed all 23 tables → export → import → export) is now byte-identical. Fixed `/backup/import` to relink `Contact.referredById` via raw SQL so it no longer trips `@updatedAt`. NOTE: proven against local SQLite, not yet the production Turso transport (deferred to a desktop session). |
+| 2026-06-03 | **Photo files in manual backup.** New `client/src/lib/photo-backup.ts` fetches actual image bytes and downloads `searchbook-photos.zip` (+ manifest) from "Create Backup". Uses `fflate`. Not in the daily cron. CORS against live Blob unverified (desktop test deferred). |

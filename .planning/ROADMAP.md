@@ -156,6 +156,28 @@
 
 ---
 
+## Phase 7.5: Security & Backup Hardening (Ops)
+
+### Goals
+- Close the "anyone with the URL" hole on the public deployment
+- Make data durable: automated cloud backups + a trustworthy restore
+- Back up the actual photo files, not just their references
+
+### Acceptance Criteria
+- [x] Shared-password gate over all `/api` routes (`x-app-password`), fail-closed in prod
+- [x] Remove debug/credential leaks; harden error output
+- [x] `/health` endpoint verifies DB connectivity (for uptime monitoring)
+- [x] Automated daily backup to Vercel Blob (`/api/backup/cron`, 08:00 UTC, retain newest 30, CRON_SECRET-gated)
+- [x] Settings UI lists and downloads automatic backups
+- [x] Export/import covers all 23 tables (was missing 5 history/junction tables)
+- [x] Restore verified via isolated round-trip — byte-identical across all 23 tables (local SQLite)
+- [x] Fix `updatedAt` bump on restore (raw-SQL self-reference relink)
+- [x] Manual backup bundles actual photo files into `searchbook-photos.zip` (+ manifest)
+- [ ] **(Deferred — desktop)** End-to-end photo-ZIP test on the deployed app (confirm no CORS skips fetching Blob URLs)
+- [ ] **(Deferred — desktop)** Restore into a scratch Turso DB to prove the production browser-direct transport (`importViaTurso`), not just local SQLite
+
+---
+
 ## Phase 8: Document Search (Planned)
 
 ### Goals

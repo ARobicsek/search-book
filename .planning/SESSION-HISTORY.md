@@ -33,3 +33,6 @@ For active project context, see CLAUDE.md at the project root.
 | 2026-03-04 | Log Conversation fixes — default date stale closure, modal width expansion, resizable panels (35/65 split). |
 | 2026-03-05 | Timeout investigation — attempted unified endpoint, broke useAutoSave, reverted. |
 | 2026-03-05 | Timeout Root Cause and Fix. Prisma _count subquery caused cascading Vercel timeouts. Stripped _count, added /companies/names, staggered loading, fetchWithRetry, non-blocking warmup. |
+| 2026-03-24 | Turso reliability + Prisma 6→7 upgrade, query optimizations, resilience layers (see STATE.md recent log for detail). |
+| 2026-06-03 | LinkedIn import reliability (full career history, paste-noise stripping), global search resolves contacts via company relations. |
+| 2026-06-03 | Phase 7.5 Security & Backup Hardening: shared-password gate, error/credential leak removal, DB-aware /health, automated daily Vercel Blob backup (retain 30), all-23-table export/import, restore verified byte-identical + updatedAt fix, photo files bundled into manual backup ZIP. Desktop-only verification (live photo-ZIP CORS, scratch-Turso restore) deferred. |

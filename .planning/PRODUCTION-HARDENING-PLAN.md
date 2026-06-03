@@ -1,7 +1,7 @@
 # SearchBook — Production Hardening Plan
 
 **Created:** 2026-06-02
-**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. **Phase 1 IN PROGRESS (2026-06-03).** Task 19 relocated from Phase 2 into Phase 1. **Done & pushed to main:** Tasks 19, 14, 11, 7, 12, 13 (all typecheck-clean). **Remaining (auto-save cluster — needs local + mobile 390px testing before prod):** Tasks 8, 9, 10. See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
+**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. **Phase 1 IN PROGRESS (2026-06-03).** Task 19 relocated from Phase 2 into Phase 1. **Done & pushed to main:** Tasks 19, 14, 11, 7, 12, 13, 9, 10 (all typecheck-clean). **On branch `claude/festive-brown-RIaoq`, awaiting Vercel-preview test + merge:** Task 8 (optimistic concurrency). See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
 **Why this exists:** The owner was hired as Chief Medical Officer at NCQA and will rely on SearchBook for heavy professional networking. The app must move from "personal tool" to "near-100% uptime, never lose data." A full review (4 subagents: security, data-integrity, backup/DR, frontend resilience) produced the findings below. The app works functionally — every item here is about operational armor, not features.
 
 ---
@@ -308,6 +308,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `feat(data): optimistic concurrency on contact/company/action saves`
 
+**STATUS: 🟡 IMPLEMENTED on branch `claude/festive-brown-RIaoq` (commit e29f580), NOT yet merged to main.** Server: atomic compare-and-set (updateMany guard for contacts/companies; row-claim for actions) → 409 on stale. Client: auto-save sends `_expectedUpdatedAt`, advances it after each save, and on 409 warns + reloads (the unsaved edit survives as a Task 10 draft). Backward-compatible (guard only engages when the field is present). **Verify on the branch's Vercel preview before merge:** (1) updatedAt ISO round-trip matches exactly through the Turso/libsql adapter; (2) repeated auto-saves don't self-409; (3) a real two-tab/two-device edit yields 409 + reload; (4) mobile 390px.
+
 ---
 
 ## Task 9 — Flush pending saves on navigation + unsaved-changes guard  ⚠️ HIGH
@@ -324,6 +326,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `fix(autosave): flush pending saves on navigation + unsaved-changes guard`
 
+**STATUS: ✅ DONE (commit 279d949).** New `useAutoSaveGuard` flushes the pending save on unmount (covers back/Cancel/sidebar nav) + `beforeunload` warning; `useAutoSave` now exposes `hasUnsavedChanges`. `useBlocker` intentionally not used (app uses classic `BrowserRouter`).
+
 ---
 
 ## Task 10 — Persist edit-mode drafts + bounded retry on failed saves  ⚠️ HIGH
@@ -337,6 +341,8 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 **Acceptance:** A failed save leaves a recoverable draft; transient failures self-heal via retry; reload offers to restore unsaved edits.
 
 **Commit:** `feat(autosave): edit-mode drafts + bounded retry on write failures`
+
+**STATUS: ✅ DONE (commit cc5a139).** New `useEditDraft` writes `draft_edit_contact_${id}`/`draft_edit_company_${id}` while dirty, clears on save, offers restore of a draft newer than the server copy. `useAutoSave` retries a failed (idempotent) save up to 2× with backoff before surfacing the error.
 
 ---
 

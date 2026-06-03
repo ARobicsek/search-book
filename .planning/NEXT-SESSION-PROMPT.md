@@ -14,11 +14,10 @@ This file serves as a handoff document for the next AI session. It summarizes wh
   - **Task 7** (`e59e456`) — atomic restore: browser-direct path downloads a pre-restore safety snapshot then runs wipe+reinsert in a libsql interactive transaction; server `/import` wrapped in `$transaction`.
   - **Task 12** (`5e65697`) — multi-write endpoints (conversations, contacts/companies + StatusHistory, batch-action, prepnotes) wrapped in transactions.
   - **Task 13** (`b5dcfd0`) — delete-confirm dialogs now show cascade impact counts via new `/…/:id/delete-impact` endpoints.
-- **Phase 1 — REMAINING (the auto-save cluster; needs local + mobile 390px testing before prod):**
-  - **Task 8** — optimistic concurrency (409 on stale `_expectedUpdatedAt`) on Contact/Company/Action saves. ⚠️ Highest care: auto-save fires repeatedly, so the client must track and advance the expected `updatedAt` after every save or it will self-409. Test with two tabs/devices.
-  - **Task 9** — flush pending auto-save on navigation + `beforeunload`/`useBlocker` unsaved-changes guard.
-  - **Task 10** — edit-mode localStorage drafts + bounded retry on failed idempotent PUTs.
-  These were intentionally NOT pushed blind to the single prod instance; do them on a branch with a Vercel preview + mobile test, then merge.
+  - **Task 9** (`279d949`) — `useAutoSaveGuard`: flush pending auto-save on unmount (covers back/Cancel/sidebar nav) + `beforeunload` guard. (`useBlocker` avoided — app uses classic `BrowserRouter`.)
+  - **Task 10** (`cc5a139`) — `useEditDraft`: edit-mode localStorage drafts with restore-on-reload + bounded auto-retry of failed idempotent saves.
+- **Phase 1 — ON BRANCH `claude/festive-brown-RIaoq`, awaiting Vercel-preview test then merge to main:**
+  - **Task 8** (`e29f580`) — optimistic concurrency (409 on stale `_expectedUpdatedAt`) on Contact/Company/Action saves. Server uses an atomic compare-and-set (updateMany guard; row-claim for actions); client advances its expected `updatedAt` after every save and reloads on 409 (the unsaved edit survives as a Task 10 draft). **Before merging, test on the branch's Vercel preview:** (1) the `updatedAt` ISO round-trip matches exactly through the Turso/libsql adapter; (2) repeated auto-saves don't self-409; (3) a real two-tab/two-device edit produces the 409 + reload; (4) mobile 390px. Then `git merge` the branch into main (it's already rebased on the latest main).
 
 ---
 

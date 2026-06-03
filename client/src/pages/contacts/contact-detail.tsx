@@ -226,6 +226,12 @@ export function ContactDetailPage() {
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteImpact, setDeleteImpact] = useState<{
+    conversations: number
+    prepNotes: number
+    relationships: number
+    employmentHistory: number
+  } | null>(null)
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [newLinkTitle, setNewLinkTitle] = useState('')
   const [companyDossierCount, setCompanyDossierCount] = useState(0)
@@ -570,7 +576,20 @@ export function ContactDetailPage() {
               Edit
             </Link>
           </Button>
-          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <Dialog
+            open={deleteOpen}
+            onOpenChange={(open) => {
+              setDeleteOpen(open)
+              if (open) {
+                // Task 13: fetch what else this delete will destroy.
+                setDeleteImpact(null)
+                api
+                  .get<typeof deleteImpact>(`/contacts/${id}/delete-impact`)
+                  .then(setDeleteImpact)
+                  .catch(() => {})
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="flex-1 sm:flex-initial">
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -585,6 +604,32 @@ export function ContactDetailPage() {
                   action cannot be undone.
                 </DialogDescription>
               </DialogHeader>
+              {deleteImpact &&
+                (deleteImpact.conversations +
+                  deleteImpact.prepNotes +
+                  deleteImpact.relationships +
+                  deleteImpact.employmentHistory >
+                  0) && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                    <p className="mb-1 font-medium text-destructive">
+                      This will also permanently delete:
+                    </p>
+                    <ul className="list-inside list-disc text-muted-foreground">
+                      {deleteImpact.conversations > 0 && (
+                        <li>{deleteImpact.conversations} conversation log(s)</li>
+                      )}
+                      {deleteImpact.prepNotes > 0 && (
+                        <li>{deleteImpact.prepNotes} prep note(s)</li>
+                      )}
+                      {deleteImpact.relationships > 0 && (
+                        <li>{deleteImpact.relationships} relationship(s)</li>
+                      )}
+                      {deleteImpact.employmentHistory > 0 && (
+                        <li>{deleteImpact.employmentHistory} employment history record(s)</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDeleteOpen(false)}>
                   Cancel

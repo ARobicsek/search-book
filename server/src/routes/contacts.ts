@@ -398,6 +398,31 @@ router.post('/batch-action', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/contacts/:id/delete-impact — counts of records a delete will also destroy.
+// Task 13: surfaced in the delete-confirm dialog so the user knows the blast radius.
+router.get('/:id/delete-impact', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const [conversations, prepNotes, relationshipsFrom, relationshipsTo, employmentHistory] =
+      await Promise.all([
+        prisma.conversation.count({ where: { contactId: id } }),
+        prisma.prepNote.count({ where: { contactId: id } }),
+        prisma.relationship.count({ where: { fromContactId: id } }),
+        prisma.relationship.count({ where: { toContactId: id } }),
+        prisma.employmentHistory.count({ where: { contactId: id } }),
+      ]);
+    res.json({
+      conversations,
+      prepNotes,
+      relationships: relationshipsFrom + relationshipsTo,
+      employmentHistory,
+    });
+  } catch (error) {
+    console.error('Error computing contact delete impact:', error);
+    res.status(500).json({ error: 'Failed to compute delete impact' });
+  }
+});
+
 // DELETE /api/contacts/:id — hard delete
 router.delete('/:id', async (req: Request, res: Response) => {
   try {

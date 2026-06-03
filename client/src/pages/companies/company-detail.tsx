@@ -150,6 +150,11 @@ export function CompanyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteImpact, setDeleteImpact] = useState<{
+    prepNotes: number
+    activities: number
+    employedContacts: number
+  } | null>(null)
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [newLinkTitle, setNewLinkTitle] = useState('')
   const [showActivityForm, setShowActivityForm] = useState(false)
@@ -371,7 +376,20 @@ export function CompanyDetailPage() {
               Edit
             </Link>
           </Button>
-          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <Dialog
+            open={deleteOpen}
+            onOpenChange={(open) => {
+              setDeleteOpen(open)
+              if (open) {
+                // Task 13: fetch what else this delete will affect.
+                setDeleteImpact(null)
+                api
+                  .get<typeof deleteImpact>(`/companies/${id}/delete-impact`)
+                  .then(setDeleteImpact)
+                  .catch(() => {})
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="flex-1 sm:flex-initial">
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -386,6 +404,24 @@ export function CompanyDetailPage() {
                   action cannot be undone.
                 </DialogDescription>
               </DialogHeader>
+              {deleteImpact &&
+                (deleteImpact.prepNotes + deleteImpact.activities + deleteImpact.employedContacts >
+                  0) && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                    <p className="mb-1 font-medium text-destructive">This delete will:</p>
+                    <ul className="list-inside list-disc text-muted-foreground">
+                      {deleteImpact.prepNotes > 0 && (
+                        <li>permanently delete {deleteImpact.prepNotes} research note(s)</li>
+                      )}
+                      {deleteImpact.activities > 0 && (
+                        <li>permanently delete {deleteImpact.activities} activity log entry(ies)</li>
+                      )}
+                      {deleteImpact.employedContacts > 0 && (
+                        <li>unlink {deleteImpact.employedContacts} contact(s) from this company</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDeleteOpen(false)}>
                   Cancel

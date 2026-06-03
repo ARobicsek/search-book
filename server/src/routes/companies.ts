@@ -327,6 +327,24 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/companies/:id/delete-impact — counts of records a delete will affect.
+// Task 13: surfaced in the delete-confirm dialog. Company prep notes (dossiers) and
+// activities are cascade-deleted; employed contacts are unlinked (not deleted).
+router.get('/:id/delete-impact', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const [prepNotes, activities, employedContacts] = await Promise.all([
+      prisma.companyPrepNote.count({ where: { companyId: id } }),
+      prisma.companyActivity.count({ where: { companyId: id } }),
+      prisma.contact.count({ where: { companyId: id } }),
+    ]);
+    res.json({ prepNotes, activities, employedContacts });
+  } catch (error) {
+    console.error('Error computing company delete impact:', error);
+    res.status(500).json({ error: 'Failed to compute delete impact' });
+  }
+});
+
 // DELETE /api/companies/:id — hard delete
 router.delete('/:id', async (req: Request, res: Response) => {
   try {

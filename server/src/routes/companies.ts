@@ -4,6 +4,24 @@ import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../co
 
 const router = Router();
 
+// Task 18: explicit allow-list of client-writable Company fields. Prevents
+// mass-assignment — only these are copied from req.body into Prisma (never id,
+// createdAt, updatedAt, or unknown keys). `status` drives status-history logic.
+const COMPANY_WRITABLE_FIELDS = [
+  'name', 'industry', 'size', 'website', 'hqLocation', 'notes', 'status',
+] as const;
+
+function pickWritable<T extends readonly string[]>(
+  body: Record<string, unknown>,
+  fields: T,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of fields) {
+    if (key in body) out[key] = body[key];
+  }
+  return out;
+}
+
 // Task 20: parse a JSON-array string defensively. Malformed JSON (e.g. a row
 // hand-edited or corrupted) must not 500 the request — fall back to [].
 function safeParseArray(value: string | null | undefined): any[] {
@@ -311,8 +329,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     // Task 8: optimistic-concurrency guard (only when the client sends _expectedUpdatedAt).
     const expectedUpdatedAt = parseExpectedUpdatedAt(req.body._expectedUpdatedAt);
-    const { _expectedUpdatedAt, ...data } = req.body;
-    void _expectedUpdatedAt;
+    // Task 18: copy only allow-listed fields — ignore id/createdAt/updatedAt/unknowns.
+    const data = pickWritable(req.body, COMPANY_WRITABLE_FIELDS);
     // Task 12: update the company and record any status change atomically.
     const company = await prisma.$transaction(async (tx) => {
       if (expectedUpdatedAt) {
@@ -324,7 +342,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       } else {
         await tx.company.update({ where: { id }, data });
       }
-      if (data.status && data.status !== existing.status) {
+      if (typeof data.status === 'string' && data.status !== existing.status) {
         await tx.companyStatusHistory.create({
           data: {
             companyId: id,

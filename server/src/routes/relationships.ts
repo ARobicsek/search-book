@@ -93,9 +93,16 @@ router.put('/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Task 18: allow-list editable fields only (no mass-assignment of id or the
+    // fromContactId/toContactId identity columns). type and notes are the editable
+    // attributes of an existing relationship.
+    const data: { type?: string; notes?: string | null } = {};
+    if ('type' in req.body) data.type = req.body.type;
+    if ('notes' in req.body) data.notes = req.body.notes ?? null;
+
     const relationship = await prisma.relationship.update({
       where: { id },
-      data: req.body,
+      data,
       include: relationshipIncludes,
     });
     res.json(relationship);

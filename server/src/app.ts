@@ -26,25 +26,30 @@ import linkedinRouter from './routes/linkedin';
 
 const app = express();
 
-// CORS configuration - allow requests from Vercel domains and localhost
+// CORS configuration — Task 24: restrict to the exact prod domain + localhost.
+// The app is served same-origin (client and /api share one Vercel domain), so
+// same-origin and no-origin requests (the PWA, curl, the uptime monitor, cron)
+// don't need a permissive allow-list. The old `*.vercel.app` wildcard let any
+// Vercel-hosted site call the API cross-origin; that's now removed.
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3001',
+  'https://searchbook-three.vercel.app',
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
   process.env.CLIENT_URL || '',
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no origin (same-origin fetches, mobile/PWA, curl,
+    // the uptime monitor, Vercel cron).
     if (!origin) return callback(null, true);
 
-    // Allow any Vercel deployment URL
-    if (origin.includes('.vercel.app') || allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    // In development, allow any origin
+    // In development, allow any origin for convenience.
     if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }

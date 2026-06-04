@@ -12,6 +12,7 @@
     "@libsql/client": "^0.17.2",
     "@prisma/adapter-libsql": "^7.5.0",
     "@prisma/client": "^7.5.0",
+    "@sentry/node": "^10.56.0",
     "@types/multer": "^2.0.0",
     "@vercel/blob": "^2.1.0",
     "cors": "^2.8.5",

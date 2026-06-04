@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Sentry, sentryEnabled } from '@/lib/sentry'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -23,8 +24,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Keep a console trace for debugging; wire to Sentry later (Task 17).
     console.error('Render error caught by ErrorBoundary:', error, info.componentStack)
+    // Task 17: report to Sentry (no-op unless VITE_SENTRY_DSN is configured).
+    if (sentryEnabled) {
+      Sentry.captureException(error, {
+        contexts: { react: { componentStack: info.componentStack } },
+      })
+    }
   }
 
   handleReload = (): void => {

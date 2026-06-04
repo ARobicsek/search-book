@@ -1,5 +1,8 @@
 // Express app configuration (shared between local dev and Vercel serverless)
 import 'dotenv/config';
+// Task 17: must load before express/http so Sentry can instrument them (no-op
+// unless SENTRY_DSN is set).
+import { Sentry, sentryEnabled } from './sentry';
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -198,5 +201,11 @@ app.use('/api/duplicates', duplicatesRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/company-activities', companyActivitiesRouter);
 app.use('/api/linkedin', linkedinRouter);
+
+// Task 17: Sentry must capture errors after the routes are mounted. Most route
+// handlers catch their own errors, so this primarily reports uncaught throws.
+if (sentryEnabled) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 export default app;

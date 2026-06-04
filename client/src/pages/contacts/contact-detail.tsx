@@ -273,6 +273,21 @@ export function ContactDetailPage() {
   const loadData = useCallback(async () => {
     if (!id) return
 
+    // Task 23: clear the previous contact's secondary data so navigating between
+    // contacts doesn't briefly show the prior contact's conversations/notes/etc.
+    // (these load asynchronously below). Lookup data (allContacts/allCompanies/
+    // allTags) is contact-independent, so it's intentionally left in place.
+    setContact(null)
+    setLoading(true)
+    setActions([])
+    setConversations([])
+    setRelationships([])
+    setLinks([])
+    setPrepNotes([])
+    setEmploymentHistory([])
+    setTags([])
+    setCompanyDossierCount(0)
+
     try {
       // Phase 1: Load contact first — this triggers the server-side DB warmup
       const c = await api.get<Contact>(`/contacts/${id}`)

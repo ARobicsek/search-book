@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import prisma, { resetPrisma } from './db';
 import path from 'path';
@@ -25,6 +26,10 @@ import companyActivitiesRouter from './routes/company-activities';
 import linkedinRouter from './routes/linkedin';
 
 const app = express();
+
+// Behind Vercel's proxy: trust the first hop so express-rate-limit keys on the
+// real client IP (X-Forwarded-For) rather than the proxy's.
+app.set('trust proxy', 1);
 
 // CORS configuration — Task 24: restrict to the exact prod domain + localhost.
 // The app is served same-origin (client and /api share one Vercel domain), so
@@ -60,7 +65,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'x-app-password']
 }));
 
-app.use(express.json({ limit: '50mb' }));
+// Task 16: a small global body limit closes a memory-DoS vector. Backup restores
+// (full-DB JSON) legitimately need a large body, so they get their own larger
+// parser mounted first — body-parser sets req._body and the global one then skips.
+app.use('/api/backup', express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // Request timing middleware — logs to Vercel function logs
 app.use((req, res, next) => {
@@ -96,6 +105,31 @@ app.use('/api', (req, res, next) => {
   res.on('close', () => clearTimeout(timeout));
   next();
 });
+
+// ---- Rate limiting (Task 16) ----
+// Sits before the auth gate so it also throttles password brute-forcing. The
+// in-memory store is per-serverless-instance (resets on cold start) — imperfect
+// on Vercel, but ample friction against abuse for a single-user app.
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  limit: 1000,              // per IP — high enough that heavy real browsing (each
+                            // page fires ~10 requests) never trips it, low enough
+                            // to throttle scraping / password brute-forcing.
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/health', // never throttle the uptime monitor
+});
+app.use('/api', generalLimiter);
+
+// Stricter cap on the LinkedIn parse route — it calls the OpenAI API, so abuse
+// costs real money. Mounted on the full path; req.path here is relative to it.
+const linkedinLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/linkedin', linkedinLimiter);
 
 // ---- Shared-password auth gate over all /api routes ----
 // Single-user app: one shared password closes the "anyone with the URL" hole.

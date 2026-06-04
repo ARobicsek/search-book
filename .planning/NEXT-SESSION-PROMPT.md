@@ -18,7 +18,9 @@ This file serves as a handoff document for the next AI session. It summarizes wh
   - **Task 10** (`cc5a139`) — `useEditDraft`: edit-mode localStorage drafts with restore-on-reload + bounded auto-retry of failed idempotent saves.
 - **Task 8** (`e29f580`, merged via PR #1) — optimistic concurrency (409 on stale `_expectedUpdatedAt`) on Contact/Company/Action saves. Server uses an atomic compare-and-set (updateMany guard; row-claim for actions); client advances its expected `updatedAt` after every save and reloads on 409 (the unsaved edit survives as a Task 10 draft). **Verified on the Vercel preview:** two-tab conflict produced the 409 + reload; single-tab repeated editing produced no false conflicts.
 
-**Phase 1 is now COMPLETE.** Phase 2 (Tasks 15–18, 20–25) remains as lower-urgency hardening. Outstanding [USER ACTION]s: UptimeRobot on `/api/health`, and confirming the Turso PITR window. (Turso token rotation is already done.)
+**Phase 1 is now COMPLETE.** Phase 2 (Tasks 15–18, 20–25) remains as lower-urgency hardening — **start here next session.** All Phase 0 user actions are now done: Turso token rotated; UptimeRobot monitor live on `/api/health` (5-min, alerting, 100% uptime); Turso PITR window confirmed = up to 2 weeks on the Free plan. Only standing habit: the weekly off-platform backup download.
+
+The merged feature branch `claude/festive-brown-RIaoq` has been deleted (Task 8 is on `main`).
 
 ---
 

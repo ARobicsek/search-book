@@ -1,7 +1,7 @@
 # SearchBook — Production Hardening Plan
 
 **Created:** 2026-06-02
-**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below; remaining user actions: (a) set up UptimeRobot on `/api/health`, (b) confirm Turso PITR window, (c) adopt weekly off-platform backup habit. The Turso token rotation (Task 2) was completed in a prior session. **Phase 1 COMPLETE (2026-06-03):** all of Tasks 7–14 + 19 are on `main` and deployed. Task 8 was verified on a Vercel preview (two-tab conflict → 409 + reload; no false positives on single-tab editing) and merged via PR #1. See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
+**Status:** **Phase 0 complete (2026-06-03).** Tasks 1–5 built, deployed to prod, and verified. Task 6 runbook written below. **All Phase 0 user actions now done:** Turso token rotated (prior session); UptimeRobot monitor live on `/api/health` (5-min checks, alerting); Turso PITR window confirmed = **up to 2 weeks** on the current Free plan. Only standing habit: the weekly off-platform backup download. **Phase 1 COMPLETE (2026-06-03):** all of Tasks 7–14 + 19 are on `main` and deployed. Task 8 was verified on a Vercel preview (two-tab conflict → 409 + reload; no false positives on single-tab editing) and merged via PR #1. **Next: Phase 2 (Tasks 15–18, 20–25).** See `.planning/NEXT-SESSION-PROMPT.md` for the live handoff.
 **Why this exists:** The owner was hired as Chief Medical Officer at NCQA and will rely on SearchBook for heavy professional networking. The app must move from "personal tool" to "near-100% uptime, never lose data." A full review (4 subagents: security, data-integrity, backup/DR, frontend resilience) produced the findings below. The app works functionally — every item here is about operational armor, not features.
 
 ---
@@ -245,7 +245,7 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `feat(ops): health endpoint now verifies DB connectivity`
 
-**STATUS: ✅ DONE in code (commit 65e1caf). [USER ACTION] external monitor still to be set up.**
+**STATUS: ✅ DONE (commit 65e1caf). [USER ACTION] external monitor DONE — UptimeRobot HTTP(s) monitor live on `https://searchbook-three.vercel.app/api/health`, 5-minute interval, alerting enabled; showing 100% uptime.**
 
 ---
 
@@ -254,7 +254,7 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 **Problem:** Turso is the single source of truth. Its built-in point-in-time-restore (PITR) is the fastest safety net, but it's unverified. And there is no written disaster-recovery procedure — a non-technical user under stress could get stuck (notably: the JSON restore does NOT create tables; the schema must exist first).
 
 **[USER ACTION]:**
-- Log into the Turso dashboard. Confirm: (a) the current plan's PITR window (free tier historically ~24h), (b) that it's enabled, (c) whether database branching is available. Note the findings in the runbook.
+- Log into the Turso dashboard. Confirm: (a) the current plan's PITR window (Free plan confirmed = up to 2 weeks (2026-06-03)), (b) that it's enabled, (c) whether database branching is available. Note the findings in the runbook.
 - Decide if the PITR window is sufficient; if not, consider upgrading the Turso plan.
 
 **AI action:** Write/verify the **Recovery Runbook** at the bottom of this doc with exact, tested steps (create DB → apply schema DDL → set env → restore JSON → verify counts). Test the schema-DDL step against a scratch Turso DB if feasible.
@@ -263,7 +263,7 @@ Of these, `CompanyPrepNote` (company research dossiers) and `CompanyActivity` (c
 
 **Commit:** `docs(ops): add disaster-recovery runbook and Turso backup notes`
 
-**STATUS: ✅ Runbook written (below). [USER ACTION] UptimeRobot + Turso PITR confirmation + weekly off-platform habit still pending.**
+**STATUS: ✅ DONE.** Runbook written (below). UptimeRobot monitor live; Turso PITR window confirmed in the dashboard = **up to 2 weeks** (Free plan; restore dropdown offers 1h/6h/12h/24h/48h/72h/1wk/2wk/custom) via Branches → Create From Point-in-Time. Only the weekly off-platform backup download remains a standing habit.
 
 ---
 
@@ -455,7 +455,7 @@ Brief — each is a small, self-contained task. Detail can be expanded when reac
 - Vercel Blob backups are at `https://sv1nlcmvomldhzg3.public.blob.vercel-storage.com/backups/searchbook-backup-<ts>.json` (public URL, same store as photos).
 
 **Fastest recovery — Turso PITR (use first if the DB is corrupted, not lost):**
-- Turso dashboard → `searchbook` → Branches → **Create From Point-in-Time** → pick a timestamp before the corruption → this creates a new DB branch with that state. Point Vercel `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` at it (or promote), redeploy, verify `/api/health`. (Confirm the available PITR window in the dashboard — free tier historically ~24h.)
+- Turso dashboard → `searchbook` → Branches → **Create From Point-in-Time** → pick a timestamp before the corruption → this creates a new DB branch with that state. Point Vercel `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` at it (or promote), redeploy, verify `/api/health`. (Confirm the available PITR window in the dashboard — Free plan confirmed = up to 2 weeks (2026-06-03).)
 
 **Full rebuild from JSON backup (if the database is lost entirely):**
 1. Create a fresh Turso database in the dashboard.
@@ -472,7 +472,7 @@ The dashboard **"Invalidate All Tokens"** (Configuration section) rotates the da
 **What you lose:** anything entered after the latest backup. With daily automated backups (Task 4), that window is ≤ 24h instead of weeks.
 
 **Backup layers (target state after Phase 0):**
-- **Layer 1 — Turso PITR:** ~24h "oops" recovery (verify in Task 6).
+- **Layer 1 — Turso PITR:** up to ~2-week "oops" recovery window on the current Free plan (confirmed 2026-06-03).
 - **Layer 2 — Daily JSON → Vercel Blob:** automatic, complete, ~30-backup history (Task 4).
 - **Layer 3 — Weekly manual download → OneDrive:** independent, off-platform backstop (survives loss of the Vercel/Turso account). Click "Create Backup" on a computer weekly.
 

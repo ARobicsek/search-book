@@ -9,7 +9,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Task 22: 'prompt' (not 'autoUpdate') so PWAUpdatePrompt's needRefresh fires
+      // and the user is offered the new bundle. 'autoUpdate' contradicted that
+      // component and let old bundles linger after deploys.
+      registerType: 'prompt',
       devOptions: { enabled: true },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {

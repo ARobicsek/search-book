@@ -4,6 +4,18 @@ import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../co
 
 const router = Router();
 
+// Task 20: parse a JSON-array string defensively. Malformed JSON (e.g. a row
+// hand-edited or corrupted) must not 500 the request — fall back to [].
+function safeParseArray(value: string | null | undefined): any[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 // GET /api/companies/names — lightweight list of just id/name (no _count subquery)
 router.get('/names', async (_req: Request, res: Response) => {
   try {
@@ -243,13 +255,11 @@ router.post('/:id/contacts', async (req: Request, res: Response) => {
         updateData.companyId = companyId;
       } else {
         // Otherwise append to additionalCompanyIds securely
-        const currentAdditional = contact.additionalCompanyIds
-          ? JSON.parse(contact.additionalCompanyIds)
-          : [];
+        const currentAdditional = safeParseArray(contact.additionalCompanyIds);
 
         // Ensure we don't duplicate
         const isAlreadyEmployed = contact.companyId === companyId ||
-          (Array.isArray(currentAdditional) && currentAdditional.some((c: any) =>
+          (currentAdditional.some((c: any) =>
             (typeof c === 'object' && c.id === companyId) || c === companyId
           ));
 
@@ -260,15 +270,11 @@ router.post('/:id/contacts', async (req: Request, res: Response) => {
       }
     } else if (type === 'CONNECTED') {
       // Logic for adding to connected array
-      const currentConnected = contact.connectedCompanyIds
-        ? JSON.parse(contact.connectedCompanyIds)
-        : [];
+      const currentConnected = safeParseArray(contact.connectedCompanyIds);
 
-      if (Array.isArray(currentConnected) && !currentConnected.includes(companyId)) {
+      if (!currentConnected.includes(companyId)) {
         currentConnected.push(companyId);
         updateData.connectedCompanyIds = JSON.stringify(currentConnected);
-      } else if (!Array.isArray(currentConnected)) {
-        updateData.connectedCompanyIds = JSON.stringify([companyId]);
       }
     }
 

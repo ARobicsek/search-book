@@ -374,7 +374,47 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Company not found' });
       return;
     }
-    await prisma.company.delete({ where: { id } });
+
+    // Task 21: the primary `companyId` FK is SetNull'd by the DB on delete, but
+    // references inside the JSON-array columns (additionalCompanyIds with
+    // {id,isCurrent} objects or legacy numbers; connectedCompanyIds with numbers)
+    // have no FK and would be left dangling. Scrub them, then delete, atomically.
+    await prisma.$transaction(async (tx) => {
+      const referencing = await tx.contact.findMany({
+        where: {
+          OR: [
+            { additionalCompanyIds: { contains: `${id}` } },
+            { connectedCompanyIds: { contains: `${id}` } },
+          ],
+        },
+        select: { id: true, additionalCompanyIds: true, connectedCompanyIds: true },
+      });
+
+      for (const c of referencing) {
+        const update: { additionalCompanyIds?: string | null; connectedCompanyIds?: string | null } = {};
+
+        const additional = safeParseArray(c.additionalCompanyIds);
+        const filteredAdditional = additional.filter((item: any) =>
+          typeof item === 'object' ? item?.id !== id : item !== id
+        );
+        if (filteredAdditional.length !== additional.length) {
+          update.additionalCompanyIds = filteredAdditional.length > 0 ? JSON.stringify(filteredAdditional) : null;
+        }
+
+        const connected = safeParseArray(c.connectedCompanyIds);
+        const filteredConnected = connected.filter((item: any) => item !== id);
+        if (filteredConnected.length !== connected.length) {
+          update.connectedCompanyIds = filteredConnected.length > 0 ? JSON.stringify(filteredConnected) : null;
+        }
+
+        if (Object.keys(update).length > 0) {
+          await tx.contact.update({ where: { id: c.id }, data: update });
+        }
+      }
+
+      await tx.company.delete({ where: { id } });
+    });
+
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting company:', error);

@@ -4,23 +4,25 @@ This file serves as a handoff document for the next AI session. It summarizes wh
 
 ### What Was Just Completed
 
-**Production Hardening Plan — Phase 0 done; Phase 1 mostly done.** See `.planning/PRODUCTION-HARDENING-PLAN.md` (now committed) for the full task list and per-task STATUS lines.
+**Production Hardening Plan — ALL phases (0, 1, 2) COMPLETE.** See `.planning/PRODUCTION-HARDENING-PLAN.md` for the full task list and per-task STATUS lines.
 
-- **Phase 0 (Tasks 1–6):** complete and deployed (password gate, debug/credential leak removal, all-23-table backup, daily Vercel Blob backup, DB-health endpoint, recovery runbook). Outstanding **[USER ACTION]s**: set up UptimeRobot on `/api/health`, rotate the Turso token, confirm the Turso PITR window, adopt the weekly off-platform backup habit.
-- **Phase 1 — done & pushed to main (typecheck-clean):**
-  - **Task 19** (`daa7fc5`) — tags list no longer uses the `_count` include that hangs Turso; uses `groupBy`.
-  - **Task 14** (`6ad6f11`) — `build:vercel` runs prisma generate → full typecheck → build, so type errors now fail the deploy.
-  - **Task 11** (`1326423`) — React `ErrorBoundary` around `<App/>` with a reload fallback.
-  - **Task 7** (`e59e456`) — atomic restore: browser-direct path downloads a pre-restore safety snapshot then runs wipe+reinsert in a libsql interactive transaction; server `/import` wrapped in `$transaction`.
-  - **Task 12** (`5e65697`) — multi-write endpoints (conversations, contacts/companies + StatusHistory, batch-action, prepnotes) wrapped in transactions.
-  - **Task 13** (`b5dcfd0`) — delete-confirm dialogs now show cascade impact counts via new `/…/:id/delete-impact` endpoints.
-  - **Task 9** (`279d949`) — `useAutoSaveGuard`: flush pending auto-save on unmount (covers back/Cancel/sidebar nav) + `beforeunload` guard. (`useBlocker` avoided — app uses classic `BrowserRouter`.)
-  - **Task 10** (`cc5a139`) — `useEditDraft`: edit-mode localStorage drafts with restore-on-reload + bounded auto-retry of failed idempotent saves.
-- **Task 8** (`e29f580`, merged via PR #1) — optimistic concurrency (409 on stale `_expectedUpdatedAt`) on Contact/Company/Action saves. Server uses an atomic compare-and-set (updateMany guard; row-claim for actions); client advances its expected `updatedAt` after every save and reloads on 409 (the unsaved edit survives as a Task 10 draft). **Verified on the Vercel preview:** two-tab conflict produced the 409 + reload; single-tab repeated editing produced no false conflicts.
+- **Phase 0 (Tasks 1–6):** complete and deployed (password gate, debug/credential leak removal, all-23-table backup, daily Vercel Blob backup, DB-health endpoint, recovery runbook). All user-actions done: Turso token rotated; UptimeRobot live on `/api/health` (5-min, alerting); Turso PITR window confirmed = up to 2 weeks (Free plan). Standing habit: weekly off-platform backup download.
+- **Phase 1 (Tasks 7–14, 19):** complete on `main` — atomic restore, optimistic concurrency (409 on stale saves, verified on a Vercel preview), autosave flush-on-nav + edit drafts + bounded retry, React error boundary, multi-write transactions, delete-impact counts, typecheck deploy gate, tags `_count`→`groupBy` Turso-hang fix.
+- **Phase 2 (Tasks 15–18, 20–25) — done this session (2026-06-04), merged to `main`; one atomic commit each, typecheck + client build clean:**
+  - **Task 15** (`c433bfa`) — PWA `/api/` caching `NetworkFirst`→`NetworkOnly`; API responses never cached (kills the stale-overwrite-on-autosave vector).
+  - **Task 22** (`853a99c`) — `registerType` `autoUpdate`→`prompt`; the existing `PWAUpdatePrompt` now offers new bundles instead of old ones lingering.
+  - **Task 23** (`b05d674`) — `loadData` resets the prior contact's secondary arrays + re-enters loading before fetching (no cross-contact data flash).
+  - **Task 20** (`46d3b30`) — `safeParseArray` guards the unguarded `JSON.parse`s in `POST /companies/:id/contacts` (malformed JSON no longer 500s).
+  - **Task 21** (`70f56ee`) — company delete scrubs the deleted id from contacts' `additionalCompanyIds`/`connectedCompanyIds` JSON arrays, in one transaction.
+  - **Task 18** (`60e4686`) — input allow-listing: `PUT /companies/:id` (`name,industry,size,website,hqLocation,notes,status`) and `PUT /relationships/:id` (`type,notes`) copy only known fields (no mass-assignment).
+  - **Task 24** (`120195d`) — CORS tightened: dropped `*.vercel.app` wildcard, exact allow-list (localhost + prod domain); header-auth remains the real gate.
+  - **Task 16** (`565f0dd`) — `express-rate-limit` (1000/15min on `/api` before the auth gate, skips `/health`; 40/hr on `/api/linkedin`), body limit 50mb→2mb (backup routes keep a 50mb parser), `trust proxy` set.
+  - **Task 17** (`89ec4a6`) — opt-in Sentry (`@sentry/node` + `@sentry/react`), wired into the `ErrorBoundary`; no-op until DSNs are set.
+  - **Task 25** — resolved by decision+documentation: photos are best-effort for the automatic layer; bytes are already backed up off-platform via the manual photo-ZIP. A cron-side zip would add no independence (same Blob store) and risk the 30s timeout. See the plan's Task 25 STATUS for the full rationale.
 
-**Phase 1 is now COMPLETE.** Phase 2 (Tasks 15–18, 20–25) remains as lower-urgency hardening — **start here next session.** All Phase 0 user actions are now done: Turso token rotated; UptimeRobot monitor live on `/api/health` (5-min, alerting, 100% uptime); Turso PITR window confirmed = up to 2 weeks on the Free plan. Only standing habit: the weekly off-platform backup download.
+**Remaining [USER ACTION] to activate Task 17 (non-blocking):** create a free Sentry project and set `SENTRY_DSN` (Vercel prod) + `VITE_SENTRY_DSN` (Vercel prod, build-time → needs a redeploy). Until then error tracking is dormant; the console + error boundary still work.
 
-The merged feature branch `claude/festive-brown-RIaoq` has been deleted (Task 8 is on `main`).
+All Phase 2 work is on `main` (fast-forwarded from `claude/bold-ride-OjoVC`, tip `3da9982`; this doc-sync commit follows).
 
 ---
 
@@ -63,4 +65,4 @@ These two were explicitly parked until the user is at their desktop. **Do not at
 
 ### Working branch
 
-`claude/sweet-planck-plokJ` — both final-session commits (`ec777d4`, `3875990`) are pushed there. Not yet merged to `main`.
+`claude/bold-ride-OjoVC` — Phase 2 (10 commits) developed here and fast-forwarded to `main` (tip `3da9982`). Nothing pending un-merged.

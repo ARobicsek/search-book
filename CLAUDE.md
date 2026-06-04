@@ -96,7 +96,7 @@ api/index.ts      # Vercel serverless entry point
 
 ## Current Status
 
-Phases 1-7 complete. Phase 7.5 (Security & Backup Hardening) complete — automated daily Vercel Blob backup, shared-password gate, verified restore, photo files in the manual backup ZIP; two desktop-only verifications deferred (live photo-ZIP CORS check, scratch-Turso restore). Phase 8 (Document Search) is next. See `.planning/ROADMAP.md` for details.
+Phases 1-7 complete. Phase 7.5 (Security & Backup Hardening) complete — automated daily Vercel Blob backup, shared-password gate, verified restore, photo files in the manual backup ZIP; two desktop-only verifications deferred (live photo-ZIP CORS check, scratch-Turso restore). **Production Hardening Plan (Phases 0–2) complete** (`.planning/PRODUCTION-HARDENING-PLAN.md`) — Phase 2 (Tasks 15–18, 20–25: PWA caching/update, rate limiting, smaller body limit, input allow-listing, JSON-parse guards, dangling-ref scrub, CORS tightening, opt-in Sentry) merged to `main` 2026-06-04. Only standing follow-up: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel to activate error tracking. Phase 8 (Document Search) is next. See `.planning/ROADMAP.md` for details.
 
 ## Session Management
 

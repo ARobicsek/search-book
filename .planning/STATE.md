@@ -22,7 +22,12 @@
 | Deployment | Vercel + Turso cloud DB for iPhone PWA access | 2026-02-05 |
 | API auth | Single shared-password gate over all `/api` routes (single-user app) | 2026-06-03 |
 | Cloud backup | Automated daily DB export to Vercel Blob (`/api/backup/cron`, 08:00 UTC, keep newest 30) | 2026-06-03 |
-| Photo backup | Actual photo *files* bundled into the **manual** backup ZIP only (not the daily cron, to keep Turso/cloud backups small) | 2026-06-03 |
+| Photo backup | Actual photo *files* bundled into the **manual** backup ZIP only (not the daily cron, to keep Turso/cloud backups small); automatic layer is best-effort by design (Task 25) | 2026-06-03 |
+| API caching | `/api/` is `NetworkOnly` in the service worker — never cache API responses (prevents stale data overwriting newer via auto-save) | 2026-06-04 |
+| PWA updates | `registerType: 'prompt'` so the user is offered new bundles (not silent `autoUpdate`) | 2026-06-04 |
+| Rate limiting | `express-rate-limit`: 1000/15min on `/api` (before auth gate; skips `/health`), 40/hr on `/api/linkedin`; body limit 50mb→2mb (backup routes keep 50mb) | 2026-06-04 |
+| Error tracking | Opt-in Sentry (`@sentry/node` + `@sentry/react`), no-op until `SENTRY_DSN`/`VITE_SENTRY_DSN` set; wired into the React ErrorBoundary | 2026-06-04 |
+| CORS | Exact allow-list (localhost + prod domain), no `*.vercel.app` wildcard; header-auth is the real gate | 2026-06-04 |
 
 ## User Feedback Summary
 
@@ -59,3 +64,5 @@ For full history, see SESSION-HISTORY.md.
 | 2026-06-03 | **Automated cloud backup.** Daily `/api/backup/cron` → Vercel Blob (`backups/` prefix, newest 30 kept), CRON_SECRET-gated. Settings UI lists/downloads them. Fixed export/import to cover all 23 tables (5 history/junction tables were missing). |
 | 2026-06-03 | **Restore verified + `updatedAt` fix.** Isolated round-trip (seed all 23 tables → export → import → export) is now byte-identical. Fixed `/backup/import` to relink `Contact.referredById` via raw SQL so it no longer trips `@updatedAt`. NOTE: proven against local SQLite, not yet the production Turso transport (deferred to a desktop session). |
 | 2026-06-03 | **Photo files in manual backup.** New `client/src/lib/photo-backup.ts` fetches actual image bytes and downloads `searchbook-photos.zip` (+ manifest) from "Create Backup". Uses `fflate`. Not in the daily cron. CORS against live Blob unverified (desktop test deferred). |
+| 2026-06-03 | **Production Hardening Plan — Phase 1 complete** (Tasks 7–14, 19). Atomic restore, optimistic concurrency (409 on stale saves), autosave flush-on-nav + edit drafts + bounded retry, React error boundary, multi-write transactions, delete-impact counts, typecheck deploy gate, tags `_count`→`groupBy` Turso-hang fix. All on `main`. |
+| 2026-06-04 | **Production Hardening Plan — Phase 2 complete** (Tasks 15–18, 20–25), merged to `main`. PWA `/api/` `NetworkOnly` + `prompt` updates; `express-rate-limit` + 2mb body limit; input allow-listing on company/relationship update; `safeParseArray` JSON-parse guards; dangling JSON-array ref scrub on company delete; CORS tightened to exact origins; opt-in Sentry (server + client) wired into the ErrorBoundary. Task 25 (photo backup) resolved by decision — best-effort, already covered by the manual photo-ZIP. Remaining user-action: set Sentry DSNs in Vercel to activate. |

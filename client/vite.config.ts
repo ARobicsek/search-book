@@ -43,15 +43,13 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
+            // Task 15: API responses are NEVER cached. A stale cached record fed
+            // to auto-save on a flaky connection could overwrite newer server data
+            // (the same silent-loss class Phase 1 fought). NetworkOnly removes that
+            // vector entirely; the trade-off is no offline read of records, which is
+            // acceptable for a single-user CRM that needs write correctness.
             urlPattern: /^\/api\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24, // 1 day
-              },
-            },
+            handler: 'NetworkOnly',
           },
           {
             urlPattern: /^\/photos\//,

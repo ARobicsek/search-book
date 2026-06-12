@@ -409,6 +409,13 @@ export function ContactDetailPage() {
     .filter((c) => c.id !== contact.id)
     .map((c) => ({ value: c.id.toString(), label: c.name }))
 
+  // Unfiltered (includes this contact): meetings can list the page's own
+  // contact as a named participant, so the editor must be able to label them.
+  const allContactOptions: ComboboxOption[] = allContacts.map((c) => ({
+    value: c.id.toString(),
+    label: c.name,
+  }))
+
   const companyOptions: ComboboxOption[] = allCompanies.map((c) => ({
     value: c.id.toString(),
     label: c.name,
@@ -795,6 +802,9 @@ export function ContactDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Meeting takeaways — per-participant notes from every meeting they attended (NCQA 2.4) */}
+          <MeetingTakeawaysCard contactId={contact.id} conversations={conversations} />
+
           {(contact.whereFound) && (
           <Card>
             <CardHeader>
@@ -1071,7 +1081,7 @@ export function ContactDetailPage() {
             contactId={contact.id}
             conversations={conversations}
             prepNotes={prepNotes}
-            contactOptions={contactOptions}
+            contactOptions={allContactOptions}
             companyOptions={companyOptions}
             tagOptions={tagOptions}
             onRefresh={loadData}
@@ -1112,6 +1122,56 @@ export function ContactDetailPage() {
         <span>Updated {formatDate(contact.updatedAt)}</span>
       </div>
     </div >
+  )
+}
+
+// ─── Meeting Takeaways card (NCQA Task 2.4) ─────────────────
+// Per-participant notes captured about this contact across all meetings they
+// attended, newest first — the raw material for stakeholder intelligence.
+function MeetingTakeawaysCard({
+  contactId,
+  conversations,
+}: {
+  contactId: number
+  conversations: Conversation[]
+}) {
+  // conversations arrive newest-first from the server
+  const takeaways = conversations.flatMap((conv) =>
+    (conv.participants || [])
+      .filter((p) => p.contact.id === contactId && p.note)
+      .map((p) => ({ conv, note: p.note as string }))
+  )
+
+  if (takeaways.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Meeting Takeaways</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {takeaways.map(({ conv, note }) => (
+            <li key={conv.id} className="text-sm">
+              <p>{note}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
+                {' — '}
+                {conv.title ? (
+                  <Link to={`/meetings?title=${encodeURIComponent(conv.title)}`} className="text-primary hover:underline">
+                    {conv.title}
+                  </Link>
+                ) : (
+                  <Link to={`/meetings?id=${conv.id}`} className="text-primary hover:underline">
+                    {conv.summary || 'Meeting'}
+                  </Link>
+                )}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company, Contact, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType } from '@/lib/types'
+import type { Company, Contact, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType, Conversation } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, COMPANY_ACTIVITY_TYPE_OPTIONS } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -143,6 +143,8 @@ export function CompanyDetailPage() {
   const [actions, setActions] = useState<Action[]>([])
   const [links, setLinks] = useState<LinkRecord[]>([])
   const [activities, setActivities] = useState<CompanyActivity[]>([])
+  const [meetings, setMeetings] = useState<Conversation[]>([])
+  const [meetingsTotal, setMeetingsTotal] = useState(0)
   const [prepNotesCount, setPrepNotesCount] = useState<number>(0)
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [selectedContact, setSelectedContact] = useState('')
@@ -184,6 +186,10 @@ export function CompanyDetailPage() {
 
     api.get<Action[]>(`/actions?companyId=${id}`).then(setActions).catch(() => { })
     api.get<CompanyActivity[]>(`/company-activities?companyId=${id}`).then(setActivities).catch(() => { })
+    // Meetings anchored to this org (NCQA Task 2.4)
+    api.get<{ data: Conversation[]; pagination: { total: number } }>(`/meetings?companyId=${id}&limit=5`)
+      .then((res) => { setMeetings(res.data); setMeetingsTotal(res.pagination.total) })
+      .catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/names').then(setAllContacts).catch(() => { })
     api.get<any[]>(`/company-prepnotes?companyId=${id}`).then((res) => setPrepNotesCount(res.length)).catch(() => { })
     loadLinks()
@@ -491,6 +497,42 @@ export function CompanyDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-sm prep-note-markdown"><ReactMarkdown>{company.notes}</ReactMarkdown></div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Meetings anchored to this org (NCQA Task 2.4) */}
+          {meetings.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Meetings{' '}
+                  <span className="text-sm font-normal text-muted-foreground">({meetingsTotal})</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {meetings.map((conv) => (
+                  <div key={conv.id} className="text-sm">
+                    <Link
+                      to={conv.title ? `/meetings?title=${encodeURIComponent(conv.title)}` : `/meetings?id=${conv.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {conv.title || conv.contact?.name || conv.attendeesDescription || 'Meeting'}
+                    </Link>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(conv.date + 'T00:00:00')}
+                      {conv.summary && ` — ${conv.summary}`}
+                    </p>
+                  </div>
+                ))}
+                {meetingsTotal > meetings.length && (
+                  <Link
+                    to={`/meetings?companyId=${company.id}`}
+                    className="inline-block text-xs text-primary hover:underline"
+                  >
+                    View all {meetingsTotal} meetings
+                  </Link>
+                )}
               </CardContent>
             </Card>
           )}

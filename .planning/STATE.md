@@ -28,6 +28,12 @@
 | Rate limiting | `express-rate-limit`: 1000/15min on `/api` (before auth gate; skips `/health`), 40/hr on `/api/linkedin`; body limit 50mb→2mb (backup routes keep 50mb) | 2026-06-04 |
 | Error tracking | Opt-in Sentry (`@sentry/node` + `@sentry/react`), no-op until `SENTRY_DSN`/`VITE_SENTRY_DSN` set; wired into the React ErrorBoundary | 2026-06-04 |
 | CORS | Exact allow-list (localhost + prod domain), no `*.vercel.app` wildcard; header-auth is the real gate | 2026-06-04 |
+| App mission | Adapt SearchBook (vs. replace) into NCQA CMO stakeholder-management system; plan of record = `.planning/NCQA-ADAPTATION-PLAN.md` | 2026-06-12 |
+| Legacy data | No archiving; legacy ecosystem values stay valid (additive taxonomy), reclassify opportunistically | 2026-06-12 |
+| Meetings model | Conversation = meeting with 5 optional "who" facets (contact anchor, org anchor, Groups, named participants w/ per-person notes, free-text attendees description; ≥1 required); multi-subject via markdown `### Topic` headings + conversation tags, NOT per-topic child records; group links are live references, not snapshots | 2026-06-12 |
+| Meeting capture | Paste MS Copilot recaps → Claude API extraction → mandatory review screen → normal CRUD (AI never writes directly) | 2026-06-12 |
+| Calendar | Outlook via published ICS feed (server-side secret env var), v1; Graph OAuth only if ICS staleness hurts | 2026-06-12 |
+| Git workflow | Owner granted standing permission to commit/push directly to `main` (prepush typecheck first; Turso DDL before schema code) | 2026-06-12 |
 
 ## User Feedback Summary
 
@@ -52,6 +58,7 @@ For full history, see SESSION-HISTORY.md.
 
 | Date | What Happened |
 |------|---------------|
+| 2026-06-12 | **NCQA Adaptation Plan created** (`.planning/NCQA-ADAPTATION-PLAN.md`, plan of record): 6 phases — taxonomy retheme, meetings overhaul (Groups/fuzzy attendance/multi-subject), stakeholder stance+leverage, Copilot-recap AI ingest, Outlook ICS daily briefing, backlog extras. Session docs made agent-agnostic (root `AGENTS.md`, updated Gemini start/end prompts, CLAUDE.md). Decisions D1–D9 pending user sign-off. |
 | 2026-02-28 | Conversation Participants — separate junction from "discussed", analytics drilldown updated. |
 | 2026-03-04 | Log Conversation fixes — default date stale closure, modal width expansion, resizable panels (35/65 split). |
 | 2026-03-05 | Timeout investigation — attempted unified endpoint, broke useAutoSave, reverted. |

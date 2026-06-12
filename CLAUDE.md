@@ -96,14 +96,21 @@ api/index.ts      # Vercel serverless entry point
 
 ## Current Status
 
-Phases 1-7 complete. Phase 7.5 (Security & Backup Hardening) complete — automated daily Vercel Blob backup, shared-password gate, verified restore, photo files in the manual backup ZIP; two desktop-only verifications deferred (live photo-ZIP CORS check, scratch-Turso restore). **Production Hardening Plan (Phases 0–2) complete** (`.planning/PRODUCTION-HARDENING-PLAN.md`) — Phase 2 (Tasks 15–18, 20–25: PWA caching/update, rate limiting, smaller body limit, input allow-listing, JSON-parse guards, dangling-ref scrub, CORS tightening, opt-in Sentry) merged to `main` 2026-06-04. Only standing follow-up: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel to activate error tracking. Phase 8 (Document Search) is next. See `.planning/ROADMAP.md` for details.
+**The app is being adapted for the owner's new role as Chief Medical Officer of NCQA** — from job-search CRM to executive stakeholder-management system. The active **plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`** (taxonomy retheme, multi-person/multi-subject meetings with Groups, stakeholder stance/leverage tracking, AI ingest of MS Copilot meeting recaps, Outlook-calendar daily briefing). Phase 1 is next; decisions D1–D9 at the top of that plan gate several tasks.
+
+Historical: ROADMAP Phases 1–7 + 7.5 (security/backup hardening) + Production Hardening Plan Phases 0–2 are complete. Old ROADMAP Phase 8 (Google Drive document search) is superseded by the adaptation plan's Task 6.2 (semantic search over meeting notes). Standing follow-up: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel to activate error tracking.
+
+**The owner has granted standing permission to commit/push directly to `main`** (auto-deploys to Vercel for testing). Run `npm run prepush` first; never push schema-touching code before the Turso DDL is applied (procedure at the top of the adaptation plan).
 
 ## Session Management
 
-When starting a new session, read `.planning/NEXT-SESSION-PROMPT.md` for:
-- What was done last session
-- What to work on next
-- Any open bugs
+The session protocol is **agent-agnostic** (Claude Code and Gemini/Antigravity both follow it; see root `AGENTS.md`).
+
+Session start, read in order:
+1. `.planning/NEXT-SESSION-PROMPT.md` — what was done last, what's next, open bugs
+2. `.planning/NCQA-ADAPTATION-PLAN.md` — active plan of record (the "How to use this document" section + the phase being worked)
+
+Session end: update the plan's per-task STATUS lines, rewrite `NEXT-SESSION-PROMPT.md`, record durable decisions in `.planning/STATE.md`, commit and push.
 
 For deeper context, `.planning/STATE.md` has active decisions and recent session history.
 Full historical session log is in `.planning/SESSION-HISTORY.md` (rarely needed).

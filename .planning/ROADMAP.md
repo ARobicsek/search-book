@@ -11,7 +11,8 @@
 | 5 | Recurring Tasks & Dashboard | ✅ Complete | Recurring actions, contact flagging, weekly activity dashboard, PWA |
 | 6 | Backup & Polish | ✅ Complete | Google Drive backup, UX polish, keyboard shortcuts, data cleanup |
 | 7 | iPhone PWA Access | ✅ Complete | Vercel deployment, Turso cloud DB, mobile access |
-| 8 | Document Search | 📋 Planned | Full-text search across linked Google Drive documents |
+| 8 | Document Search | ⛔ Superseded | Replaced by NCQA Adaptation Plan Task 6.2 (semantic search over meeting notes) |
+| 9 | NCQA Adaptation | 🔄 Active | App becomes the CMO stakeholder-management system — **see `.planning/NCQA-ADAPTATION-PLAN.md` (plan of record)** |
 
 ---
 
@@ -178,7 +179,13 @@
 
 ---
 
-## Phase 8: Document Search (Planned)
+## Phase 9: NCQA Adaptation (Active)
+
+The owner is now Chief Medical Officer of NCQA. The full phased plan — taxonomy retheme, meetings overhaul (groups, fuzzy attendance, multi-subject), stakeholder stance/leverage tracking, AI ingest of Copilot recaps, Outlook daily briefing — lives in **`.planning/NCQA-ADAPTATION-PLAN.md`**, which is the active plan of record. This roadmap is retained for historical phase criteria.
+
+---
+
+## Phase 8: Document Search (Superseded — see NCQA Adaptation Plan Task 6.2)
 
 ### Goals
 - Full-text search across linked Google Drive documents

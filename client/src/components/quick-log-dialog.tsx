@@ -80,10 +80,6 @@ interface PendingAttachment {
   size: number
 }
 
-function isImage(att: { mimeType?: string | null; url: string }) {
-  return (att.mimeType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(att.url)
-}
-
 function QuickLogDialog({
   open,
   onOpenChange,

@@ -190,7 +190,7 @@ Display name resolves `title → contact name → company → attendees descript
 - **Backup/restore must keep working:** add `ConversationTag` to the export/import table lists (server export AND browser-direct Turso path) + restore ordering.
 
 **Commit:** `feat(meetings): titles, org anchor, fuzzy attendees, participant notes, conversation tags`
-**STATUS:** Not started. ⚠️ Largest migration in the plan (contactId nullable rebuild). Backup first.
+**STATUS:** ✅ Code complete 2026-06-12 (commit `1b618e9`). Local SQLite migrated via `db push` (22 conversations preserved). Deviations: contactId FK keeps `onDelete: Cascade` (legacy delete behavior unchanged; new-style meetings usually have no anchor so they're unaffected); PUT junctions are replaced only when the key is present in the body; PUT never changes the anchor unless `contactId` is explicitly sent; `/conversations?contactId=` now also matches named participants. ⚠️ Turso table rebuild pending — do NOT push to main before it runs.
 
 ## Task 2.2 — Quick Log + full meeting editor
 
@@ -199,7 +199,7 @@ Display name resolves `title → contact name → company → attendees descript
 - Conversation cards show resolved display name + org chip + description.
 
 **Commit:** `feat(meetings): quick log dialog + full meeting editor`
-**STATUS:** Not started. Depends on 2.1.
+**STATUS:** ✅ Code complete 2026-06-12 (commit `b91376a`). Quick Log opens from a header button (all pages), the command palette, and the Meetings page; who-pickers sit behind a collapsed "Who was there" disclosure. New shared `TitleAutocomplete` component. Verified in-browser.
 
 ## Task 2.3 — Global Meetings page, series view, search coverage
 
@@ -208,7 +208,7 @@ Display name resolves `title → contact name → company → attendees descript
 - Global search (`server/src/routes/search.ts` + `/search` page): include conversation titles in matching and render meeting hits.
 
 **Commit:** `feat(meetings): global meetings page + title series view + search coverage`
-**STATUS:** Not started. Depends on 2.1.
+**STATUS:** ✅ Code complete 2026-06-12 (commit `b507f0e`). Implemented as a dedicated `GET /api/meetings` route (pagination envelope; series title matched case-insensitively exact; extra `id` param for single-meeting deep links from search). Meetings nav item added to the sidebar. Verified in-browser incl. series view.
 
 ## Task 2.4 — Contact takeaways + org meetings
 
@@ -216,7 +216,7 @@ Display name resolves `title → contact name → company → attendees descript
 - Company detail: meetings anchored to that org.
 
 **Commit:** `feat(meetings): per-contact takeaways timeline + org meeting list`
-**STATUS:** Not started. Depends on 2.1.
+**STATUS:** ✅ Code complete 2026-06-12 (commit `df9eb8a`). Takeaways card on the contact Overview tab; org meetings card on the company Overview tab (5 most recent + view-all link). Verified in-browser.
 
 ---
 

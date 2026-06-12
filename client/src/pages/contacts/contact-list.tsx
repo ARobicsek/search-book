@@ -435,7 +435,10 @@ export function ContactListPage() {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'updatedAt', desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [globalFilter, setGlobalFilter] = useState('')
+  // Seed the search box from a ?search= deep link (e.g. "show all" on /search)
+  const [globalFilter, setGlobalFilter] = useState(
+    () => new URLSearchParams(window.location.search).get('search') || ''
+  )
   const [ecosystemFilter, setEcosystemFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [lastOutreachFrom, setLastOutreachFrom] = useState<string>('')

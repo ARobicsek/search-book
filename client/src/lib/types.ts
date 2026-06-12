@@ -351,8 +351,28 @@ export interface EmploymentHistory {
 
 // ─── Search ────────────────────────────────────────────────
 
+/** Why a record matched: field name + snippet around the first match. */
+export interface SearchMatch {
+  field: string;
+  snippet: string;
+}
+
+export type SearchScope = 'people-profile' | 'people-notes' | 'orgs' | 'meetings' | 'actions' | 'ideas';
+export type SearchSort = 'relevance' | 'newest' | 'oldest' | 'alpha' | 'recent-contact';
+
 export interface SearchResult {
   query: string;
+  terms?: string[];
+  scopes?: SearchScope[];
+  sort?: SearchSort;
+  caseSensitive?: boolean;
+  totals?: {
+    contacts: number;
+    companies: number;
+    actions: number;
+    ideas: number;
+    conversations: number;
+  };
   contacts: ContactSearchResult[];
   companies: CompanySearchResult[];
   actions: ActionSearchResult[];
@@ -369,6 +389,7 @@ export interface ConversationSearchResult {
   displayName: string;
   contact?: { id: number; name: string } | null;
   company?: { id: number; name: string } | null;
+  matches?: SearchMatch[];
 }
 
 export interface RelatedCompany {
@@ -390,6 +411,7 @@ export interface ContactSearchResult {
   ecosystem: string;
   status: string;
   company?: { id: number; name: string } | null;
+  matches?: SearchMatch[];
   related?: {
     companies: RelatedCompany[];
     contacts: RelatedContact[];
@@ -405,6 +427,7 @@ export interface CompanySearchResult {
   industry: string | null;
   status: string;
   _count?: { contacts: number };
+  matches?: SearchMatch[];
   related?: {
     contacts: { id: number; name: string; title: string | null }[];
     actions: { id: number; title: string; completed: boolean }[];
@@ -421,6 +444,7 @@ export interface ActionSearchResult {
   dueDate: string | null;
   contact?: { id: number; name: string } | null;
   company?: { id: number; name: string } | null;
+  matches?: SearchMatch[];
 }
 
 export interface IdeaSearchResult {
@@ -428,5 +452,6 @@ export interface IdeaSearchResult {
   title: string;
   description: string | null;
   contacts?: { id: number; name: string }[];
-  companies?: { id: number; name: string }[]
+  companies?: { id: number; name: string }[];
+  matches?: SearchMatch[];
 }

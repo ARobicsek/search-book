@@ -213,6 +213,13 @@ export function CompanyListPage() {
   const [globalFilter, setGlobalFilter] = useLocalStorage<string>('companies_table_search', '')
   const [statusFilter, setStatusFilter] = useLocalStorage<string>('companies_table_status', 'all')
 
+  // A ?search= deep link (e.g. "show all" on /search) overrides the saved filter
+  useEffect(() => {
+    const urlSearch = new URLSearchParams(window.location.search).get('search')
+    if (urlSearch) setGlobalFilter(urlSearch)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     api
       .get<Company[]>('/companies')

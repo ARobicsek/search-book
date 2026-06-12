@@ -60,6 +60,7 @@ For full history, see SESSION-HISTORY.md.
 
 | Date | What Happened |
 |------|---------------|
+| 2026-06-12 | **Phase 1 built + deployed.** Taxonomy retheme (`08568e0`) + action direction/Waiting For (`71cd9b0`) on `main`; user ran the Turso migration in the web console (legacy ecosystem/status remaps + `Action.direction` column), verified clean. Discovered during impl: company `AWAITING_RESPONSE` status existed only client-side — added to eliminate set. Turso table names are PascalCase model names (`"Contact"`). |
 | 2026-06-12 | **NCQA Adaptation Plan created** (`.planning/NCQA-ADAPTATION-PLAN.md`, plan of record): 6 phases — taxonomy retheme, meetings overhaul (Groups/fuzzy attendance/multi-subject), stakeholder stance+leverage, Copilot-recap AI ingest, Outlook ICS daily briefing, backlog extras. Session docs made agent-agnostic (root `AGENTS.md`, updated Gemini start/end prompts, CLAUDE.md). Decisions D1–D9 pending user sign-off. |
 | 2026-02-28 | Conversation Participants — separate junction from "discussed", analytics drilldown updated. |
 | 2026-03-04 | Log Conversation fixes — default date stale closure, modal width expansion, resizable panels (35/65 split). |

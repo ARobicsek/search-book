@@ -19,14 +19,17 @@ Session-management docs were updated to make the protocol explicitly agent-agnos
 
 **Standing permission:** the user has authorized committing/pushing directly to `main` (auto-deploys to Vercel) so they can test. Typecheck + local smoke test first; never push schema-touching code before the Turso DDL is applied (procedure at the top of the adaptation plan).
 
-### What's Next — Build Phase 1 (decisions D1–D4 resolved 2026-06-12)
+### What's Next — Phase 2: Meetings overhaul
 
-The user answered D1–D4 (final taxonomies + the meetings redesign); the plan doc reflects them, including **exact migration SQL** in Tasks 1.1–1.3 (note: table names are PascalCase — `"Contact"`, `"Company"`, `"Action"`).
+**Phase 1 is COMPLETE and DEPLOYED (2026-06-12).** Commits `08568e0` (taxonomy: NCQA ecosystems, trimmed statuses with `'NONE'` blank sentinel, Organizations relabel) and `71cd9b0` (action `direction` + Waiting For view + dashboard card) are on `main`; the Turso data migration (legacy remaps + `ALTER TABLE "Action" ADD COLUMN direction`) was run by the user in the Turso console and verified clean (only valid values remain; all 223 actions `OWED_BY_ME`).
 
-1. **All Phase 1 tasks are unblocked but need Turso access** (data UPDATEs for 1.1–1.3; `ADD COLUMN` for 1.4). The user must be at their desktop (creds in local `server/.env`, temporarily uncommented) — batch all four statements into one migration moment, after a fresh backup.
-2. Code for Tasks 1.1–1.4 can be written and tested locally beforehand, but per standing rule do **not** push schema/taxonomy-dependent code to `main` until the Turso statements have run.
-3. **Phase 2 was redesigned per D4: NO Groups feature.** Recurring meetings are identified by repeated, autocompleted **titles** (matching Outlook event names, e.g. "Weekly VP meeting"), with a series view + title search. Read the revised Phase 2 design section before building. Task 2.1 still contains the riskiest migration (nullable `contactId` = table rebuild).
-4. Remaining open decisions: **D5–D9** (Copilot sample, API key, ICS availability, auth choice, policy check).
+Next: **Phase 2 (Tasks 2.1–2.4)** per the plan — title-based meeting series (autocomplete), optional contact anchor, org anchor, `attendeesDescription`, per-participant notes, `ConversationTag`, Quick Log dialog, global `/meetings` page.
+
+⚠️ **Task 2.1 contains the plan's riskiest migration**: making `Conversation.contactId` nullable requires a SQLite **table rebuild** on Turso (create new table → copy → drop → rename, in one transaction). Fresh backup immediately before; verify row counts after. The proven workflow from Phase 1: build + typecheck + client-build everything locally and commit to the session branch, hand the user exact SQL for the Turso web console (PascalCase table names, e.g. `"Conversation"`), wait for verification output, only then push to `main`.
+
+Also remember (Phase 1 lesson): new tables/columns must be added to **both** backup paths (server export in `server/src/routes/backup.ts` AND browser-direct list in `client/src/lib/backup.ts` `TABLES_PARENT_FIRST`) — `ConversationTag` will need this.
+
+Remaining open decisions: **D5–D9** (Copilot recap sample, `ANTHROPIC_API_KEY`, Outlook ICS availability, auth choice, NCQA policy check) — needed for Phases 3–5, not Phase 2.
 
 ### Carry-over items (pre-dating the adaptation plan, lower priority)
 

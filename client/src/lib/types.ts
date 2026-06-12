@@ -1,6 +1,6 @@
-export type Ecosystem = 'RECRUITER' | 'ROLODEX' | 'TARGET' | 'INFLUENCER' | 'ACADEMIA' | 'INTRO_SOURCE';
-export type ContactStatus = 'NEW' | 'RESEARCHING' | 'CONNECTED' | 'AWAITING_RESPONSE' | 'FOLLOW_UP_NEEDED' | 'LEAD_TO_PURSUE' | 'ON_HOLD' | 'CLOSED';
-export type CompanyStatus = 'RESEARCHING' | 'ACTIVE_TARGET' | 'IN_DISCUSSIONS' | 'AWAITING_RESPONSE' | 'CONNECTED' | 'ON_HOLD' | 'CLOSED';
+export type Ecosystem = 'PAYER' | 'PROVIDER' | 'GOVERNMENT' | 'ACADEMIA' | 'HEALTH_TECH' | 'POLICY' | 'MEDIA' | 'FUNDER' | 'NCQA' | 'NETWORK' | 'RECRUITER';
+export type ContactStatus = 'NONE' | 'RESEARCHING' | 'CONNECTED' | 'AWAITING_RESPONSE' | 'FOLLOW_UP_NEEDED';
+export type CompanyStatus = 'NONE' | 'RESEARCHING' | 'ENGAGED' | 'PARTNER' | 'CONNECTED';
 
 export interface Contact {
   id: number;
@@ -65,33 +65,33 @@ export interface Company {
 }
 
 export const ECOSYSTEM_OPTIONS: { value: Ecosystem; label: string }[] = [
-  { value: 'RECRUITER', label: 'Recruiter' },
-  { value: 'ROLODEX', label: 'Rolodex' },
-  { value: 'TARGET', label: 'Target' },
-  { value: 'INFLUENCER', label: 'Influencer' },
+  { value: 'PAYER', label: 'Payer / Health Plan' },
+  { value: 'PROVIDER', label: 'Provider / Health System' },
+  { value: 'GOVERNMENT', label: 'Government' },
   { value: 'ACADEMIA', label: 'Academia' },
-  { value: 'INTRO_SOURCE', label: 'Intro Source' },
+  { value: 'HEALTH_TECH', label: 'Health Tech / Vendor' },
+  { value: 'POLICY', label: 'Policy / Think Tank' },
+  { value: 'MEDIA', label: 'Media / Press' },
+  { value: 'FUNDER', label: 'Funder / Philanthropy' },
+  { value: 'NCQA', label: 'NCQA Internal' },
+  { value: 'NETWORK', label: 'General Network' },
+  { value: 'RECRUITER', label: 'Recruiter' },
 ];
 
 export const CONTACT_STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
-  { value: 'NEW', label: 'New' },
+  { value: 'NONE', label: '—' },
   { value: 'RESEARCHING', label: 'Researching' },
   { value: 'CONNECTED', label: 'Connected' },
   { value: 'AWAITING_RESPONSE', label: 'Awaiting Response' },
   { value: 'FOLLOW_UP_NEEDED', label: 'Follow-Up Needed' },
-  { value: 'LEAD_TO_PURSUE', label: 'Lead to Pursue' },
-  { value: 'ON_HOLD', label: 'On Hold' },
-  { value: 'CLOSED', label: 'Closed' },
 ];
 
 export const COMPANY_STATUS_OPTIONS: { value: CompanyStatus; label: string }[] = [
+  { value: 'NONE', label: '—' },
   { value: 'RESEARCHING', label: 'Researching' },
-  { value: 'ACTIVE_TARGET', label: 'Active Target' },
-  { value: 'IN_DISCUSSIONS', label: 'In Discussions' },
-  { value: 'AWAITING_RESPONSE', label: 'Awaiting Response' },
+  { value: 'ENGAGED', label: 'Engaged' },
+  { value: 'PARTNER', label: 'Partner' },
   { value: 'CONNECTED', label: 'Connected' },
-  { value: 'ON_HOLD', label: 'On Hold' },
-  { value: 'CLOSED', label: 'Closed' },
 ];
 
 // ─── Actions ─────────────────────────────────────────────────

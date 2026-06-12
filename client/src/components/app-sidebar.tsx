@@ -15,7 +15,7 @@ import {
 const mainNav = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard, exact: true },
   { title: 'Contacts', url: '/contacts', icon: BookUser },
-  { title: 'Companies', url: '/companies', icon: Building2 },
+  { title: 'Organizations', url: '/companies', icon: Building2 },
   { title: 'Actions', url: '/actions', icon: ListTodo },
   { title: 'Calendar', url: '/calendar', icon: CalendarDays },
   { title: 'Ideas', url: '/ideas', icon: Lightbulb },

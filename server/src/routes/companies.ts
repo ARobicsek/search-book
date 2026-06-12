@@ -247,7 +247,7 @@ router.post('/:id/contacts', async (req: Request, res: Response) => {
         data: {
           name: contactName.trim(),
           status: 'CONNECTED',
-          ecosystem: 'ROLODEX'
+          ecosystem: 'NETWORK'
         }
       });
       targetContactId = newContact.id;

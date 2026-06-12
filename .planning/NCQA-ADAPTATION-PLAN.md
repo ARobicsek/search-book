@@ -120,8 +120,9 @@ WHERE status IN ('NEW','LEAD_TO_PURSUE','ON_HOLD','CLOSED');
 ```sql
 UPDATE "Company" SET status='ENGAGED' WHERE status='IN_DISCUSSIONS';
 UPDATE "Company" SET status='PARTNER' WHERE status='ACTIVE_TARGET';
-UPDATE "Company" SET status='NONE'    WHERE status IN ('ON_HOLD','CLOSED');
+UPDATE "Company" SET status='NONE'    WHERE status IN ('ON_HOLD','CLOSED','AWAITING_RESPONSE');
 ```
+(`AWAITING_RESPONSE` existed as a company status in the client UI even though the schema comment omitted it — included in the eliminate set.)
 `CompanyStatusHistory` left verbatim.
 
 Also: UI-only relabel of nav/headers from "Companies" to "Organizations" (routes, API, schema keep `companies` — pure label change, zero migration).

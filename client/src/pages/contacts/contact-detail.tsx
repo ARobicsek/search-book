@@ -116,23 +116,25 @@ const actionPriorityColors: Record<string, string> = {
 }
 
 const ecosystemColors: Record<string, string> = {
-  RECRUITER: 'bg-blue-100 text-blue-800',
-  ROLODEX: 'bg-purple-100 text-purple-800',
-  TARGET: 'bg-green-100 text-green-800',
-  INFLUENCER: 'bg-amber-100 text-amber-800',
+  PAYER: 'bg-blue-100 text-blue-800',
+  PROVIDER: 'bg-green-100 text-green-800',
+  GOVERNMENT: 'bg-red-100 text-red-800',
   ACADEMIA: 'bg-rose-100 text-rose-800',
-  INTRO_SOURCE: 'bg-cyan-100 text-cyan-800',
+  HEALTH_TECH: 'bg-cyan-100 text-cyan-800',
+  POLICY: 'bg-violet-100 text-violet-800',
+  MEDIA: 'bg-pink-100 text-pink-800',
+  FUNDER: 'bg-emerald-100 text-emerald-800',
+  NCQA: 'bg-indigo-100 text-indigo-800',
+  NETWORK: 'bg-purple-100 text-purple-800',
+  RECRUITER: 'bg-amber-100 text-amber-800',
 }
 
 const statusColors: Record<string, string> = {
-  NEW: 'bg-slate-100 text-slate-700',
+  NONE: 'bg-slate-100 text-slate-400',
   RESEARCHING: 'bg-blue-100 text-blue-700',
   CONNECTED: 'bg-green-100 text-green-700',
   AWAITING_RESPONSE: 'bg-yellow-100 text-yellow-700',
   FOLLOW_UP_NEEDED: 'bg-orange-100 text-orange-700',
-  LEAD_TO_PURSUE: 'bg-pink-100 text-pink-700',
-  ON_HOLD: 'bg-gray-100 text-gray-500',
-  CLOSED: 'bg-red-100 text-red-700',
 }
 
 const conversationTypeColors: Record<string, string> = {
@@ -1351,7 +1353,7 @@ function ConversationsTab({
           const newContact = await api.post<{ id: number; name: string }>('/contacts', {
             name: val,
             status: 'CONNECTED',
-            ecosystem: 'ROLODEX',
+            ecosystem: 'NETWORK',
           })
           resolvedParticipants.push(newContact.id.toString())
         } catch {
@@ -1371,7 +1373,7 @@ function ConversationsTab({
           const newContact = await api.post<{ id: number; name: string }>('/contacts', {
             name: val,
             status: 'CONNECTED',
-            ecosystem: 'ROLODEX',
+            ecosystem: 'NETWORK',
           })
           resolvedContacts.push(newContact.id.toString())
         } catch {
@@ -2257,7 +2259,7 @@ function RelationshipsTab({
         const newContact = await api.post<{ id: number; name: string }>('/contacts', {
           name: newContactName,
           status: 'CONNECTED',
-          ecosystem: 'ROLODEX',
+          ecosystem: 'NETWORK',
         })
         otherContactId = newContact.id.toString()
       } catch {

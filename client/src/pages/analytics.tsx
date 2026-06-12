@@ -329,12 +329,12 @@ export function AnalyticsPage() {
 
             <Card className="flex flex-col justify-between">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Companies in Discussions</CardTitle>
+                <CardTitle className="text-sm font-medium">Engaged Organizations</CardTitle>
                 <Building2 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overview?.inDiscussionsCompaniesCount ?? 0}</div>
-                <div className="text-xs text-muted-foreground mt-1">Status: In Discussions</div>
+                <div className="text-xs text-muted-foreground mt-1">Status: Engaged</div>
               </CardContent>
             </Card>
 
@@ -501,7 +501,7 @@ export function AnalyticsPage() {
                 </CardTitle>
                 <div className="text-sm text-muted-foreground space-y-1 pt-2">
                   <div className="flex justify-between border-b pb-1"><span>Added:</span> <strong>{companyTotals.added}</strong></div>
-                  <div className="flex justify-between pb-1"><span>Added/Changed to 'In Discussions':</span> <strong>{companyTotals.toInDiscussions}</strong></div>
+                  <div className="flex justify-between pb-1"><span>Moved to 'Engaged':</span> <strong>{companyTotals.toInDiscussions}</strong></div>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 min-h-[300px]">
@@ -513,7 +513,7 @@ export function AnalyticsPage() {
                     <Tooltip labelFormatter={formatDate} contentStyle={{ backgroundColor: 'hsl(var(--background))', borderRadius: '6px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px' }} />
                     <Bar name="Added" dataKey="added" fill={COLORS.Added} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.added > 0) { setDrilldownConfig({ type: 'companies', metric: 'added', date: d.date, title: 'Companies Added' }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
-                    <Bar name="To 'In Discussions'" dataKey="toInDiscussions" fill={COLORS.ToInDiscussions} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.toInDiscussions > 0) { setDrilldownConfig({ type: 'companies', metric: 'toInDiscussions', date: d.date, title: "Companies Moved to 'In Discussions'" }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
+                    <Bar name="To 'Engaged'" dataKey="toInDiscussions" fill={COLORS.ToInDiscussions} radius={[2, 2, 0, 0]} onClick={(d: any) => { if (d?.date && d.toInDiscussions > 0) { setDrilldownConfig({ type: 'companies', metric: 'toInDiscussions', date: d.date, title: "Organizations Moved to 'Engaged'" }); setDrilldownOpen(true); } }} className="cursor-pointer hover:opacity-80 transition-opacity" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>

@@ -146,9 +146,9 @@ router.post('/', async (req: Request, res: Response) => {
         });
       }
 
-      // Auto-update contact status to CONNECTED if currently NEW
+      // Auto-update contact status to CONNECTED if currently blank
       const relatedContact = await tx.contact.findUnique({ where: { id: contactId }, select: { status: true } });
-      if (relatedContact && relatedContact.status === 'NEW') {
+      if (relatedContact && relatedContact.status === 'NONE') {
         await tx.contact.update({ where: { id: contactId }, data: { status: 'CONNECTED' } });
       }
 

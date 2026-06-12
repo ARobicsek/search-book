@@ -62,7 +62,7 @@ router.get('/overview', async (req: Request, res: Response) => {
         WHERE completed = 1 AND completedDate >= ${startDateStr} AND completedDate <= ${endDateStr}
         GROUP BY completedDate
       `,
-      prisma.company.count({ where: { status: 'IN_DISCUSSIONS' } }),
+      prisma.company.count({ where: { status: 'ENGAGED' } }),
     ]);
 
     const dates = getDatesInRange(startDateStr, endDateStr);
@@ -248,7 +248,7 @@ router.get('/companies-metrics', async (req: Request, res: Response) => {
         select: { createdAt: true },
       }),
       prisma.companyStatusHistory.findMany({
-        where: { createdAt: { gte: startDate, lte: endDate }, newStatus: 'IN_DISCUSSIONS' },
+        where: { createdAt: { gte: startDate, lte: endDate }, newStatus: 'ENGAGED' },
         select: { createdAt: true },
       }),
     ]);
@@ -457,7 +457,7 @@ router.get('/drilldown/companies', async (req: Request, res: Response) => {
       const historyRecords = await prisma.companyStatusHistory.findMany({
         where: {
           createdAt: { gte: startDate, lte: endDate },
-          newStatus: 'IN_DISCUSSIONS',
+          newStatus: 'ENGAGED',
         },
         include: {
           company: {

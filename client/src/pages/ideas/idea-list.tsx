@@ -165,7 +165,7 @@ export function IdeaListPage() {
             const newContact = await api.post<Contact>('/contacts', {
               name: val.trim(),
               status: 'CONNECTED',
-              ecosystem: 'ROLODEX',
+              ecosystem: 'NETWORK',
             })
             contactIds.push(newContact.id)
             setAllContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }])

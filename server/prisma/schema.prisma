@@ -19,7 +19,7 @@ model Contact {
   companyName       String?
   additionalCompanyIds String?  // JSON array: [2, 5, 7] - IDs of additional current companies
   connectedCompanyIds  String?  // JSON array: [2, 5, 7] - IDs of connected companies
-  ecosystem         String   @default("RECRUITER") // RECRUITER, ROLODEX, TARGET, INFLUENCER, ACADEMIA, INTRO_SOURCE
+  ecosystem         String   @default("RECRUITER") // PAYER, PROVIDER, GOVERNMENT, ACADEMIA, HEALTH_TECH, POLICY, MEDIA, FUNDER, NCQA, NETWORK, RECRUITER (DDL default kept as RECRUITER to avoid a table rebuild; client always sends explicitly, defaulting to NETWORK)
   email             String?
   additionalEmails  String?  // JSON array: ["email2@x.com", "email3@x.com"]
   phone             String?
@@ -27,7 +27,7 @@ model Contact {
   location          String?
   photoUrl          String?
   photoFile         String?
-  status            String   @default("NEW") // NEW, RESEARCHING, CONNECTED, AWAITING_RESPONSE, FOLLOW_UP_NEEDED, LEAD_TO_PURSUE, ON_HOLD, CLOSED
+  status            String   @default("NEW") // NONE (blank), RESEARCHING, CONNECTED, AWAITING_RESPONSE, FOLLOW_UP_NEEDED (DDL default kept as NEW to avoid a table rebuild; client always sends explicitly)
   howConnected      String?
   referredById      Int?
   referredBy        Contact?  @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
@@ -66,7 +66,7 @@ model Company {
   website    String?
   hqLocation String?
   notes      String?
-  status     String   @default("RESEARCHING") // RESEARCHING, ACTIVE_TARGET, IN_DISCUSSIONS, CONNECTED, ON_HOLD, CLOSED
+  status     String   @default("RESEARCHING") // NONE (blank), RESEARCHING, ENGAGED, PARTNER, CONNECTED
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

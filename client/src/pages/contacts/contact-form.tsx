@@ -71,7 +71,7 @@ const emptyForm: FormData = {
   title: '',
   roleDescription: '',
   companyEntries: [],
-  ecosystem: 'ROLODEX',
+  ecosystem: 'NETWORK',
   status: 'CONNECTED',
   emails: [''],
   phone: '',
@@ -487,7 +487,7 @@ export function ContactFormPage() {
           const newReferrer = await api.post<Contact>('/contacts', {
             name: (payload as { referredByName?: string | null }).referredByName,
             status: 'CONNECTED',
-            ecosystem: 'ROLODEX',
+            ecosystem: 'NETWORK',
           })
           payload.referredById = newReferrer.id
         } catch {
@@ -509,7 +509,7 @@ export function ContactFormPage() {
             const newContact = await api.post<Contact>('/contacts', {
               name: trimmedName,
               status: 'CONNECTED',
-              ecosystem: 'ROLODEX',
+              ecosystem: 'NETWORK',
             })
             setAllContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }])
           } catch {

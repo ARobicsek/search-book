@@ -103,20 +103,34 @@ const HEADER_ALIASES: Record<string, string> = {
   'ecosystem': 'ecosystem',
 }
 
-// Valid ecosystem values
+// Valid ecosystem values (legacy job-search terms map into the NCQA taxonomy)
 const ECOSYSTEM_MAP: Record<string, string> = {
-  recruiter: 'RECRUITER',
-  rolodex: 'ROLODEX',
-  target: 'TARGET',
-  influencer: 'INFLUENCER',
+  payer: 'PAYER',
+  'health plan': 'PAYER',
+  provider: 'PROVIDER',
+  'health system': 'PROVIDER',
+  government: 'GOVERNMENT',
   academia: 'ACADEMIA',
-  'intro source': 'INTRO_SOURCE',
-  intro_source: 'INTRO_SOURCE',
+  'health tech': 'HEALTH_TECH',
+  health_tech: 'HEALTH_TECH',
+  vendor: 'HEALTH_TECH',
+  policy: 'POLICY',
+  media: 'MEDIA',
+  press: 'MEDIA',
+  funder: 'FUNDER',
+  ncqa: 'NCQA',
+  network: 'NETWORK',
+  recruiter: 'RECRUITER',
+  // legacy terms
+  rolodex: 'NETWORK',
+  target: 'NETWORK',
+  influencer: 'NETWORK',
+  'intro source': 'NETWORK',
+  intro_source: 'NETWORK',
 }
 
-// Valid status values
+// Valid status values (eliminated legacy statuses map to NONE = blank)
 const STATUS_MAP: Record<string, string> = {
-  new: 'NEW',
   researching: 'RESEARCHING',
   research: 'RESEARCHING',
   connected: 'CONNECTED',
@@ -124,13 +138,15 @@ const STATUS_MAP: Record<string, string> = {
   awaiting_response: 'AWAITING_RESPONSE',
   'follow up needed': 'FOLLOW_UP_NEEDED',
   follow_up_needed: 'FOLLOW_UP_NEEDED',
-  'lead to pursue': 'LEAD_TO_PURSUE',
-  lead_to_pursue: 'LEAD_TO_PURSUE',
-  'warm lead': 'LEAD_TO_PURSUE', // backwards compatibility
-  warm_lead: 'LEAD_TO_PURSUE', // backwards compatibility
-  'on hold': 'ON_HOLD',
-  on_hold: 'ON_HOLD',
-  closed: 'CLOSED',
+  // legacy terms
+  new: 'NONE',
+  'lead to pursue': 'NONE',
+  lead_to_pursue: 'NONE',
+  'warm lead': 'NONE',
+  warm_lead: 'NONE',
+  'on hold': 'NONE',
+  on_hold: 'NONE',
+  closed: 'NONE',
 }
 
 interface CsvImportDialogProps {
@@ -291,7 +307,7 @@ export function CsvImportDialog({
 
       // Handle ecosystem and status
       if (rawData.ecosystem) {
-        contact.ecosystem = ECOSYSTEM_MAP[rawData.ecosystem.toLowerCase()] || 'ROLODEX'
+        contact.ecosystem = ECOSYSTEM_MAP[rawData.ecosystem.toLowerCase()] || 'NETWORK'
       }
       if (rawData.status) {
         contact.status = STATUS_MAP[rawData.status.toLowerCase()] || 'CONNECTED'
@@ -336,7 +352,7 @@ export function CsvImportDialog({
 
       // Build the contact object
       const contact: Record<string, string | number | null> = {
-        ecosystem: 'ROLODEX',
+        ecosystem: 'NETWORK',
         status: 'CONNECTED',
       }
 
@@ -364,7 +380,7 @@ export function CsvImportDialog({
 
       // Handle ecosystem and status
       if (rawData.ecosystem) {
-        contact.ecosystem = ECOSYSTEM_MAP[rawData.ecosystem.toLowerCase()] || 'ROLODEX'
+        contact.ecosystem = ECOSYSTEM_MAP[rawData.ecosystem.toLowerCase()] || 'NETWORK'
       }
       if (rawData.status) {
         contact.status = STATUS_MAP[rawData.status.toLowerCase()] || 'CONNECTED'
@@ -592,7 +608,7 @@ export function CsvImportDialog({
                           <TableCell className="font-medium">{contact.name || '—'}</TableCell>
                           <TableCell>{contact.title || '—'}</TableCell>
                           <TableCell>{contact.companyName || '—'}</TableCell>
-                          <TableCell>{contact.ecosystem || 'ROLODEX'}</TableCell>
+                          <TableCell>{contact.ecosystem || 'NETWORK'}</TableCell>
                           <TableCell>{contact.status || 'CONNECTED'}</TableCell>
                         </TableRow>
                       ))}

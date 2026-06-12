@@ -230,7 +230,7 @@ export function ActionFormPage() {
             const newContact = await api.post<Contact>('/contacts', {
               name: idOrName,
               status: 'CONNECTED',
-              ecosystem: 'ROLODEX',
+              ecosystem: 'NETWORK',
             })
             finalContactIds.push(newContact.id)
             // Update local state to prevent re-creation if staying on page

@@ -96,7 +96,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
 
   // Quick-add form states
   const [contactName, setContactName] = useState('')
-  const [contactEcosystem, setContactEcosystem] = useState('ROLODEX')
+  const [contactEcosystem, setContactEcosystem] = useState('NETWORK')
   const [actionTitle, setActionTitle] = useState('')
   const [actionType, setActionType] = useState('OTHER')
   const [actionPriority, setActionPriority] = useState('MEDIUM')
@@ -132,7 +132,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
 
   function resetForms() {
     setContactName('')
-    setContactEcosystem('ROLODEX')
+    setContactEcosystem('NETWORK')
     setActionTitle('')
     setActionType('OTHER')
     setActionPriority('MEDIUM')
@@ -401,7 +401,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
             )}
 
             {searchResults.companies.length > 0 && (
-              <CommandGroup heading="Companies">
+              <CommandGroup heading="Organizations">
                 {searchResults.companies.map((c) => (
                   <CommandItem key={`search-company-${c.id}`} onSelect={() => { close(); navigate(`/companies/${c.id}`) }}>
                     <Building2 className="mr-2 h-4 w-4" />

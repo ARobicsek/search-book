@@ -10,9 +10,10 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { api } from '@/lib/api'
+import { useQuickLog } from '@/components/quick-log-dialog'
 import type { Contact, Action, Idea, SearchResult } from '@/lib/types'
 import { toast } from 'sonner'
-import { BookUser, Building2, ListTodo, Lightbulb, Search, Loader2 } from 'lucide-react'
+import { BookUser, Building2, ListTodo, Lightbulb, Search, Loader2, MessageSquarePlus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -87,6 +88,7 @@ export function CommandPalette() {
 
 function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
   const navigate = useNavigate()
+  const quickLog = useQuickLog()
   const [mode, setMode] = useState<Mode>('search')
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
@@ -371,6 +373,10 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
             <CommandEmpty>Type to search...</CommandEmpty>
 
             <CommandGroup>
+              <CommandItem onSelect={() => { close(); quickLog.open() }}>
+                <MessageSquarePlus className="mr-2 h-4 w-4" />
+                <span>Log Meeting</span>
+              </CommandItem>
               <CommandItem onSelect={() => { close(); navigate('/search') }}>
                 <Search className="mr-2 h-4 w-4" />
                 <span>Global Search</span>

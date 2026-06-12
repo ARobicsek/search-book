@@ -58,6 +58,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
+import { TitleAutocomplete } from '@/components/title-autocomplete'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
@@ -411,6 +412,11 @@ export function ContactDetailPage() {
   const companyOptions: ComboboxOption[] = allCompanies.map((c) => ({
     value: c.id.toString(),
     label: c.name,
+  }))
+
+  const tagOptions: ComboboxOption[] = allTags.map((t) => ({
+    value: t.id.toString(),
+    label: t.name,
   }))
 
   return (
@@ -1067,6 +1073,7 @@ export function ContactDetailPage() {
             prepNotes={prepNotes}
             contactOptions={contactOptions}
             companyOptions={companyOptions}
+            tagOptions={tagOptions}
             onRefresh={loadData}
           />
         </TabsContent>
@@ -1131,12 +1138,32 @@ interface LinkEntry {
   title: string
 }
 
+type ConversationForm = {
+  title: string
+  companyId: string            // numeric string = existing org; free text = create on save
+  attendeesDescription: string
+  date: string
+  datePrecision: DatePrecision
+  type: ConversationType
+  summary: string
+  notes: string
+  nextSteps: string
+  participantIds: string[]     // numeric strings = existing contacts; free text = create on save
+  participantNotes: Record<string, string>  // keyed by participantIds value
+  tagIds: string[]             // numeric strings = existing tags; free text = create on save
+  contactsDiscussed: string[]
+  companiesDiscussed: string[]
+  actions: ActionFormEntry[]
+  links: LinkEntry[]
+}
+
 function ConversationsTab({
   contactId,
   conversations,
   prepNotes,
   contactOptions,
   companyOptions,
+  tagOptions,
   onRefresh,
 }: {
   contactId: number
@@ -1144,6 +1171,7 @@ function ConversationsTab({
   prepNotes: PrepNote[]
   contactOptions: ComboboxOption[]
   companyOptions: ComboboxOption[]
+  tagOptions: ComboboxOption[]
   onRefresh: () => void
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -1163,6 +1191,12 @@ function ConversationsTab({
     setLocalCompanyOptions(companyOptions)
   }, [contactOptions, companyOptions])
 
+  // Previously used meeting titles for the series autocomplete (D4)
+  const [knownTitles, setKnownTitles] = useState<string[]>([])
+  useEffect(() => {
+    api.get<string[]>('/conversations/titles').then(setKnownTitles).catch(() => { })
+  }, [])
+
   // Track which conversation IDs have pending edit drafts in localStorage
   const [editDrafts, setEditDrafts] = useState<Set<number>>(new Set())
   useEffect(() => {
@@ -1175,24 +1209,13 @@ function ConversationsTab({
     setEditDrafts(drafts)
   }, [conversations])
 
-  type ConversationForm = {
-    date: string
-    datePrecision: DatePrecision
-    type: ConversationType
-    summary: string
-    notes: string
-    nextSteps: string
-    participantIds: string[]
-    contactsDiscussed: string[]
-    companiesDiscussed: string[]
-    actions: ActionFormEntry[]
-    links: LinkEntry[]
-  }
-
   // Draft auto-save for NEW conversations
   const draftKey = `draft_conversation_${contactId}`
 
   const getEmptyForm = (): ConversationForm => ({
+    title: '',
+    companyId: '',
+    attendeesDescription: '',
     date: new Date().toLocaleDateString('en-CA'),
     datePrecision: 'DAY',
     type: 'VIDEO_CALL',
@@ -1200,6 +1223,8 @@ function ConversationsTab({
     notes: '',
     nextSteps: '',
     participantIds: [],
+    participantNotes: {},
+    tagIds: [],
     contactsDiscussed: [],
     companiesDiscussed: [],
     actions: [{ ...emptyAction }],
@@ -1219,7 +1244,8 @@ function ConversationsTab({
         try {
           const parsed = JSON.parse(saved)
           // Check if it has any meaningful content
-          const hasContent = parsed.summary || parsed.notes || parsed.nextSteps ||
+          const hasContent = parsed.title || parsed.attendeesDescription || parsed.companyId ||
+            parsed.summary || parsed.notes || parsed.nextSteps ||
             parsed.contactsDiscussed.length > 0 || parsed.companiesDiscussed.length > 0 ||
             parsed.actions.some((a: any) => a.title) || parsed.links.length > 0
           setHasDraft(!!hasContent)
@@ -1259,7 +1285,14 @@ function ConversationsTab({
     setLocalContactOptions(contactOptions)
     setLocalCompanyOptions(companyOptions)
     // Server version — always used as originalForm for dirty detection and Cancel revert
+    const participantNotes: Record<string, string> = {}
+    for (const p of conv.participants || []) {
+      if (p.note) participantNotes[p.contact.id.toString()] = p.note
+    }
     const serverForm: ConversationForm = {
+      title: conv.title || '',
+      companyId: conv.companyId?.toString() || '',
+      attendeesDescription: conv.attendeesDescription || '',
       date: conv.date,
       datePrecision: conv.datePrecision as DatePrecision,
       type: conv.type as ConversationType,
@@ -1267,6 +1300,8 @@ function ConversationsTab({
       notes: conv.notes || '',
       nextSteps: conv.nextSteps || '',
       participantIds: conv.participants?.map((p) => p.contact.id.toString()) || [],
+      participantNotes,
+      tagIds: conv.tags?.map((t) => t.tag.id.toString()) || [],
       contactsDiscussed: conv.contactsDiscussed.map((cd) => cd.contact.id.toString()),
       companiesDiscussed: conv.companiesDiscussed.map((cd) => cd.company.id.toString()),
       actions: [{ ...emptyAction }],
@@ -1292,32 +1327,40 @@ function ConversationsTab({
   const handleAutoSave = useCallback(async (data: ConversationForm) => {
     if (!editId) return
 
-    // Only include existing contact/company IDs (numeric strings only)
-    const existingParticipantIds = data.participantIds
+    // Only include existing contact/company/tag IDs (numeric strings only)
+    const existingParticipants = data.participantIds
       .filter((val) => /^\d+$/.test(val))
-      .map(Number)
+      .map((val) => ({ contactId: Number(val), note: data.participantNotes[val]?.trim() || null }))
     const existingContactIds = data.contactsDiscussed
       .filter((val) => /^\d+$/.test(val))
       .map(Number)
     const existingCompanyIds = data.companiesDiscussed
       .filter((val) => /^\d+$/.test(val))
       .map(Number)
+    const existingTagIds = data.tagIds
+      .filter((val) => /^\d+$/.test(val))
+      .map(Number)
 
+    // Deliberately NO contactId: the meeting may be anchored to another contact
+    // (or to none) — auto-save from this page must never re-anchor it.
     const payload = {
-      contactId,
+      title: data.title.trim() || null,
+      companyId: /^\d+$/.test(data.companyId) ? Number(data.companyId) : null,
+      attendeesDescription: data.attendeesDescription.trim() || null,
       date: data.date,
       datePrecision: data.datePrecision,
       type: data.type,
       summary: data.summary.trim() || null,
       notes: data.notes.trim() || null,
       nextSteps: data.nextSteps.trim() || null,
-      participantIds: existingParticipantIds,
+      participants: existingParticipants,
       contactsDiscussed: existingContactIds,
       companiesDiscussed: existingCompanyIds,
+      tagIds: existingTagIds,
       // Note: actions and links are NOT auto-saved - they save on explicit submit
     }
     await api.put(`/conversations/${editId}`, payload)
-  }, [editId, contactId])
+  }, [editId])
 
 
   // Save immediately on any change (synchronous)
@@ -1344,10 +1387,12 @@ function ConversationsTab({
   })
 
   async function resolveNewEntries() {
-    const resolvedParticipants: string[] = []
+    // Participants carry their per-person note through resolution
+    const resolvedParticipants: { contactId: number; note: string | null }[] = []
     for (const val of form.participantIds) {
+      const note = form.participantNotes[val]?.trim() || null
       if (/^\d+$/.test(val)) {
-        resolvedParticipants.push(val)
+        resolvedParticipants.push({ contactId: Number(val), note })
       } else {
         try {
           const newContact = await api.post<{ id: number; name: string }>('/contacts', {
@@ -1355,9 +1400,48 @@ function ConversationsTab({
             status: 'CONNECTED',
             ecosystem: 'NETWORK',
           })
-          resolvedParticipants.push(newContact.id.toString())
+          resolvedParticipants.push({ contactId: newContact.id, note })
         } catch {
           toast.error(`Failed to create contact "${val}"`)
+        }
+      }
+    }
+
+    // Resolve the org anchor (free text creates a new company)
+    let resolvedCompanyAnchor: number | null = null
+    if (form.companyId) {
+      if (/^\d+$/.test(form.companyId)) {
+        resolvedCompanyAnchor = Number(form.companyId)
+      } else {
+        try {
+          const newCompany = await api.post<{ id: number; name: string }>('/companies', {
+            name: form.companyId,
+          })
+          resolvedCompanyAnchor = newCompany.id
+        } catch {
+          toast.error(`Failed to create company "${form.companyId}"`)
+        }
+      }
+    }
+
+    // Resolve tags (free text creates a new tag; 409 = exists, look it up)
+    const resolvedTagIds: number[] = []
+    for (const val of form.tagIds) {
+      if (/^\d+$/.test(val)) {
+        resolvedTagIds.push(Number(val))
+        continue
+      }
+      try {
+        const newTag = await api.post<{ id: number }>('/tags', { name: val })
+        resolvedTagIds.push(newTag.id)
+      } catch {
+        try {
+          const all = await api.get<Tag[]>('/tags')
+          const found = all.find((t) => t.name.toLowerCase() === val.toLowerCase())
+          if (found) resolvedTagIds.push(found.id)
+          else toast.error(`Failed to create tag "${val}"`)
+        } catch {
+          toast.error(`Failed to create tag "${val}"`)
         }
       }
     }
@@ -1399,7 +1483,7 @@ function ConversationsTab({
       }
     }
 
-    return { resolvedParticipants, resolvedContacts, resolvedCompanies }
+    return { resolvedParticipants, resolvedContacts, resolvedCompanies, resolvedCompanyAnchor, resolvedTagIds }
   }
 
   async function handleSubmit() {
@@ -1411,19 +1495,28 @@ function ConversationsTab({
     autoSave.cancel()
     setSaving(true)
     try {
-      const { resolvedParticipants, resolvedContacts, resolvedCompanies } = await resolveNewEntries()
+      const { resolvedParticipants, resolvedContacts, resolvedCompanies, resolvedCompanyAnchor, resolvedTagIds } = await resolveNewEntries()
 
       const payload: Record<string, unknown> = {
-        contactId,
+        title: form.title.trim() || null,
+        companyId: resolvedCompanyAnchor,
+        attendeesDescription: form.attendeesDescription.trim() || null,
         date: form.date,
         datePrecision: form.datePrecision,
         type: form.type,
         summary: form.summary.trim() || null,
         notes: form.notes.trim() || null,
         nextSteps: form.nextSteps.trim() || null,
-        participantIds: resolvedParticipants.map(Number),
+        participants: resolvedParticipants,
         contactsDiscussed: resolvedContacts.map(Number),
         companiesDiscussed: resolvedCompanies.map(Number),
+        tagIds: resolvedTagIds,
+      }
+      // Creating from a contact page anchors to that contact (the classic 1:1 case).
+      // Edits never send contactId so they can't re-anchor a meeting (it may be
+      // anchored to another contact, or be a title-only series entry).
+      if (!editId) {
+        payload.contactId = contactId
       }
 
       // Multiple actions support (works for both create and edit)
@@ -1625,8 +1718,14 @@ function ConversationsTab({
                         </span>
                       )}
                     </div>
+                    {conv.title && (
+                      <p className="text-sm font-semibold">{conv.title}</p>
+                    )}
                     {conv.summary && (
                       <p className="text-sm font-medium">{conv.summary}</p>
+                    )}
+                    {conv.attendeesDescription && (
+                      <p className="text-xs italic text-muted-foreground">{conv.attendeesDescription}</p>
                     )}
                     {conv.notes && (
                       <div className="text-sm text-muted-foreground prep-note-markdown"><ReactMarkdown>{conv.notes}</ReactMarkdown></div>
@@ -1636,10 +1735,16 @@ function ConversationsTab({
                         <span className="font-medium">Next:</span> {conv.nextSteps}
                       </p>
                     )}
-                    {((conv.participants && conv.participants.length > 0) || conv.contactsDiscussed.length > 0 || conv.companiesDiscussed.length > 0) && (
+                    {(conv.company || (conv.participants && conv.participants.length > 0) || conv.contactsDiscussed.length > 0 || conv.companiesDiscussed.length > 0 || (conv.tags && conv.tags.length > 0)) && (
                       <div className="flex flex-wrap gap-1 pt-1">
+                        {conv.company && (
+                          <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200">
+                            <Building2 className="mr-1 h-3 w-3" />
+                            {conv.company.name}
+                          </Badge>
+                        )}
                         {conv.participants?.map((p) => (
-                          <Badge key={p.contact.id} variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200">
+                          <Badge key={p.contact.id} variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200" title={p.note || undefined}>
                             {p.contact.name} (Participant)
                           </Badge>
                         ))}
@@ -1651,6 +1756,12 @@ function ConversationsTab({
                         {conv.companiesDiscussed.map((cd) => (
                           <Badge key={cd.company.id} variant="outline" className="text-xs bg-slate-50">
                             {cd.company.name}
+                          </Badge>
+                        ))}
+                        {conv.tags?.map((t) => (
+                          <Badge key={t.tag.id} variant="outline" className="text-xs bg-violet-50 text-violet-800 border-violet-200">
+                            <TagIcon className="mr-1 h-3 w-3" />
+                            {t.tag.name}
                           </Badge>
                         ))}
                       </div>
@@ -1764,6 +1875,16 @@ function ConversationsTab({
                   <div className="h-full overflow-y-auto pr-2 pb-4">
                     {/* Conversation form */}
                     <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <Label>Title</Label>
+                        <TitleAutocomplete
+                          value={form.title}
+                          onChange={(v) => set('title', v)}
+                          titles={knownTitles}
+                          placeholder="Meeting name, e.g. Weekly VP meeting (optional)"
+                        />
+                      </div>
+
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                           <Label>Date</Label>
@@ -1837,6 +1958,45 @@ function ConversationsTab({
                           searchPlaceholder="Search participants..."
                           allowFreeText={true}
                         />
+                        {form.participantIds.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            {form.participantIds.map((val) => {
+                              const name = localContactOptions.find((o) => o.value === val)?.label || val
+                              return (
+                                <div key={val} className="flex items-center gap-2">
+                                  <span className="w-32 shrink-0 truncate text-xs text-muted-foreground" title={name}>{name}</span>
+                                  <Input
+                                    className="h-8 text-sm"
+                                    value={form.participantNotes[val] || ''}
+                                    onChange={(e) => set('participantNotes', { ...form.participantNotes, [val]: e.target.value })}
+                                    placeholder="Takeaway about this person (optional)"
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Attendees Description</Label>
+                        <Input
+                          value={form.attendeesDescription}
+                          onChange={(e) => set('attendeesDescription', e.target.value)}
+                          placeholder='e.g. "~10 Arcadia folks incl. analytics team"'
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Organization</Label>
+                        <Combobox
+                          options={localCompanyOptions}
+                          value={form.companyId}
+                          onChange={(v) => set('companyId', v)}
+                          placeholder="Org this meeting was with..."
+                          searchPlaceholder="Search or type new name..."
+                          allowFreeText={true}
+                        />
                       </div>
 
                       <div className="space-y-2">
@@ -1859,6 +2019,18 @@ function ConversationsTab({
                           onChange={(v) => set('companiesDiscussed', v)}
                           placeholder="Search or type new name..."
                           searchPlaceholder="Search companies..."
+                          allowFreeText={true}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Tags</Label>
+                        <MultiCombobox
+                          options={tagOptions}
+                          values={form.tagIds || []}
+                          onChange={(v) => set('tagIds', v)}
+                          placeholder="Tag topics (e.g. digital-measures)..."
+                          searchPlaceholder="Search or create tags..."
                           allowFreeText={true}
                         />
                       </div>
@@ -1964,6 +2136,16 @@ function ConversationsTab({
               </ResizablePanelGroup>
             ) : (
               <div className="grid gap-4 py-2">
+                <div className="space-y-2">
+                  <Label>Title</Label>
+                  <TitleAutocomplete
+                    value={form.title}
+                    onChange={(v) => set('title', v)}
+                    titles={knownTitles}
+                    placeholder="Meeting name, e.g. Weekly VP meeting (optional)"
+                  />
+                </div>
+
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Date</Label>
@@ -2037,6 +2219,45 @@ function ConversationsTab({
                     searchPlaceholder="Search participants..."
                     allowFreeText={true}
                   />
+                  {form.participantIds.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      {form.participantIds.map((val) => {
+                        const name = localContactOptions.find((o) => o.value === val)?.label || val
+                        return (
+                          <div key={val} className="flex items-center gap-2">
+                            <span className="w-32 shrink-0 truncate text-xs text-muted-foreground" title={name}>{name}</span>
+                            <Input
+                              className="h-8 text-sm"
+                              value={form.participantNotes[val] || ''}
+                              onChange={(e) => set('participantNotes', { ...form.participantNotes, [val]: e.target.value })}
+                              placeholder="Takeaway about this person (optional)"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Attendees Description</Label>
+                  <Input
+                    value={form.attendeesDescription}
+                    onChange={(e) => set('attendeesDescription', e.target.value)}
+                    placeholder='e.g. "~10 Arcadia folks incl. analytics team"'
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Organization</Label>
+                  <Combobox
+                    options={localCompanyOptions}
+                    value={form.companyId}
+                    onChange={(v) => set('companyId', v)}
+                    placeholder="Org this meeting was with..."
+                    searchPlaceholder="Search or type new name..."
+                    allowFreeText={true}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -2059,6 +2280,18 @@ function ConversationsTab({
                     onChange={(v) => set('companiesDiscussed', v)}
                     placeholder="Search or type new name..."
                     searchPlaceholder="Search companies..."
+                    allowFreeText={true}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Tags</Label>
+                  <MultiCombobox
+                    options={tagOptions}
+                    values={form.tagIds || []}
+                    onChange={(v) => set('tagIds', v)}
+                    placeholder="Tag topics (e.g. digital-measures)..."
+                    searchPlaceholder="Search or create tags..."
                     allowFreeText={true}
                   />
                 </div>

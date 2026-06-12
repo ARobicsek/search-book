@@ -2,12 +2,14 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { CommandPaletteProvider } from '@/components/command-palette'
+import { QuickLogProvider, useQuickLog } from '@/components/quick-log-dialog'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
-import { Search } from 'lucide-react'
+import { Search, MessageSquarePlus } from 'lucide-react'
 
 function LayoutContent() {
   const navigate = useNavigate()
+  const quickLog = useQuickLog()
 
   return (
     <>
@@ -18,6 +20,25 @@ function LayoutContent() {
           <Separator orientation="vertical" className="mr-2 !h-4" />
           <span className="text-sm text-muted-foreground">SearchBook</span>
           <div className="ml-auto flex items-center gap-2">
+            {/* Quick Log — a meeting is loggable from anywhere in two taps */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden sm:inline-flex"
+              onClick={quickLog.open}
+            >
+              <MessageSquarePlus className="mr-1 h-4 w-4" />
+              Log Meeting
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 sm:hidden"
+              onClick={quickLog.open}
+              aria-label="Quick log meeting"
+            >
+              <MessageSquarePlus className="h-5 w-5" />
+            </Button>
             {/* Mobile search button */}
             <Button
               variant="ghost"
@@ -47,9 +68,11 @@ function LayoutContent() {
 export function Layout() {
   return (
     <SidebarProvider>
-      <CommandPaletteProvider>
-        <LayoutContent />
-      </CommandPaletteProvider>
+      <QuickLogProvider>
+        <CommandPaletteProvider>
+          <LayoutContent />
+        </CommandPaletteProvider>
+      </QuickLogProvider>
     </SidebarProvider>
   )
 }

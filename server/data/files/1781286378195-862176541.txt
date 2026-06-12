@@ -1,1 +1,0 @@
-﻿Test attachment for SearchBook smoke test

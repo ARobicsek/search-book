@@ -40,6 +40,9 @@
 | Meeting editor | Quick Log dialog is the canonical create+edit meeting editor app-wide (`useQuickLog().openEdit(id)`); contact-detail keeps its legacy embedded editor for now | 2026-06-12 |
 | Markdown speed input | Shared `MarkdownTextarea` (toolbar + Ctrl+B/I, Ctrl+Shift+8/7, Ctrl+Alt+1-3, Enter list auto-continue, paste-screenshot→upload→`![](url)`) instead of a rich-text editor | 2026-06-12 |
 | Search upgrade | Plan of record `.planning/SEARCH-UPGRADE-PLAN.md`: full-field coverage, scope groups (People-profile / People-notes / Orgs / Meetings / Actions / Ideas), multi-term AND, 4 sorts, match snippets; plain `LIKE`, no FTS5 at current scale | 2026-06-12 |
+| Case-sensitive search | `caseSensitive=true` param (user ask, default off): DB fetches the insensitive `LIKE` superset, JS verifies exact case during snippet computation; totals in cs-mode are the verified count of the fetched superset | 2026-06-12 |
+| Favorite contacts | Stored as a reserved `Favorite` tag via the existing `ContactTag` junction (no schema change, synced, in backups); `GET /contacts/favorites` + `PATCH /contacts/:id/favorite`; UI = star toggle + quick-add chips in the Quick Log participants block | 2026-06-12 |
+| Multi-org meetings | New `ConversationOrg` junction = orgs the meeting was WITH (anchor `companyId` stays primary, same pattern as `Contact.additionalCompanyIds`); distinct from `ConversationCompany` (orgs *discussed*). Org filter + search match both | 2026-06-12 |
 
 ## User Feedback Summary
 

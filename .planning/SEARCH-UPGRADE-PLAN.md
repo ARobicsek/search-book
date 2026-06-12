@@ -1,7 +1,7 @@
 # SearchBook — Search Upgrade Plan
 
 **Created:** 2026-06-12
-**Status:** PLANNED — not started. Companion to `NCQA-ADAPTATION-PLAN.md` (this work was requested directly by the owner; it complements, and partially front-runs, the adaptation plan's Task 6.2 semantic search).
+**Status:** DONE (2026-06-12, same day). S.1 = commit `bb870e6`, S.2 = `9c0f8fd`, S.3 verified (390px layout, local timings 12–137ms all-scopes; deployed + bundle confirmed live). Additions beyond plan: **case-sensitivity toggle** (user ask; `caseSensitive=true` → JS exact-case verification over the insensitive LIKE superset) and meeting search also covers the new `ConversationOrg` orgs. Companion to `NCQA-ADAPTATION-PLAN.md` (this work was requested directly by the owner; it complements, and partially front-runs, the adaptation plan's Task 6.2 semantic search).
 **Goal:** one search box that can find a term ("AI", "Boston", "CMS") across **everything** SearchBook stores, with user control over **where** to look and **how to sort** what comes back.
 
 ---

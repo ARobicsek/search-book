@@ -91,6 +91,8 @@ api/index.ts      # Vercel serverless entry point
 - **Multiple companies per contact**: `additionalCompanyIds` JSON array with `{id, isCurrent}` objects
 - **Multiple emails**: `additionalEmails` JSON field with dynamic inputs
 - **Conversation participants vs discussed**: `ConversationParticipant` junction for attendees, `ConversationContact` for people mentioned
+- **Multi-org meetings**: `ConversationOrg` junction = orgs the meeting was WITH (anchor `companyId` stays the primary org); `ConversationCompany` = orgs *discussed*
+- **Favorite contacts**: reserved `Favorite` tag via `ContactTag` (no dedicated column); `GET /contacts/favorites`, `PATCH /contacts/:id/favorite`
 - **Company Activity Log**: `CompanyActivity` model for company-level event tracking
 - **Status history**: `ContactStatusHistory` and `CompanyStatusHistory` for analytics transitions
 

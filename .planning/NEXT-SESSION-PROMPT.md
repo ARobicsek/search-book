@@ -2,36 +2,43 @@
 
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
 
-### What Was Just Completed (2026-06-12, third session) — Phase 2 touch-ups, DEPLOYED
+## ⚠️ FIRST: one unpushed commit is waiting on Turso DDL
 
-Commits `e099388`, `68e8eaa`, `9f90bdd`, `d718ffa` on `main`; Turso DDL (2 additive CREATE TABLEs) run by the user in the console; deploy + `/api/health` verified live.
+Local `main` is **1 commit ahead** of origin: `1dea764` (multi-org meetings, new `ConversationOrg` table). Everything before it is pushed and live. **Before pushing it**, run this in the Turso console (web dashboard → searchbook DB → shell):
 
-1. **Edit/delete everywhere**: every card on `/meetings` has Edit (pencil) and Delete (trash + confirm). The Quick Log dialog is now the **canonical meeting editor** — `useQuickLog().openEdit(id)` loads the full record (title/date/type/summary/notes/next steps/anchor contact/org/participants with per-person notes/attendees description/tags) and PUTs on save.
-2. **Meeting prep notes** (`ConversationPrepNote` + `/api/conversation-prepnotes`): on ANY meeting. Advance prep = quick-log the meeting with a future date, add prep notes (staged locally in create mode, live in edit mode). Amber block on meeting cards.
-3. **Attachments** (`ConversationAttachment` + `/api/conversation-attachments` + `POST /api/upload/file`): images/PDF/Office/text/zip, **4MB cap** (Vercel body limit). Prod → Vercel Blob `files/` prefix (best-effort `del()` on remove); dev → `server/data/files/` at `/files` (vite proxy added). Image attachments = thumbnails; others = name links.
-4. **Markdown speed typing** (`client/src/components/markdown-textarea.tsx`): toolbar + **Ctrl+B / Ctrl+I / Ctrl+Shift+8 / Ctrl+Shift+7 / Ctrl+Alt+1-3** + **Enter auto-continues lists** + **paste-screenshot → upload → `![](url)`**. Wired into meeting dialog, contact-detail conversation editor, contact prep-note forms.
-5. Backup paths now cover **26 tables**, `_meta.version` **4** (server `buildExport`/import + client `TABLES_PARENT_FIRST`).
-6. `prep-note-markdown` CSS styles h1–h3 + constrains inline images.
+```sql
+CREATE TABLE "ConversationOrg" (
+    "conversationId" INTEGER NOT NULL,
+    "companyId" INTEGER NOT NULL,
+    PRIMARY KEY ("conversationId", "companyId"),
+    CONSTRAINT "ConversationOrg_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "ConversationOrg_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+```
+
+Then `git push` (this doc's commit rides along) and smoke-test: edit a meeting → add a second organization → save → org filter on /meetings finds it. Local dev.db already has the table (`prisma db push` was run).
+
+### What Was Just Completed (2026-06-12, fourth session) — meeting tweaks + search upgrade
+
+Commits `4f70e35`, `bb870e6`, `9c0f8fd` pushed & verified live (health ok, new bundle confirmed); `1dea764` held (above).
+
+1. **Quick Log dialog upgrades** (`4f70e35`): left-side **Prep Notes panel** on ALL meetings (live notes in edit mode, staged in create mode, composer, plus "Last Meeting in Series" context box when the title matches a known series), fixed-height so prep stays visible while the form scrolls; **follow-up actions** (add multiple inline; existing linked actions listed) using the API's existing `createActions`; **favorite participants** — star a participant to favorite them (reserved `Favorite` tag via `ContactTag`, no schema change), favorites render as one-click amber quick-add chips. New endpoints `GET /contacts/favorites`, `PATCH /contacts/:id/favorite`.
+2. **Search upgrade S.1 server** (`bb870e6`): scopes (`people-profile,people-notes,orgs,meetings,actions,ideas`), sorts (`relevance|newest|oldest|alpha|recent-contact`), **caseSensitive=true** (user ask: DB fetches insensitive LIKE superset, JS verifies exact case), multi-term AND + quoted phrases, per-hit `matches: [{field, snippet}]` evidence, per-group `totals`, `[TIMING]` log line per query. All field gaps from the plan closed (personalDetails, tags everywhere, takeaways, prep notes, activity log, attachment names, …).
+3. **Search upgrade S.2 client** (`9c0f8fd`): scope chips + sort dropdown + match-case (Aa) toggle persisted in URL (`?q&scopes&sort&cs`) + localStorage; `<mark>` highlighting of all terms in names/titles and evidence snippets (React nodes, no innerHTML); tab counts from totals; "Show all N" deep links (`/contacts?search=`, `/companies?search=` — both list pages now seed from the URL — and `/meetings?q=`). S.3 verified: 390px wraps cleanly, local all-scopes timings 12–137ms.
+4. **Multi-org meetings** (`1dea764`, HELD): `ConversationOrg` junction (orgs the meeting was WITH; `companyId` stays primary; `ConversationCompany` still = orgs discussed). Quick Log org field is now multi-select; /meetings org filter + cards and search cover additional orgs; **backup = 27 tables, `_meta.version` 5**.
+
+**Verification done locally** (chrome-devtools): prep panel, favorites star + chip round-trip, case-sensitive "AI" (drops the gm**ai**l noise), multi-term "boston partner" AND-across-fields with dual evidence, multi-org create/filter/PUT/search/delete via API. Test data cleaned up.
 
 **Gotchas captured this session:**
-- The client **build** (`tsc -b`, used by Vercel `build:vercel`) enforces `noUnusedLocals`; the `typecheck` script (`tsc --noEmit`) does not. **Run `npm run build --prefix client` before pushing UI changes**, or prepush alone can pass while the deploy fails (that happened; fixed in `d718ffa`).
-- `npx prisma db push` resolves `file:./dev.db` against the **CWD**; the runtime (`db.ts`) resolves it against `server/prisma/`. Push with: `cd server; $env:DATABASE_URL='file:./prisma/dev.db'; npx prisma db push`. A stray empty `server/dev.db` from before this was caught still exists — **safe to delete** (gitignored).
-- The Turso auth token commented out in `server/.env` is **stale (401)**. The user runs console DDL instead; if a script run is ever needed, get a fresh token first (`server/scripts/migrate-turso-phase2-touchups.js` shows the pattern).
-- Local dev photo/file binaries under `server/data/` are tracked in git (existing convention).
+- PowerShell 5.1 mangles multi-line `git commit -m` here-strings containing double quotes — write the message to a temp file and use `git commit -F`.
+- Never round-trip source files through PS `Get-Content -Raw | Set-Content` — it corrupted UTF-8 (em-dashes) in types.ts once; use the Edit tool.
+- `recent-contact` sort computes last-meeting dates with plain `findMany` + JS max (NOT `groupBy`/`_count` — Turso adapter gotcha).
+- In case-sensitive mode, `totals` are the verified count of the fetched superset (capped at 3×limit), not exact DB counts.
 
-### What's Next — Search Upgrade (user-requested)
+### What's Next
 
-**Plan of record: `.planning/SEARCH-UPGRADE-PLAN.md`.** Read it fully (it's short), then build top-to-bottom:
-
-- **Task S.1** — server: full field coverage (incl. contact `personalDetails`, tags everywhere, meeting takeaways/prep notes, org activity log), `scopes` + `sort` params, multi-term AND with quoted phrases, match-evidence snippets. No schema changes, no Turso DDL.
-- **Task S.2** — client `/search`: scope chips (URL + localStorage), sort dropdown, highlighted snippets, per-group "show all" deep links.
-- **Task S.3** — mobile (390px) + prod perf validation.
-
-After that: back to the adaptation plan — **Phase 3** (blocked on D8/D9) / **Phase 4** (blocked on D5/D6). The user said login changes + AI features wait ~2 weeks for info they don't yet have — **don't push on D5–D9 until they raise them.**
-
-### Suggested verification at session start (2 min)
-
-Live site smoke test if the user hasn't already: /meetings → edit a meeting, add a prep note, upload an attachment (first prod use of Blob `files/` prefix), delete a throwaway meeting.
+- **Prod search perf check** (S.3 leftover, 2 min): after using prod search once, check the Vercel function logs for the `[TIMING] search …` line; local was 12–137ms, Turso adds per-query latency. If slow, the first lever is dropping `includeRelated` related-entity fan-out (pre-existing behavior, ~60 queries at limit=20).
+- Back to the adaptation plan — **Phase 3** (blocked on D8/D9) / **Phase 4** (blocked on D5/D6). The user is waiting on info for login changes + AI features (D5–D9); **don't push on them until the user raises them.**
 
 ### Carry-over items (pre-dating, lower priority)
 
@@ -39,12 +46,14 @@ Live site smoke test if the user hasn't already: /meetings → edit a meeting, a
 2. Desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
 3. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
 4. Company near-duplicate scan (LinkedIn-variant suffixes).
-5. Meeting-editor parity: contact-detail's embedded editor still has its own actions/links/photo sections; the global dialog doesn't do follow-up actions yet. Consolidate when it next causes friction.
+5. Meeting-editor parity: contact-detail's embedded editor still has its own actions/links/photo/orgs(single) sections. Consolidate when it next causes friction.
+6. A stray empty `server/dev.db` (root of server/, gitignored) is safe to delete.
 
 ### Open Bugs / Known Caveats
 
-- No confirmed bugs. Attachment binaries (like photos) are NOT in the daily cloud DB backup — by design. Attachment delete may orphan a blob (harmless).
+- No confirmed bugs. The `Favorite` tag is a normal tag and will appear in tag dropdowns — by design (zero-DDL favorites).
+- Attachment binaries (like photos) are NOT in the daily cloud DB backup — by design.
 
 ### Working branch
 
-`main`, clean and pushed; Vercel deploy of `d718ffa` verified live (new bundle + healthy DB).
+`main`; pushed through `9c0f8fd` (deployed + verified). `1dea764` + the docs commit are local-only pending the Turso DDL above.

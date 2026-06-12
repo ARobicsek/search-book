@@ -149,6 +149,54 @@ router.get('/names', async (_req: Request, res: Response) => {
   }
 });
 
+// Favorites are stored as a reserved "Favorite" tag via the existing ContactTag
+// junction — no schema change, synced across devices, covered by backups.
+const FAVORITE_TAG_NAME = 'Favorite';
+
+// GET /api/contacts/favorites — id/name of favorite contacts (quick-add in meeting dialogs)
+router.get('/favorites', async (_req: Request, res: Response) => {
+  try {
+    const contacts = await prisma.contact.findMany({
+      where: { tags: { some: { tag: { name: FAVORITE_TAG_NAME } } } },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json(contacts);
+  } catch (error) {
+    console.error('Error fetching favorite contacts:', error);
+    res.status(500).json({ error: 'Failed to fetch favorite contacts' });
+  }
+});
+
+// PATCH /api/contacts/:id/favorite — body { favorite: boolean }
+router.patch('/:id/favorite', async (req: Request, res: Response) => {
+  try {
+    const contactId = parseInt(req.params.id as string);
+    const favorite = req.body.favorite === true;
+    let tag = await prisma.tag.findUnique({ where: { name: FAVORITE_TAG_NAME } });
+    if (!tag) {
+      if (!favorite) {
+        res.json({ id: contactId, favorite: false });
+        return;
+      }
+      tag = await prisma.tag.create({ data: { name: FAVORITE_TAG_NAME } });
+    }
+    if (favorite) {
+      await prisma.contactTag.upsert({
+        where: { contactId_tagId: { contactId, tagId: tag.id } },
+        create: { contactId, tagId: tag.id },
+        update: {},
+      });
+    } else {
+      await prisma.contactTag.deleteMany({ where: { contactId, tagId: tag.id } });
+    }
+    res.json({ id: contactId, favorite });
+  } catch (error) {
+    console.error('Error toggling favorite:', error);
+    res.status(500).json({ error: 'Failed to toggle favorite' });
+  }
+});
+
 // GET /api/contacts/without-actions — contacts with no pending actions
 router.get('/without-actions', async (_req: Request, res: Response) => {
   try {

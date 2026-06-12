@@ -81,7 +81,31 @@ function totalResults(results: SearchResult): number {
     results.contacts.length +
     results.companies.length +
     results.actions.length +
-    results.ideas.length
+    results.ideas.length +
+    (results.conversations?.length || 0)
+  )
+}
+
+function MeetingSearchCard({ conv }: { conv: NonNullable<SearchResult['conversations']>[number] }) {
+  return (
+    <Card className="mb-2">
+      <CardContent className="p-3">
+        <div className="flex items-center gap-2">
+          <Link
+            to={conv.title ? `/meetings?title=${encodeURIComponent(conv.title)}` : `/meetings?id=${conv.id}`}
+            className="font-medium hover:underline"
+          >
+            {conv.displayName}
+          </Link>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {conv.date}
+          {conv.contact && ` | ${conv.contact.name}`}
+          {conv.company && ` | ${conv.company.name}`}
+          {conv.summary && ` — ${conv.summary}`}
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -470,6 +494,10 @@ export function SearchPage() {
               <Lightbulb className="mr-1 h-4 w-4" />
               Ideas ({results.ideas.length})
             </TabsTrigger>
+            <TabsTrigger value="meetings">
+              <MessageSquare className="mr-1 h-4 w-4" />
+              Meetings ({results.conversations?.length || 0})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-4">
@@ -599,6 +627,17 @@ export function SearchPage() {
                 ))}
               </div>
             )}
+
+            {results.conversations && results.conversations.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" /> Meetings
+                </h2>
+                {results.conversations.slice(0, 5).map((conv) => (
+                  <MeetingSearchCard key={conv.id} conv={conv} />
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="contacts" className="mt-4">
@@ -688,6 +727,12 @@ export function SearchPage() {
                   )}
                 </CardContent>
               </Card>
+            ))}
+          </TabsContent>
+
+          <TabsContent value="meetings" className="mt-4">
+            {results.conversations?.map((conv) => (
+              <MeetingSearchCard key={conv.id} conv={conv} />
             ))}
           </TabsContent>
         </Tabs>

@@ -144,6 +144,8 @@ function QuickLogDialog({
         attendeesDescription: attendeesDescription.trim() || null,
       })
       toast.success('Meeting logged')
+      // Pages that list meetings (e.g. /meetings) listen for this to refresh
+      window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to log meeting')

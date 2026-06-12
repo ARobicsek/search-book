@@ -89,6 +89,30 @@ router.get('/', async (req: Request, res: Response) => {
       orderBy: { updatedAt: 'desc' },
     });
 
+    // Search conversations/meetings (titles per NCQA Task 2.3, plus content fields)
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        OR: [
+          { title: { contains: searchTerm } },
+          { summary: { contains: searchTerm } },
+          { notes: { contains: searchTerm } },
+          { attendeesDescription: { contains: searchTerm } },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        summary: true,
+        date: true,
+        type: true,
+        attendeesDescription: true,
+        contact: { select: { id: true, name: true } },
+        company: { select: { id: true, name: true } },
+      },
+      take: maxResults,
+      orderBy: { date: 'desc' },
+    });
+
     // Search ideas
     const ideas = await prisma.idea.findMany({
       where: {
@@ -161,12 +185,25 @@ router.get('/', async (req: Request, res: Response) => {
       companies: idea.companies.map((ic) => ic.company),
     }));
 
+    const conversationResults = conversations.map((conv) => ({
+      id: conv.id,
+      title: conv.title,
+      summary: conv.summary,
+      date: conv.date,
+      type: conv.type,
+      // Display-name fallback mirrors the client: title → contact → company → description
+      displayName: conv.title || conv.contact?.name || conv.company?.name || conv.attendeesDescription || 'Meeting',
+      contact: conv.contact,
+      company: conv.company,
+    }));
+
     res.json({
       query: q.trim(),
       contacts: contactResults,
       companies: companyResults,
       actions: actionResults,
       ideas: ideaResults,
+      conversations: conversationResults,
     });
   } catch (error) {
     console.error('Search error:', error);

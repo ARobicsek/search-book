@@ -16,6 +16,7 @@ import { ActionListPage } from '@/pages/actions/action-list'
 import { ActionFormPage } from '@/pages/actions/action-form'
 import { ActionDetailPage } from '@/pages/actions/action-detail'
 import { CalendarPage } from '@/pages/calendar'
+import { MeetingsPage } from '@/pages/meetings'
 import { IdeaListPage } from '@/pages/ideas/idea-list'
 import { AnalyticsPage } from '@/pages/analytics'
 import { SettingsPage } from '@/pages/settings'
@@ -57,6 +58,7 @@ function App() {
           <Route path="/actions/new" element={<ActionFormPage />} />
           <Route path="/actions/:id" element={<ActionDetailPage />} />
           <Route path="/actions/:id/edit" element={<ActionFormPage />} />
+          <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/ideas" element={<IdeaListPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />

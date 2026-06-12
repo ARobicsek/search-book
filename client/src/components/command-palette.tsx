@@ -351,7 +351,8 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
     searchResults.contacts.length > 0 ||
     searchResults.companies.length > 0 ||
     searchResults.actions.length > 0 ||
-    searchResults.ideas.length > 0
+    searchResults.ideas.length > 0 ||
+    (searchResults.conversations?.length || 0) > 0
   )
 
   return (
@@ -444,6 +445,28 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
                   <CommandItem key={`search-idea-${idea.id}`} onSelect={() => { close(); navigate('/ideas') }}>
                     <Lightbulb className="mr-2 h-4 w-4" />
                     <span>{idea.title}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {searchResults.conversations && searchResults.conversations.length > 0 && (
+              <CommandGroup heading="Meetings">
+                {searchResults.conversations.map((conv) => (
+                  <CommandItem
+                    key={`search-meeting-${conv.id}`}
+                    onSelect={() => {
+                      close()
+                      navigate(conv.title ? `/meetings?title=${encodeURIComponent(conv.title)}` : `/meetings?id=${conv.id}`)
+                    }}
+                  >
+                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>{conv.displayName}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {conv.date}{conv.summary ? ` | ${conv.summary}` : ''}
+                      </span>
+                    </div>
                   </CommandItem>
                 ))}
               </CommandGroup>

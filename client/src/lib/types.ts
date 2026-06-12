@@ -332,6 +332,18 @@ export interface SearchResult {
   companies: CompanySearchResult[];
   actions: ActionSearchResult[];
   ideas: IdeaSearchResult[];
+  conversations?: ConversationSearchResult[];
+}
+
+export interface ConversationSearchResult {
+  id: number;
+  title: string | null;
+  summary: string | null;
+  date: string;
+  type: string;
+  displayName: string;
+  contact?: { id: number; name: string } | null;
+  company?: { id: number; name: string } | null;
 }
 
 export interface RelatedCompany {

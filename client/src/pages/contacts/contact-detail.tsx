@@ -1719,7 +1719,13 @@ function ConversationsTab({
                       )}
                     </div>
                     {conv.title && (
-                      <p className="text-sm font-semibold">{conv.title}</p>
+                      <Link
+                        to={`/meetings?title=${encodeURIComponent(conv.title)}`}
+                        className="block text-sm font-semibold text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {conv.title}
+                      </Link>
                     )}
                     {conv.summary && (
                       <p className="text-sm font-medium">{conv.summary}</p>

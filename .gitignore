@@ -8,6 +8,7 @@ dist/
 *.db-wal
 *.db-shm
 data/photos/
+data/files/
 .DS_Store
 Thumbs.db
 

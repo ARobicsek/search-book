@@ -16,10 +16,22 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { TitleAutocomplete } from '@/components/title-autocomplete'
 import { useQuickLog } from '@/components/quick-log-dialog'
+import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
-import { Building2, Loader2, MessageSquarePlus, Tag as TagIcon, X } from 'lucide-react'
+import {
+  Building2, FileText, Loader2, MessageSquarePlus, Paperclip, Pencil,
+  Tag as TagIcon, Trash2, X,
+} from 'lucide-react'
 
 const conversationTypeColors: Record<string, string> = {
   CALL: 'bg-green-100 text-green-800',
@@ -85,6 +97,8 @@ export function MeetingsPage() {
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Free-text input is debounced before it hits the URL/server
   const [qInput, setQInput] = useState(qFilter)
@@ -174,6 +188,21 @@ export function MeetingsPage() {
       setHasMore(res.pagination.hasMore)
     } catch { /* keep what we have */ } finally {
       setLoadingMore(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteId) return
+    setDeleting(true)
+    try {
+      await api.delete(`/conversations/${deleteId}`)
+      toast.success('Meeting deleted')
+      setDeleteId(null)
+      loadMeetings()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete meeting')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -298,6 +327,26 @@ export function MeetingsPage() {
                       <span className="text-sm text-muted-foreground">
                         {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
                       </span>
+                      <div className="ml-auto flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                          title="Edit meeting"
+                          onClick={() => quickLog.openEdit(conv.id)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          title="Delete meeting"
+                          onClick={() => setDeleteId(conv.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                     {/* Display name: title (→ series view) → contact → company → description */}
                     {conv.title ? (
@@ -323,9 +372,48 @@ export function MeetingsPage() {
                     {conv.attendeesDescription && conv.title && (
                       <p className="text-xs italic text-muted-foreground">{conv.attendeesDescription}</p>
                     )}
+                    {conv.prepNotes && conv.prepNotes.length > 0 && (
+                      <div className="rounded-md bg-amber-50/60 p-2">
+                        <p className="mb-1 flex items-center gap-1 text-xs font-medium text-amber-900">
+                          <FileText className="h-3 w-3" /> Prep notes
+                        </p>
+                        {conv.prepNotes.map((note) => (
+                          <div key={note.id} className="prep-note-markdown text-sm text-muted-foreground">
+                            <ReactMarkdown>{note.content}</ReactMarkdown>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {conv.notes && (
                       <div className="prep-note-markdown text-sm text-muted-foreground">
                         <ReactMarkdown>{conv.notes}</ReactMarkdown>
+                      </div>
+                    )}
+                    {conv.attachments && conv.attachments.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {conv.attachments.map((att) =>
+                          (att.mimeType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(att.url) ? (
+                            <a key={att.id} href={att.url} target="_blank" rel="noreferrer" title={att.name}>
+                              <img
+                                src={att.url}
+                                alt={att.name}
+                                className="h-16 w-16 rounded-md border object-cover hover:opacity-80"
+                              />
+                            </a>
+                          ) : (
+                            <a
+                              key={att.id}
+                              href={att.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs text-primary hover:underline"
+                              title={att.name}
+                            >
+                              <Paperclip className="h-3 w-3" />
+                              <span className="max-w-40 truncate">{att.name}</span>
+                            </a>
+                          )
+                        )}
                       </div>
                     )}
                     {conv.nextSteps && (
@@ -379,6 +467,25 @@ export function MeetingsPage() {
           )}
         </>
       )}
+
+      {/* Delete confirmation */}
+      <Dialog open={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this meeting?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the meeting record, its prep notes, attachments,
+              and participant takeaways. Linked actions are kept (unlinked).
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

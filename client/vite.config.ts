@@ -78,6 +78,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3001',
       '/photos': 'http://localhost:3001',
+      '/files': 'http://localhost:3001',
     },
   },
 })

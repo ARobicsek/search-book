@@ -100,4 +100,13 @@ export const api = {
       body: formData, // No Content-Type header - browser sets it with boundary
     }).then(handleResponse<{ path: string }>);
   },
+  // Generic file upload (meeting attachments): broader types than photos, 4MB cap
+  uploadGenericFile(file: File): Promise<{ path: string; name: string; mimeType: string; size: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return fetchWithTimeout(`${API_BASE}/upload/file`, {
+      method: 'POST',
+      body: formData,
+    }).then(handleResponse<{ path: string; name: string; mimeType: string; size: number }>);
+  },
 };

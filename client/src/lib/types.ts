@@ -194,6 +194,31 @@ export interface Conversation {
   companiesDiscussed: { company: { id: number; name: string } }[];
   tags?: { tag: { id: number; name: string } }[];
   actions?: { id: number; title: string; completed: boolean; dueDate: string | null }[];
+  prepNotes?: ConversationPrepNote[];
+  attachments?: ConversationAttachment[];
+}
+
+// ─── Meeting Prep Notes & Attachments ───────────────────────
+
+export interface ConversationPrepNote {
+  id: number;
+  content: string;
+  url: string | null;
+  urlTitle: string | null;
+  date: string;
+  ordering: number;
+  conversationId: number;
+  createdAt: string;
+}
+
+export interface ConversationAttachment {
+  id: number;
+  conversationId: number;
+  url: string;
+  name: string;
+  mimeType: string | null;
+  size: number | null;
+  createdAt: string;
 }
 
 /** Display name precedence for a meeting: title → contact → company → attendees description. */

@@ -21,7 +21,7 @@ function bigintReplacer(_key: string, value: unknown): unknown {
   return typeof value === 'bigint' ? Number(value) : value;
 }
 
-// Build the full 24-table export object. Shared by /export and /cron.
+// Build the full 26-table export object. Shared by /export and /cron.
 async function buildExport() {
   const [
     contacts, companies, employmentHistory, tags, contactTags, companyTags,
@@ -30,6 +30,7 @@ async function buildExport() {
     ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
     contactStatusHistory, companyStatusHistory, companyActivities,
     companyPrepNotes, conversationParticipants, conversationTags,
+    conversationPrepNotes, conversationAttachments,
   ] = await Promise.all([
     prisma.contact.findMany(),
     prisma.company.findMany(),
@@ -55,10 +56,12 @@ async function buildExport() {
     prisma.companyPrepNote.findMany(),
     prisma.conversationParticipant.findMany(),
     prisma.conversationTag.findMany(),
+    prisma.conversationPrepNote.findMany(),
+    prisma.conversationAttachment.findMany(),
   ]);
 
   return {
-    _meta: { exportedAt: new Date().toISOString(), version: 3 },
+    _meta: { exportedAt: new Date().toISOString(), version: 4 },
     Contact: contacts,
     Company: companies,
     EmploymentHistory: employmentHistory,
@@ -85,6 +88,9 @@ async function buildExport() {
     ConversationParticipant: conversationParticipants,
     // Task 2.1 (NCQA plan): conversation tags
     ConversationTag: conversationTags,
+    // Phase 2 touch-ups: meeting prep notes + attachments
+    ConversationPrepNote: conversationPrepNotes,
+    ConversationAttachment: conversationAttachments,
   };
 }
 
@@ -402,6 +408,8 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.conversationContact.deleteMany();
       await tx.conversationCompany.deleteMany();
       await tx.conversationTag.deleteMany();
+      await tx.conversationPrepNote.deleteMany();
+      await tx.conversationAttachment.deleteMany();
       await tx.contactTag.deleteMany();
       await tx.companyTag.deleteMany();
       await tx.ideaContact.deleteMany();
@@ -460,6 +468,9 @@ router.post('/import', async (req: Request, res: Response) => {
       if (data.ConversationParticipant?.length) await tx.conversationParticipant.createMany({ data: transformRecords(data.ConversationParticipant) });
       // Task 2.1 (NCQA plan): conversation tags (parents Conversation + Tag already inserted)
       if (data.ConversationTag?.length) await tx.conversationTag.createMany({ data: transformRecords(data.ConversationTag) });
+      // Phase 2 touch-ups: meeting prep notes + attachments (parent Conversation already inserted)
+      if (data.ConversationPrepNote?.length) await tx.conversationPrepNote.createMany({ data: transformRecords(data.ConversationPrepNote) });
+      if (data.ConversationAttachment?.length) await tx.conversationAttachment.createMany({ data: transformRecords(data.ConversationAttachment) });
     });
 
     res.json({ message: 'Import completed successfully' });

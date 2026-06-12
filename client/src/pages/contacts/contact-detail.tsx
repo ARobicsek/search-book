@@ -33,6 +33,7 @@ import { ActionDateSelect } from '@/components/action-date-select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/markdown-textarea'
 import {
   Card,
   CardContent,
@@ -1996,10 +1997,10 @@ function ConversationsTab({
 
                       <div className="space-y-2">
                         <Label>Notes</Label>
-                        <Textarea
+                        <MarkdownTextarea
                           value={form.notes}
-                          onChange={(e) => set('notes', e.target.value)}
-                          placeholder="Detailed notes..."
+                          onChange={(v) => set('notes', v)}
+                          placeholder="Detailed notes... (paste screenshots directly)"
                           rows={6}
                         />
                       </div>
@@ -2257,10 +2258,10 @@ function ConversationsTab({
 
                 <div className="space-y-2">
                   <Label>Notes</Label>
-                  <Textarea
+                  <MarkdownTextarea
                     value={form.notes}
-                    onChange={(e) => set('notes', e.target.value)}
-                    placeholder="Detailed notes..."
+                    onChange={(v) => set('notes', v)}
+                    placeholder="Detailed notes... (paste screenshots directly)"
                     rows={6}
                   />
                 </div>
@@ -3097,9 +3098,9 @@ function PrepSheetTab({
                       </div>
                       {editingNoteId === note.id ? (
                         <div className="space-y-2">
-                          <Textarea
+                          <MarkdownTextarea
                             value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
+                            onChange={setEditContent}
                             rows={5}
                             className="text-sm"
                             autoFocus
@@ -3192,9 +3193,9 @@ function PrepSheetTab({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Notes / Thoughts</Label>
-                <Textarea
+                <MarkdownTextarea
                   value={newPrepContent}
-                  onChange={(e) => setNewPrepContent(e.target.value)}
+                  onChange={setNewPrepContent}
                   placeholder="Ideas for conversation, talking points, questions to ask..."
                   rows={3}
                 />

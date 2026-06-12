@@ -13,6 +13,8 @@ const meetingListInclude = {
     include: { contact: { select: { id: true, name: true } } },
   },
   tags: { include: { tag: { select: { id: true, name: true } } } },
+  prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
+  attachments: true,
 };
 
 // GET /api/meetings — paginated list of all conversations with filters.

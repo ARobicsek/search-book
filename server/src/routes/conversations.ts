@@ -17,6 +17,8 @@ const conversationIncludes = {
   },
   tags: { include: { tag: { select: { id: true, name: true } } } },
   actions: { select: { id: true, title: true, completed: true, dueDate: true } },
+  prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
+  attachments: true,
 };
 
 // Participant input: new shape { contactId, note? }[] via `participants`, or the

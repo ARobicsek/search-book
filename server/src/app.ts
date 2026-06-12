@@ -20,6 +20,8 @@ import relationshipsRouter from './routes/relationships';
 import linksRouter from './routes/links';
 import prepnotesRouter from './routes/prepnotes';
 import companyPrepNotesRouter from './routes/company-prepnotes';
+import conversationPrepNotesRouter from './routes/conversation-prepnotes';
+import conversationAttachmentsRouter from './routes/conversation-attachments';
 import employmentHistoryRouter from './routes/employmenthistory';
 import tagsRouter from './routes/tags';
 import analyticsRouter from './routes/analytics';
@@ -161,9 +163,10 @@ app.use('/api', (req, res, next) => {
   return res.status(401).json({ error: 'Unauthorized' });
 });
 
-// Serve uploaded photos statically (for local dev - Vercel will use Blob storage)
+// Serve uploaded photos/files statically (for local dev - Vercel will use Blob storage)
 if (process.env.NODE_ENV !== 'production') {
   app.use('/photos', express.static(path.join(process.cwd(), 'data', 'photos')));
+  app.use('/files', express.static(path.join(process.cwd(), 'data', 'files')));
 }
 
 // Health check — verifies DB connectivity so the uptime monitor catches
@@ -195,6 +198,8 @@ app.use('/api/relationships', relationshipsRouter);
 app.use('/api/links', linksRouter);
 app.use('/api/prepnotes', prepnotesRouter);
 app.use('/api/company-prepnotes', companyPrepNotesRouter);
+app.use('/api/conversation-prepnotes', conversationPrepNotesRouter);
+app.use('/api/conversation-attachments', conversationAttachmentsRouter);
 app.use('/api/employment-history', employmentHistoryRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/analytics', analyticsRouter);

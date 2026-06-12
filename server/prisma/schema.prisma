@@ -189,6 +189,36 @@ model Conversation {
   contactsDiscussed  ConversationContact[]
   companiesDiscussed ConversationCompany[]
   tags               ConversationTag[]
+  prepNotes          ConversationPrepNote[]
+  attachments        ConversationAttachment[]
+}
+
+// Prep notes attached to a specific meeting (incl. one logged in advance with a
+// future date) — the meeting-level analog of PrepNote/CompanyPrepNote.
+model ConversationPrepNote {
+  id             Int          @id @default(autoincrement())
+  content        String       // Free text for thoughts, ideas (markdown)
+  url            String?      // Optional URL for document/web links
+  urlTitle       String?      // Optional title for the URL
+  date           String       // Target date for this prep (YYYY-MM-DD)
+  ordering       Int          @default(0)
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+}
+
+// Files attached to a meeting (screenshots, decks, PDFs). `url` is a Vercel
+// Blob URL in production or a local `/files/...` path in dev — binaries follow
+// the photo precedent: not part of the daily DB backup.
+model ConversationAttachment {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  url            String
+  name           String       // Original filename, for display
+  mimeType       String?
+  size           Int?         // Bytes
+  createdAt      DateTime     @default(now())
 }
 
 // Junction: contacts who were participants in the conversation.

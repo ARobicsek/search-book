@@ -92,7 +92,7 @@ WHERE ecosystem IN ('ROLODEX','TARGET','INFLUENCER','INTRO_SOURCE');
 
 **Acceptance:** no contact left on an eliminated value after migration; filters/analytics show the new list; new-contact form defaults to General Network.
 **Commit:** `feat(taxonomy): NCQA ecosystems + legacy remap`
-**STATUS:** Not started. Unblocked; needs Turso access for the UPDATE (desktop session or creds).
+**STATUS:** ✅ Code complete 2026-06-12 (commit `08568e0`, Tasks 1.1–1.3 in one atomic commit — same files, same migration moment). Typecheck + client build pass. ⚠️ NOT pushed: awaiting user confirmation that the Turso UPDATEs ran.
 
 ## Task 1.2 — Contact statuses (DECIDED — D2)
 
@@ -110,7 +110,7 @@ WHERE status IN ('NEW','LEAD_TO_PURSUE','ON_HOLD','CLOSED');
 **Code changes:** `types.ts` options (4 + None), server allow-list, status badge/filter components render None as blank, analytics status chart includes a "No status" bucket. New-contact form default stays `CONNECTED` (long-standing UX preference — most people are added right after meeting them); schema DDL default `'NEW'` untouched (client always sends status explicitly).
 **Acceptance:** only the 4 statuses + blank selectable; no contact stranded on an eliminated value; clearing a status works.
 **Commit:** `feat(taxonomy): trimmed contact statuses + blank option`
-**STATUS:** Not started. Unblocked; needs Turso access for the UPDATE.
+**STATUS:** ✅ Code complete 2026-06-12 (in `08568e0`). Conversation auto-bump now `NONE`→`CONNECTED`; LinkedIn-draft default `NONE`. Awaiting Turso UPDATE confirmation before push.
 
 ## Task 1.3 — Company statuses + relabel "Companies" → "Organizations" (DECIDED — D3)
 
@@ -127,7 +127,7 @@ UPDATE "Company" SET status='NONE'    WHERE status IN ('ON_HOLD','CLOSED','AWAIT
 
 Also: UI-only relabel of nav/headers from "Companies" to "Organizations" (routes, API, schema keep `companies` — pure label change, zero migration).
 **Commit:** `feat(taxonomy): organization statuses + relabel companies nav`
-**STATUS:** Not started. Unblocked; needs Turso access for the UPDATEs.
+**STATUS:** ✅ Code complete 2026-06-12 (in `08568e0`). Analytics "In Discussions" metrics → "Engaged" (JSON keys kept for API stability). Awaiting Turso UPDATE confirmation before push.
 
 ## Task 1.4 — Action direction: "I owe them" vs. "waiting on them"
 
@@ -142,7 +142,7 @@ Also: UI-only relabel of nav/headers from "Companies" to "Organizations" (routes
 
 **Acceptance:** can log "Sarah to send the digital-measures deck by Fri"; it appears under Waiting For; going overdue highlights it; completing works as normal.
 **Commit:** `feat(actions): direction field + Waiting For view`
-**STATUS:** Not started. No blockers — can be done before D1–D3 land.
+**STATUS:** ✅ Code complete 2026-06-12 (commit `71cd9b0`). Also: `?filter=waiting` deep link, dashboard "Waiting on others" card, recurring copy. ⚠️ NOT pushed: prod will 500 on action reads until the `ALTER TABLE "Action"` DDL runs (Prisma selects the column).
 
 ---
 

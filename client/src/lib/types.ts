@@ -192,6 +192,8 @@ export interface Conversation {
   participants?: { contact: { id: number; name: string }; note?: string | null }[];
   contactsDiscussed: { contact: { id: number; name: string } }[];
   companiesDiscussed: { company: { id: number; name: string } }[];
+  /** Additional orgs the meeting was with (anchor org stays in companyId). */
+  orgs?: { company: { id: number; name: string } }[];
   tags?: { tag: { id: number; name: string } }[];
   actions?: { id: number; title: string; completed: boolean; dueDate: string | null }[];
   prepNotes?: ConversationPrepNote[];

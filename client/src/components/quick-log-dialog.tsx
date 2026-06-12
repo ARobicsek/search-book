@@ -131,7 +131,9 @@ function QuickLogDialog({
   const [notes, setNotes] = useState('')
   const [nextSteps, setNextSteps] = useState('')
   const [contactId, setContactId] = useState('')
-  const [companyId, setCompanyId] = useState('')
+  // Orgs the meeting was with: first becomes the anchor companyId, the rest go
+  // to the ConversationOrg junction. Values are ids or free-text new names.
+  const [orgValues, setOrgValues] = useState<string[]>([])
   const [participantIds, setParticipantIds] = useState<string[]>([])
   const [participantNotes, setParticipantNotes] = useState<Record<string, string>>({})
   const [attendeesDescription, setAttendeesDescription] = useState('')
@@ -181,7 +183,7 @@ function QuickLogDialog({
     setNotes('')
     setNextSteps('')
     setContactId('')
-    setCompanyId('')
+    setOrgValues([])
     setParticipantIds([])
     setParticipantNotes({})
     setAttendeesDescription('')
@@ -224,7 +226,11 @@ function QuickLogDialog({
           setNotes(conv.notes || '')
           setNextSteps(conv.nextSteps || '')
           setContactId(conv.contactId?.toString() || '')
-          setCompanyId(conv.companyId?.toString() || '')
+          const orgVals = [
+            ...(conv.companyId ? [conv.companyId.toString()] : []),
+            ...(conv.orgs || []).map((o) => o.company.id.toString()),
+          ]
+          setOrgValues([...new Set(orgVals)])
           setParticipantIds(conv.participants?.map((p) => p.contact.id.toString()) || [])
           const pNotes: Record<string, string> = {}
           for (const p of conv.participants || []) {
@@ -237,7 +243,7 @@ function QuickLogDialog({
           setAttachments(conv.attachments || [])
           setExistingActions(conv.actions || [])
           // Expand sections that already have content
-          setShowWho(!!(conv.contactId || conv.companyId || conv.participants?.length || conv.attendeesDescription))
+          setShowWho(!!(conv.contactId || conv.companyId || conv.orgs?.length || conv.participants?.length || conv.attendeesDescription))
           setShowExtras(!!(conv.nextSteps || conv.tags?.length || conv.actions?.length || conv.attachments?.length))
         })
         .catch(() => {
@@ -273,13 +279,13 @@ function QuickLogDialog({
 
   // Resolve free-text combobox entries into real records (same pattern as the full editor)
   async function resolveWho() {
-    let resolvedCompanyId: number | null = null
-    if (companyId) {
-      if (/^\d+$/.test(companyId)) {
-        resolvedCompanyId = Number(companyId)
+    const resolvedOrgIds: number[] = []
+    for (const val of orgValues) {
+      if (/^\d+$/.test(val)) {
+        resolvedOrgIds.push(Number(val))
       } else {
-        const created = await api.post<{ id: number }>('/companies', { name: companyId })
-        resolvedCompanyId = created.id
+        const created = await api.post<{ id: number }>('/companies', { name: val })
+        resolvedOrgIds.push(created.id)
       }
     }
     const participants: { contactId: number; note: string | null }[] = []
@@ -312,7 +318,7 @@ function QuickLogDialog({
         else toast.error(`Failed to create tag "${val}"`)
       }
     }
-    return { resolvedCompanyId, participants, resolvedTagIds }
+    return { resolvedOrgIds, participants, resolvedTagIds }
   }
 
   async function handleSave() {
@@ -320,13 +326,13 @@ function QuickLogDialog({
       toast.error('Date is required')
       return
     }
-    if (!title.trim() && !contactId && !companyId && participantIds.length === 0 && !attendeesDescription.trim()) {
+    if (!title.trim() && !contactId && orgValues.length === 0 && participantIds.length === 0 && !attendeesDescription.trim()) {
       toast.error('Add a title (or someone who was there)')
       return
     }
     setSaving(true)
     try {
-      const { resolvedCompanyId, participants, resolvedTagIds } = await resolveWho()
+      const { resolvedOrgIds, participants, resolvedTagIds } = await resolveWho()
 
       const payload = {
         title: title.trim() || null,
@@ -336,7 +342,9 @@ function QuickLogDialog({
         notes: notes.trim() || null,
         nextSteps: nextSteps.trim() || null,
         contactId: contactId && /^\d+$/.test(contactId) ? Number(contactId) : null,
-        companyId: resolvedCompanyId,
+        // First org anchors companyId (backward compat); the rest are junction rows
+        companyId: resolvedOrgIds[0] ?? null,
+        orgIds: resolvedOrgIds.slice(1),
         participants,
         attendeesDescription: attendeesDescription.trim() || null,
         tagIds: resolvedTagIds,
@@ -600,7 +608,7 @@ function QuickLogDialog({
       >
         {showWho ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         Who was there
-        {(contactId || companyId || participantIds.length > 0 || attendeesDescription) && (
+        {(contactId || orgValues.length > 0 || participantIds.length > 0 || attendeesDescription) && (
           <span className="text-xs text-primary">·</span>
         )}
       </button>
@@ -681,12 +689,12 @@ function QuickLogDialog({
             })}
           </div>
           <div className="space-y-2">
-            <Label>Organization</Label>
-            <Combobox
+            <Label>Organizations</Label>
+            <MultiCombobox
               options={companyOptions}
-              value={companyId}
-              onChange={(v) => setCompanyId(v)}
-              placeholder="With which org..."
+              values={orgValues}
+              onChange={setOrgValues}
+              placeholder="With which orgs..."
               searchPlaceholder="Search or type new name..."
               allowFreeText={true}
             />

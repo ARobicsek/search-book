@@ -12,6 +12,7 @@ const meetingListInclude = {
   participants: {
     include: { contact: { select: { id: true, name: true } } },
   },
+  orgs: { include: { company: { select: { id: true, name: true } } } },
   tags: { include: { tag: { select: { id: true, name: true } } } },
   prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
   attachments: true,
@@ -31,7 +32,11 @@ router.get('/', async (req: Request, res: Response) => {
     const AND: Record<string, unknown>[] = [];
     if (id) AND.push({ id: parseInt(id as string) });
     if (type && type !== 'all') AND.push({ type });
-    if (companyId) AND.push({ companyId: parseInt(companyId as string) });
+    if (companyId) {
+      // Match the anchor org OR any additional org on the meeting
+      const cId = parseInt(companyId as string);
+      AND.push({ OR: [{ companyId: cId }, { orgs: { some: { companyId: cId } } }] });
+    }
     if (tagId) AND.push({ tags: { some: { tagId: parseInt(tagId as string) } } });
     if (from) AND.push({ date: { gte: from as string } });
     if (to) AND.push({ date: { lte: to as string } });

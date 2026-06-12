@@ -15,6 +15,9 @@ const conversationIncludes = {
   companiesDiscussed: {
     include: { company: { select: { id: true, name: true } } },
   },
+  orgs: {
+    include: { company: { select: { id: true, name: true } } },
+  },
   tags: { include: { tag: { select: { id: true, name: true } } } },
   actions: { select: { id: true, title: true, completed: true, dueDate: true } },
   prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
@@ -149,6 +152,7 @@ router.post('/', async (req: Request, res: Response) => {
       photoFile,
       contactsDiscussed,   // number[] of contact IDs
       companiesDiscussed,  // number[] of company IDs
+      orgIds,              // number[] of ADDITIONAL org IDs (first org is companyId)
       tagIds,              // number[] of tag IDs
       createAction,        // optional single action (legacy): { title, type, dueDate, priority }
       createActions,       // optional array of actions: { title, type, dueDate, priority }[]
@@ -214,6 +218,13 @@ router.post('/', async (req: Request, res: Response) => {
               create: (companiesDiscussed as number[]).map((cId) => ({
                 companyId: cId,
               })),
+            }
+            : undefined,
+          orgs: orgIds?.length
+            ? {
+              create: (orgIds as number[])
+                .filter((cId) => cId !== anchorCompanyId)
+                .map((cId) => ({ companyId: cId })),
             }
             : undefined,
           tags: tagIds?.length
@@ -326,6 +337,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const {
       contactsDiscussed,
       companiesDiscussed,
+      orgIds,
       tagIds,
       createAction,
       createActions,
@@ -373,6 +385,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       if (companiesDiscussed !== undefined) {
         await tx.conversationCompany.deleteMany({ where: { conversationId: id } });
       }
+      if (orgIds !== undefined) {
+        await tx.conversationOrg.deleteMany({ where: { conversationId: id } });
+      }
       if (participants !== undefined) {
         await tx.conversationParticipant.deleteMany({ where: { conversationId: id } });
       }
@@ -405,6 +420,13 @@ router.put('/:id', async (req: Request, res: Response) => {
               create: (companiesDiscussed as number[]).map((cId: number) => ({
                 companyId: cId,
               })),
+            }
+            : undefined,
+          orgs: orgIds?.length
+            ? {
+              create: (orgIds as number[])
+                .filter((cId: number) => cId !== finalState.companyId)
+                .map((cId: number) => ({ companyId: cId })),
             }
             : undefined,
           tags: tagIds?.length

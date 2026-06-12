@@ -437,6 +437,14 @@ export function MeetingsPage() {
                           </Badge>
                         </Link>
                       )}
+                      {conv.orgs?.map((o) => (
+                        <Link key={o.company.id} to={`/companies/${o.company.id}`}>
+                          <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100">
+                            <Building2 className="mr-1 h-3 w-3" />
+                            {o.company.name}
+                          </Badge>
+                        </Link>
+                      ))}
                       {conv.participants?.map((p) => (
                         <Link key={p.contact.id} to={`/contacts/${p.contact.id}`}>
                           <Badge variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100" title={p.note || undefined}>

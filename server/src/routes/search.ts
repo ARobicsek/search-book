@@ -340,6 +340,7 @@ router.get('/', async (req: Request, res: Response) => {
       { attachments: { some: { name: { contains: term } } } },
       { contact: { name: { contains: term } } },
       { company: { name: { contains: term } } },
+      { orgs: { some: { company: { name: { contains: term } } } } },
       { participants: { some: { contact: { name: { contains: term } } } } },
       { participants: { some: { note: { contains: term } } } },
       { contactsDiscussed: { some: { contact: { name: { contains: term } } } } },
@@ -355,6 +356,7 @@ router.get('/', async (req: Request, res: Response) => {
           attendeesDescription: true, date: true, type: true,
           contact: { select: { id: true, name: true } },
           company: { select: { id: true, name: true } },
+          orgs: { select: { company: { select: { name: true } } } },
           tags: { select: { tag: { select: { name: true } } } },
           prepNotes: { select: { content: true }, take: 20 },
           attachments: { select: { name: true } },
@@ -377,6 +379,7 @@ router.get('/', async (req: Request, res: Response) => {
       pushField(fields, 'attendees', c.attendeesDescription, 1);
       pushField(fields, 'contact', c.contact?.name, 1);
       pushField(fields, 'organization', c.company?.name, 1);
+      for (const o of c.orgs || []) pushField(fields, 'organization', o.company.name, 1);
       for (const p of c.participants || []) {
         pushField(fields, 'participant', p.contact.name, 1);
         pushField(fields, 'takeaway', p.note, 1);

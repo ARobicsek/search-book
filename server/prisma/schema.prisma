@@ -77,6 +77,7 @@ model Company {
   links                    Link[]
   anchoredConversations    Conversation[]
   discussedInConversations ConversationCompany[]
+  orgConversations         ConversationOrg[]     @relation("OrgConversations")
   employmentHistory        EmploymentHistory[]
   ideaCompanies            IdeaCompany[]
   actionCompanies          ActionCompany[] @relation("ActionCompanies")
@@ -188,6 +189,7 @@ model Conversation {
   participants       ConversationParticipant[] @relation("ConversationParticipants")
   contactsDiscussed  ConversationContact[]
   companiesDiscussed ConversationCompany[]
+  orgs               ConversationOrg[]         @relation("ConversationOrgs")
   tags               ConversationTag[]
   prepNotes          ConversationPrepNote[]
   attachments        ConversationAttachment[]
@@ -252,6 +254,19 @@ model ConversationContact {
   contact        Contact      @relation("DiscussedInConversations", fields: [contactId], references: [id], onDelete: Cascade)
 
   @@id([conversationId, contactId])
+}
+
+// Junction: organizations the meeting was WITH, beyond the single anchor
+// companyId (which stays the "primary" org for backward compat — mirrors
+// Contact.additionalCompanyIds). Distinct from ConversationCompany, which
+// records orgs *discussed* in the meeting.
+model ConversationOrg {
+  conversationId Int
+  conversation   Conversation @relation("ConversationOrgs", fields: [conversationId], references: [id], onDelete: Cascade)
+  companyId      Int
+  company        Company      @relation("OrgConversations", fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, companyId])
 }
 
 // Junction: companies discussed in a conversation

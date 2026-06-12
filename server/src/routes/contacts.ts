@@ -75,6 +75,7 @@ router.get('/', async (req: Request, res: Response) => {
       });
 
       for (const conv of conversations) {
+        if (conv.contactId === null) continue; // contactId is nullable; the where-in filter guarantees non-null here
         const existing = lastOutreachMap.get(conv.contactId);
         if (!existing || conv.date > existing.date) {
           lastOutreachMap.set(conv.contactId, {

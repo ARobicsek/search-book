@@ -21,7 +21,7 @@ function bigintReplacer(_key: string, value: unknown): unknown {
   return typeof value === 'bigint' ? Number(value) : value;
 }
 
-// Build the full 23-table export object. Shared by /export and /cron.
+// Build the full 24-table export object. Shared by /export and /cron.
 async function buildExport() {
   const [
     contacts, companies, employmentHistory, tags, contactTags, companyTags,
@@ -29,7 +29,7 @@ async function buildExport() {
     actions, actionContacts, actionCompanies,
     ideas, ideaContacts, ideaCompanies, links, prepNotes, relationships,
     contactStatusHistory, companyStatusHistory, companyActivities,
-    companyPrepNotes, conversationParticipants,
+    companyPrepNotes, conversationParticipants, conversationTags,
   ] = await Promise.all([
     prisma.contact.findMany(),
     prisma.company.findMany(),
@@ -54,10 +54,11 @@ async function buildExport() {
     prisma.companyActivity.findMany(),
     prisma.companyPrepNote.findMany(),
     prisma.conversationParticipant.findMany(),
+    prisma.conversationTag.findMany(),
   ]);
 
   return {
-    _meta: { exportedAt: new Date().toISOString(), version: 2 },
+    _meta: { exportedAt: new Date().toISOString(), version: 3 },
     Contact: contacts,
     Company: companies,
     EmploymentHistory: employmentHistory,
@@ -82,6 +83,8 @@ async function buildExport() {
     CompanyActivity: companyActivities,
     CompanyPrepNote: companyPrepNotes,
     ConversationParticipant: conversationParticipants,
+    // Task 2.1 (NCQA plan): conversation tags
+    ConversationTag: conversationTags,
   };
 }
 
@@ -118,7 +121,7 @@ router.get('/export', async (_req: Request, res: Response) => {
 // GET /api/backup/cron — automated daily backup to Vercel Blob.
 // EXEMPT from the global password gate (server/src/app.ts), so it self-authenticates:
 // accepts either Vercel cron's `Authorization: Bearer ${CRON_SECRET}` OR the app password
-// header (for the "Back up now" button). Writes the full 23-table export to Blob and prunes
+// header (for the "Back up now" button). Writes the full 24-table export to Blob and prunes
 // to the newest BACKUP_RETENTION files.
 router.get('/cron', async (req: Request, res: Response) => {
   const cronSecret = process.env.CRON_SECRET;
@@ -154,7 +157,7 @@ router.get('/cron', async (req: Request, res: Response) => {
     const toDelete = sorted.slice(BACKUP_RETENTION);
     if (toDelete.length) await del(toDelete.map((b) => b.url));
 
-    res.json({ ok: true, name, tables: 23, pruned: toDelete.length });
+    res.json({ ok: true, name, tables: 24, pruned: toDelete.length });
   } catch (error: any) {
     console.error('Cron backup error:', error?.message || error);
     res.status(500).json({ error: 'Failed to write backup to Blob' });
@@ -398,6 +401,7 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.conversationParticipant.deleteMany();
       await tx.conversationContact.deleteMany();
       await tx.conversationCompany.deleteMany();
+      await tx.conversationTag.deleteMany();
       await tx.contactTag.deleteMany();
       await tx.companyTag.deleteMany();
       await tx.ideaContact.deleteMany();
@@ -454,6 +458,8 @@ router.post('/import', async (req: Request, res: Response) => {
       if (data.CompanyActivity?.length) await tx.companyActivity.createMany({ data: transformRecords(data.CompanyActivity) });
       if (data.CompanyPrepNote?.length) await tx.companyPrepNote.createMany({ data: transformRecords(data.CompanyPrepNote) });
       if (data.ConversationParticipant?.length) await tx.conversationParticipant.createMany({ data: transformRecords(data.ConversationParticipant) });
+      // Task 2.1 (NCQA plan): conversation tags (parents Conversation + Tag already inserted)
+      if (data.ConversationTag?.length) await tx.conversationTag.createMany({ data: transformRecords(data.ConversationTag) });
     });
 
     res.json({ message: 'Import completed successfully' });

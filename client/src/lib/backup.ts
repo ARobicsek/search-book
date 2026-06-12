@@ -14,6 +14,8 @@ const TABLES_PARENT_FIRST = [
   'CompanyActivity', 'CompanyPrepNote',
   'ContactStatusHistory', 'CompanyStatusHistory',
   'ConversationParticipant',
+  // NCQA Task 2.1: conversation tags (parents Conversation + Tag appear earlier)
+  'ConversationTag',
 ] as const;
 
 /** Reverse order for deletes (children first). */
@@ -56,7 +58,7 @@ async function readAllTables(
   onProgress?: (progress: BackupProgress) => void
 ): Promise<Record<string, unknown>> {
   const data: Record<string, unknown> = {
-    _meta: { exportedAt: new Date().toISOString(), version: 2 },
+    _meta: { exportedAt: new Date().toISOString(), version: 3 },
   };
 
   for (let i = 0; i < TABLES_PARENT_FIRST.length; i++) {

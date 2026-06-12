@@ -175,8 +175,12 @@ export type DatePrecision = 'DAY' | 'MONTH' | 'QUARTER' | 'YEAR';
 
 export interface Conversation {
   id: number;
-  contactId: number;
-  contact: { id: number; name: string };
+  contactId: number | null;
+  contact: { id: number; name: string } | null;
+  title: string | null;
+  companyId: number | null;
+  company: { id: number; name: string } | null;
+  attendeesDescription: string | null;
   date: string;
   datePrecision: DatePrecision;
   type: ConversationType;
@@ -185,10 +189,22 @@ export interface Conversation {
   nextSteps: string | null;
   photoFile: string | null;
   createdAt: string;
-  participants?: { contact: { id: number; name: string } }[];
+  participants?: { contact: { id: number; name: string }; note?: string | null }[];
   contactsDiscussed: { contact: { id: number; name: string } }[];
   companiesDiscussed: { company: { id: number; name: string } }[];
+  tags?: { tag: { id: number; name: string } }[];
   actions?: { id: number; title: string; completed: boolean; dueDate: string | null }[];
+}
+
+/** Display name precedence for a meeting: title → contact → company → attendees description. */
+export function conversationDisplayName(conv: Conversation): string {
+  return (
+    conv.title ||
+    conv.contact?.name ||
+    conv.company?.name ||
+    conv.attendeesDescription ||
+    'Meeting'
+  );
 }
 
 export const CONVERSATION_TYPE_OPTIONS: { value: ConversationType; label: string }[] = [

@@ -322,6 +322,7 @@ async function getCompanyRelated(companyId: number) {
       conversation: {
         select: {
           id: true,
+          title: true,
           summary: true,
           date: true,
           contact: { select: { name: true } },
@@ -334,7 +335,7 @@ async function getCompanyRelated(companyId: number) {
     id: cc.conversation.id,
     summary: cc.conversation.summary,
     date: cc.conversation.date,
-    contactName: cc.conversation.contact.name,
+    contactName: cc.conversation.contact?.name ?? cc.conversation.title ?? '',
   }));
 
   return related;

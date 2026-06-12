@@ -75,6 +75,7 @@ model Company {
   tags                     CompanyTag[]
   actions                  Action[]
   links                    Link[]
+  anchoredConversations    Conversation[]
   discussedInConversations ConversationCompany[]
   employmentHistory        EmploymentHistory[]
   ideaCompanies            IdeaCompany[]
@@ -134,10 +135,11 @@ model EmploymentHistory {
 // ─── Tags ────────────────────────────────────────────────────
 
 model Tag {
-  id        Int          @id @default(autoincrement())
-  name      String       @unique
-  contacts  ContactTag[]
-  companies CompanyTag[]
+  id            Int               @id @default(autoincrement())
+  name          String            @unique
+  contacts      ContactTag[]
+  companies     CompanyTag[]
+  conversations ConversationTag[]
 }
 
 model ContactTag {
@@ -160,33 +162,56 @@ model CompanyTag {
 
 // ─── Conversations ───────────────────────────────────────────
 
+// A Conversation is a meeting record with four independent "who" facets, all
+// optional, at least one required (enforced in routes/conversations.ts):
+// anchor contact (the legacy 1:1 case), org anchor, named participants, or a
+// free-text attendees description. `title` is the series key for recurring
+// meetings ("Weekly VP meeting") — autocompleted so spellings stay consistent.
 model Conversation {
-  id            Int      @id @default(autoincrement())
-  contactId     Int
-  contact       Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  date          String
-  datePrecision String   @default("DAY") // DAY, MONTH, QUARTER, YEAR
-  type          String   @default("OTHER") // CALL, EMAIL, MEETING, LINKEDIN, COFFEE, EVENT, OTHER
-  summary       String?
-  notes         String?
-  nextSteps     String?
-  photoFile     String?
-  createdAt     DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  contactId            Int?
+  contact              Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  title                String?
+  companyId            Int?
+  company              Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  attendeesDescription String?
+  date                 String
+  datePrecision        String   @default("DAY") // DAY, MONTH, QUARTER, YEAR
+  type                 String   @default("OTHER") // CALL, EMAIL, MEETING, LINKEDIN, COFFEE, EVENT, OTHER
+  summary              String?
+  notes                String?
+  nextSteps            String?
+  photoFile            String?
+  createdAt            DateTime @default(now())
 
   actions            Action[]
   participants       ConversationParticipant[] @relation("ConversationParticipants")
   contactsDiscussed  ConversationContact[]
   companiesDiscussed ConversationCompany[]
+  tags               ConversationTag[]
 }
 
-// Junction: contacts who were participants in the conversation
+// Junction: contacts who were participants in the conversation.
+// `note` is the per-person takeaway ("skeptical of digital-first HEDIS") —
+// surfaced on the contact's detail page as a meeting-takeaways timeline.
 model ConversationParticipant {
   conversationId Int
   conversation   Conversation @relation("ConversationParticipants", fields: [conversationId], references: [id], onDelete: Cascade)
   contactId      Int
   contact        Contact      @relation("ParticipantInConversations", fields: [contactId], references: [id], onDelete: Cascade)
+  note           String?
 
   @@id([conversationId, contactId])
+}
+
+// Junction: tags on a conversation (reuses the existing Tag entity)
+model ConversationTag {
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tagId          Int
+  tag            Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tagId])
 }
 
 // Junction: people discussed in a conversation

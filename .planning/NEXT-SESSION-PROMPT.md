@@ -2,49 +2,54 @@
 
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
 
-### What Was Just Completed (2026-06-12, second session)
+### ⚠️ FIRST: Turso DDL is pending — code is committed locally but NOT pushed
 
-**Phase 2 of the NCQA adaptation plan (Meetings overhaul, Tasks 2.1–2.4) is COMPLETE and DEPLOYED.** `.planning/NCQA-ADAPTATION-PLAN.md` remains the plan of record (read its "How to use this document" section first). Commits, all on `main` via branch `ncqa-phase2`:
+The 2026-06-12 (third session) work is committed on local `main` (`e099388` + `68e8eaa`) but **not pushed**, per the rule "never push schema-touching code before the Turso DDL is applied." Two **additive CREATE TABLEs** (zero risk to existing rows) must run against Turso first. Either:
 
-- `1b618e9` — **Task 2.1**: `Conversation.contactId` nullable + `title`/`companyId`/`attendeesDescription` columns, `ConversationParticipant.note`, new `ConversationTag` junction, ≥1-who validation server-side, `GET /api/conversations/titles` (MRU autocomplete), `?contactId=` also matches named participants, PUT allow-list + junctions replaced only when sent, both backup paths cover `ConversationTag` (24 tables, `_meta.version` 3).
-- `b91376a` — **Task 2.2**: Quick Log dialog (header button on every page + command palette entry; title autocomplete autofocused; who-pickers behind a collapsed disclosure) + full editor gains title/org/attendees/per-participant-notes/tags. New shared `TitleAutocomplete` component. Edits never send `contactId` (can't re-anchor a meeting from an attendee's page).
-- `b507f0e` — **Task 2.3**: new `GET /api/meetings` (pagination envelope; filters title/org/tag/type/date-range/free-text/id; series title matched case-insensitively exact), `/meetings` page (URL-as-state so series links are shareable), Meetings sidebar item, global search + command palette now match and render meetings.
-- `df9eb8a` — **Task 2.4**: "Meeting Takeaways" card on contact Overview (per-participant notes across attended meetings, newest first); "Meetings" card on company Overview (anchored meetings + view-all link).
+- **Option A (Turso web console, easiest):** paste the two `CREATE TABLE` statements from `server/scripts/migrate-turso-phase2-touchups.js` (drop the `IF NOT EXISTS` if you prefer; omit BEGIN/COMMIT — the console auto-commits per statement), **or**
+- **Option B (script):** the Turso auth token in `server/.env` (commented out) is **stale — returns 401**. Get a fresh token (Turso dashboard → database → tokens, or `vercel env pull` after `vercel login`), then:
+  `cd server; $env:TURSO_DATABASE_URL='libsql://searchbook-arobicsek.aws-us-east-2.turso.io'; $env:TURSO_AUTH_TOKEN='<fresh>'; node scripts/migrate-turso-phase2-touchups.js`
+  (script verifies both tables + untouched Conversation row count). Consider updating the commented token in `server/.env` while at it.
 
-**Turso migration (the plan's riskiest — `Conversation` table rebuild) was run by the user in the Turso console and verified clean**: row counts identical before/after (226 conversations / 11 participants / 31 contacts-discussed / 70 companies-discussed / 82 linked actions / max id 240), schema checks all passed. Note for future console scripts: the Turso/Drizzle Studio console auto-commits **each statement** — `BEGIN`/`COMMIT` lines error with "no transaction is active" (harmless, but omit them next time; per-statement auto-commit is the actual behavior).
+Then `git push` (auto-deploys) and verify on https://searchbook-three.vercel.app: /meetings shows pencil/trash icons; edit a meeting; add a prep note + attachment (attachment upload exercises Vercel Blob `files/` prefix — first prod use).
 
-Everything was verified in-browser locally before deploy (quick log → series view → takeaways → editor prefill → org meetings card). Deployment to Vercel verified live.
+### What Was Just Completed (2026-06-12, third session) — Phase 2 touch-ups
 
-**Standing permission:** the user has authorized committing/pushing directly to `main` (auto-deploys to Vercel). Typecheck + local smoke test first; never push schema-touching code before the Turso DDL is applied (procedure at the top of the adaptation plan).
+User-requested additions to the Phase 2 meetings work (commit `e099388`):
 
-### What's Next — Phase 3 (Stakeholder intelligence) or Phase 4 (AI ingest)
+1. **Edit/delete everywhere**: every card on `/meetings` has Edit (pencil) and Delete (trash + confirm dialog). The Quick Log dialog is now the **canonical meeting editor** — `useQuickLog().openEdit(id)` loads the full record (title/date/type/summary/notes/next steps/anchor contact/org/participants **with per-person notes**/attendees description/tags) and PUTs on save. Server PUT/DELETE already existed; this was client-only plus payload includes.
+2. **Meeting prep notes** (`ConversationPrepNote` table + `/api/conversation-prepnotes`, mirrors company-prepnotes): on ANY meeting, not just contact-anchored ones. For notes **in advance**: quick-log the meeting with a future date, then add prep notes (in create mode they're staged locally and saved right after the meeting POST). Shown in an amber block on meeting cards and inside the editor.
+3. **Attachments** (`ConversationAttachment` table + `/api/conversation-attachments` + `POST /api/upload/file`): screenshots/decks/PDFs/Office/text/zip, **4MB cap** (Vercel ~4.5MB serverless body limit). Prod → Vercel Blob (`files/` prefix, best-effort `del()` on remove); dev → `server/data/files/` served at `/files` (vite proxy added). Images render as 16×16 thumbnails on cards, other files as name links.
+4. **Markdown speed typing** (`client/src/components/markdown-textarea.tsx`): toolbar (H3/bold/italic/bullets/numbered) + shortcuts **Ctrl+B / Ctrl+I / Ctrl+Shift+8 (bullets) / Ctrl+Shift+7 (numbered) / Ctrl+Alt+1-3 (# ## ###)** + **Enter auto-continues lists** (numbered lists auto-increment; Enter on an empty item ends the list) + **paste a screenshot → auto-upload → `![](url)` inserted**. Wired into: meeting dialog notes + prep notes, contact-detail conversation notes, contact prep-note add/edit forms.
+5. Both backup paths updated (**26 tables now**, `_meta.version` 4): server `buildExport`/import + client `TABLES_PARENT_FIRST`.
+6. `prep-note-markdown` CSS now styles h1–h3 and constrains inline images.
 
-Per the plan, next up is **Phase 3** (initiatives + stance, leverage, influence, stakeholder matrix) — but **Task 3.1 (auth hardening) is ordered first and is blocked on decisions D8/D9**. **Phase 4** (paste-a-Copilot-recap ingest) is blocked on **D5/D6**. So the session should start by collecting from the user whichever of **D5–D9** they're ready to resolve:
+All verified in-browser locally (edit→save→card refresh, prep note add/delete, attachment upload/serve/remove, delete-with-confirm, bullet auto-continue, Ctrl+B). Typecheck passes. Test artifacts were cleaned up.
 
-- **D5**: one real (sanitized) MS Copilot meeting recap to tune the extraction prompt (Task 4.2).
-- **D6**: `ANTHROPIC_API_KEY` set in Vercel + `server/.env` (Task 4.1).
-- **D7**: can NCQA M365 publish an ICS calendar link? (Phase 5).
-- **D8**: auth upgrade — Cloudflare Access (recommended) vs. high-entropy rotating token (Task 3.1).
-- **D9**: NCQA policy comfort check for candid stance notes (Phase 3).
+**Gotchas discovered this session:**
+- `npx prisma db push` resolves `file:./dev.db` against the **CWD** (Prisma 7 + prisma.config.ts), but runtime `db.ts` resolves it against `server/prisma/`. Run pushes as: `$env:DATABASE_URL='file:./prisma/dev.db'; npx prisma db push` from `server/`. A stray empty `server/dev.db` was created before this was caught — **delete `server/dev.db`** (it's gitignored, harmless, but confusing).
+- Local dev photo/file binaries under `server/data/` are **tracked in git** (existing convention for photos; files follows it).
+- The Turso token in `server/.env` is stale (401) — see above.
 
-Phase 3 Tasks 3.2/3.3 (Initiative/ContactInitiative tables, leverage/influence columns) are buildable without D8/D9 resolved, but per the plan auth hardening should land **before stance data accumulates** — don't ship stance UI ahead of 3.1 without asking.
+### What's Next
 
-Remember (Phase 1+2 lesson): every new table/column goes into **both** backup paths (server `buildExport`/import in `server/src/routes/backup.ts` AND `TABLES_PARENT_FIRST` in `client/src/lib/backup.ts`) — Phase 3 adds `Initiative` + `ContactInitiative`.
+1. **Search upgrade — plan of record: `.planning/SEARCH-UPGRADE-PLAN.md`** (user-requested; 3 tasks S.1–S.3, no schema changes). Read that file; start with Task S.1.
+2. Then back to the adaptation plan: **Phase 3** (gated on D8/D9 for auth-before-stance-data) / **Phase 4** (gated on D5/D6). Decisions D5–D9 still open (list in `NCQA-ADAPTATION-PLAN.md`); the user said login changes + AI features wait ~2 weeks for info they don't have yet — don't push on these until they raise them.
 
-### Carry-over items (pre-dating the adaptation plan, lower priority)
+### Carry-over items (pre-dating, lower priority)
 
-1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel to activate error tracking (hardening Task 17; dormant until then).
-2. Two **desktop-only verifications** parked from Phase 7.5: live photo-ZIP CORS check against prod; restore into a scratch Turso DB. Do not attempt remotely.
-3. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient (works, but wasteful).
-4. Expand `useAutoSave` to Prep Notes, Actions, Company create form.
-5. Company near-duplicate scan (LinkedIn-variant suffixes).
+1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
+2. Two desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
+3. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
+4. Company near-duplicate scan (LinkedIn-variant suffixes).
+5. Meeting-editor parity backlog: the contact-detail conversation dialog still has its own (older) editor with actions/links/photo sections; the global meeting dialog doesn't do follow-up actions yet. Consider consolidating when it next causes friction.
 
 ### Open Bugs / Known Caveats
 
-- No confirmed bugs. Photo-ZIP browser fetch against live Vercel Blob remains unverified (desktop-only item above).
-- Photo binaries are only in the manual backup ZIP, not the daily cloud backup (by design).
-- The meetings list (`GET /api/meetings`) includes `notes` in list payloads by design (the series view exists to read chronological notes); pagination (20/page, cap 100) bounds the payload.
+- No confirmed bugs. Attachment binaries (like photo binaries) are NOT in the daily cloud DB backup — by design.
+- Attachment `DELETE` removes the DB row and best-effort deletes the Vercel Blob; orphaned blobs are possible and harmless.
+- Vercel Blob `files/` uploads not yet exercised in prod (first use comes after this deploy).
 
 ### Working branch
 
-Work happens on `main` (standing user permission, see above) or short-lived branches fast-forwarded into it. Last state: `ncqa-phase2` fast-forwarded into `main` and pushed; Phase 2 live.
+Local `main`, two commits ahead of `origin/main` (`e099388`, `68e8eaa`) — push blocked on the Turso DDL above. Standing permission to push to `main` once DDL is applied.

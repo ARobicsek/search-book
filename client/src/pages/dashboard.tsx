@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Check, Plus, AlertTriangle, CalendarDays, Loader2 } from 'lucide-react'
+import { Check, Plus, AlertTriangle, CalendarDays, Loader2, Hourglass } from 'lucide-react'
 import { ActionDateSelect } from '@/components/action-date-select'
 
 const typeColors: Record<ActionType, string> = {
@@ -166,6 +166,15 @@ export function DashboardPage() {
     .filter((a) => !a.dueDate)
     .sort(sortByPriority)
 
+  const waitingActions = allPending
+    .filter((a) => a.direction === 'WAITING_ON_THEM')
+    .sort((a, b) => {
+      if (a.dueDate && b.dueDate) return a.dueDate < b.dueDate ? -1 : 1
+      if (a.dueDate) return -1
+      if (b.dueDate) return 1
+      return sortByPriority(a, b)
+    })
+
   if (loading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   }
@@ -206,6 +215,35 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-1">
             {overdueActions.sort(sortByPriority).map((action) => (
+              <ActionRow
+                key={action.id}
+                action={action}
+                onToggle={toggleComplete}
+                onUpdate={fetchData}
+                showDate
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Waiting on others */}
+      {waitingActions.length > 0 && (
+        <Card className="border-fuchsia-200 bg-fuchsia-50/40">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-fuchsia-900">
+              <Hourglass className="h-5 w-5" />
+              Waiting on others ({waitingActions.length})
+            </CardTitle>
+            <CardDescription className="text-fuchsia-800/70">
+              Things other people owe you —{' '}
+              <Link to="/actions?filter=waiting" className="hover:underline text-fuchsia-900">
+                see all
+              </Link>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {waitingActions.slice(0, 5).map((action) => (
               <ActionRow
                 key={action.id}
                 action={action}

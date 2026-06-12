@@ -30,7 +30,7 @@ const actionListIncludes = {
 // GET /api/actions — list all actions with optional filters
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { status, contactId, companyId, sortBy, today: clientToday } = req.query;
+    const { status, contactId, companyId, direction, sortBy, today: clientToday } = req.query;
     // Use client's today if provided (fixes timezone issues in production)
     const today = (clientToday as string) || new Date().toLocaleDateString('en-CA');
 
@@ -64,6 +64,10 @@ router.get('/', async (req: Request, res: Response) => {
           { actionCompanies: { some: { companyId: coId } } },
         ];
       }
+    }
+
+    if (direction === 'OWED_BY_ME' || direction === 'WAITING_ON_THEM') {
+      where.direction = direction;
     }
 
     if (status === 'pending') {
@@ -249,6 +253,7 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
             description: existing.description,
             type: existing.type,
             priority: existing.priority,
+            direction: existing.direction,
             dueDate: nextDueDate,
             contactId: existing.contactId,
             companyId: existing.companyId,

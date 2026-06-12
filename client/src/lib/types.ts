@@ -98,6 +98,7 @@ export const COMPANY_STATUS_OPTIONS: { value: CompanyStatus; label: string }[] =
 
 export type ActionType = 'EMAIL' | 'CALL' | 'MEET' | 'READ' | 'WRITE' | 'RESEARCH' | 'FOLLOW_UP' | 'INTRO' | 'OTHER';
 export type ActionPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+export type ActionDirection = 'OWED_BY_ME' | 'WAITING_ON_THEM';
 
 export interface Action {
   id: number;
@@ -114,6 +115,7 @@ export interface Action {
   conversationId: number | null;
   conversation: { id: number; summary: string | null } | null;
   priority: ActionPriority;
+  direction: ActionDirection;
   recurring: boolean;
   recurringIntervalDays: number | null;
   recurringEndDate: string | null;
@@ -133,6 +135,11 @@ export const ACTION_TYPE_OPTIONS: { value: ActionType; label: string }[] = [
   { value: 'FOLLOW_UP', label: 'Follow Up' },
   { value: 'INTRO', label: 'Intro' },
   { value: 'OTHER', label: 'Other' },
+];
+
+export const ACTION_DIRECTION_OPTIONS: { value: ActionDirection; label: string }[] = [
+  { value: 'OWED_BY_ME', label: 'My task' },
+  { value: 'WAITING_ON_THEM', label: 'Waiting on them' },
 ];
 
 export const ACTION_PRIORITY_OPTIONS: { value: ActionPriority; label: string }[] = [

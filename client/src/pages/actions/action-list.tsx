@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   useReactTable,
   getCoreRowModel,
@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 
-type FilterStatus = 'all' | 'pending' | 'completed' | 'overdue'
+type FilterStatus = 'all' | 'pending' | 'completed' | 'overdue' | 'waiting'
 
 const typeColors: Record<ActionType, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -98,16 +98,25 @@ const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) =
 export function ActionListPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const [searchParams] = useSearchParams()
   const [actions, setActions] = useState<Action[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([])
-  const [filter, setFilter] = useState<FilterStatus>('pending')
+  const [filter, setFilter] = useState<FilterStatus>(() => {
+    const f = searchParams.get('filter')
+    return f === 'waiting' || f === 'all' || f === 'completed' || f === 'overdue' ? f : 'pending'
+  })
   const [globalFilter, setGlobalFilter] = useState('')
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
 
   const fetchActions = useCallback(() => {
     const params = new URLSearchParams()
-    if (filter !== 'all') params.set('status', filter)
+    if (filter === 'waiting') {
+      params.set('status', 'pending')
+      params.set('direction', 'WAITING_ON_THEM')
+    } else if (filter !== 'all') {
+      params.set('status', filter)
+    }
     if (filter === 'completed') params.set('sortBy', 'completedDate')
     const qs = params.toString() ? `?${params}` : ''
     api
@@ -168,13 +177,20 @@ export function ActionListPage() {
       ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <Link
-            to={`/actions/${row.original.id}`}
-            className={`font-medium hover:underline ${row.original.completed ? 'text-muted-foreground line-through' : 'text-foreground'
-              }`}
-          >
-            {row.original.title}
-          </Link>
+          <span className="flex items-center gap-1.5">
+            <Link
+              to={`/actions/${row.original.id}`}
+              className={`font-medium hover:underline ${row.original.completed ? 'text-muted-foreground line-through' : 'text-foreground'
+                }`}
+            >
+              {row.original.title}
+            </Link>
+            {row.original.direction === 'WAITING_ON_THEM' && (
+              <Badge variant="outline" className="bg-fuchsia-100 text-fuchsia-800 text-xs shrink-0">
+                Waiting
+              </Badge>
+            )}
+          </span>
           <div className="sm:hidden mt-1" onClick={(e) => e.stopPropagation()}>
             <ActionDateSelect
               action={row.original}
@@ -383,6 +399,7 @@ export function ActionListPage() {
     { value: 'pending', label: 'Pending' },
     { value: 'completed', label: 'Completed' },
     { value: 'overdue', label: 'Overdue' },
+    { value: 'waiting', label: 'Waiting For' },
   ]
 
   return (

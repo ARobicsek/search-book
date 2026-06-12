@@ -226,6 +226,7 @@ model Action {
   conversationId        Int?
   conversation          Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   priority              String        @default("MEDIUM") // HIGH, MEDIUM, LOW
+  direction             String        @default("OWED_BY_ME") // OWED_BY_ME, WAITING_ON_THEM
   recurring             Boolean       @default(false)
   recurringIntervalDays Int?
   recurringEndDate      String?

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Action, Contact, Company, LinkRecord } from '@/lib/types'
-import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
+import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, ACTION_DIRECTION_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,6 +37,7 @@ type FormData = {
   description: string
   type: string
   priority: string
+  direction: string
   dueDate: string
   contactIds: string[]
   companyIds: string[]
@@ -51,6 +52,7 @@ const emptyForm: FormData = {
   description: '',
   type: 'OTHER',
   priority: 'MEDIUM',
+  direction: 'OWED_BY_ME',
   dueDate: '',
   contactIds: [],
   companyIds: [],
@@ -74,6 +76,7 @@ function actionToForm(action: Action): FormData {
     description: action.description ?? '',
     type: action.type,
     priority: action.priority,
+    direction: action.direction ?? 'OWED_BY_ME',
     dueDate: action.dueDate ?? '',
     contactIds,
     companyIds,
@@ -90,6 +93,7 @@ function formToPayload(form: FormData) {
     description: form.description.trim() || null,
     type: form.type,
     priority: form.priority,
+    direction: form.direction,
     dueDate: form.dueDate || null,
     contactIds: form.contactIds.map((id) => parseInt(id)),
     companyIds: form.companyIds.map((id) => parseInt(id)),
@@ -272,6 +276,7 @@ export function ActionFormPage() {
         description: form.description.trim() || null,
         type: form.type,
         priority: form.priority,
+        direction: form.direction,
         dueDate: form.dueDate || null,
         contactIds: finalContactIds,
         companyIds: finalCompanyIds,
@@ -415,6 +420,22 @@ export function ActionFormPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {ACTION_PRIORITY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="direction">Who owes it</Label>
+              <Select value={form.direction} onValueChange={(v) => set('direction', v)}>
+                <SelectTrigger id="direction" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACTION_DIRECTION_OPTIONS.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
                     </SelectItem>

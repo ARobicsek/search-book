@@ -163,6 +163,11 @@ export function ActionDetailPage() {
               <Badge variant="outline" className={priorityColors[action.priority]}>
                 {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
               </Badge>
+              {action.direction === 'WAITING_ON_THEM' && (
+                <Badge variant="outline" className="bg-fuchsia-100 text-fuchsia-800">
+                  Waiting on them
+                </Badge>
+              )}
               {action.completed ? (
                 <Badge variant="outline" className="bg-green-100 text-green-800">
                   Completed

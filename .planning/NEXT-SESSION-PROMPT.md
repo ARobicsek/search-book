@@ -2,54 +2,49 @@
 
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
 
-### ⚠️ FIRST: Turso DDL is pending — code is committed locally but NOT pushed
+### What Was Just Completed (2026-06-12, third session) — Phase 2 touch-ups, DEPLOYED
 
-The 2026-06-12 (third session) work is committed on local `main` (`e099388` + `68e8eaa`) but **not pushed**, per the rule "never push schema-touching code before the Turso DDL is applied." Two **additive CREATE TABLEs** (zero risk to existing rows) must run against Turso first. Either:
+Commits `e099388`, `68e8eaa`, `9f90bdd`, `d718ffa` on `main`; Turso DDL (2 additive CREATE TABLEs) run by the user in the console; deploy + `/api/health` verified live.
 
-- **Option A (Turso web console, easiest):** paste the two `CREATE TABLE` statements from `server/scripts/migrate-turso-phase2-touchups.js` (drop the `IF NOT EXISTS` if you prefer; omit BEGIN/COMMIT — the console auto-commits per statement), **or**
-- **Option B (script):** the Turso auth token in `server/.env` (commented out) is **stale — returns 401**. Get a fresh token (Turso dashboard → database → tokens, or `vercel env pull` after `vercel login`), then:
-  `cd server; $env:TURSO_DATABASE_URL='libsql://searchbook-arobicsek.aws-us-east-2.turso.io'; $env:TURSO_AUTH_TOKEN='<fresh>'; node scripts/migrate-turso-phase2-touchups.js`
-  (script verifies both tables + untouched Conversation row count). Consider updating the commented token in `server/.env` while at it.
+1. **Edit/delete everywhere**: every card on `/meetings` has Edit (pencil) and Delete (trash + confirm). The Quick Log dialog is now the **canonical meeting editor** — `useQuickLog().openEdit(id)` loads the full record (title/date/type/summary/notes/next steps/anchor contact/org/participants with per-person notes/attendees description/tags) and PUTs on save.
+2. **Meeting prep notes** (`ConversationPrepNote` + `/api/conversation-prepnotes`): on ANY meeting. Advance prep = quick-log the meeting with a future date, add prep notes (staged locally in create mode, live in edit mode). Amber block on meeting cards.
+3. **Attachments** (`ConversationAttachment` + `/api/conversation-attachments` + `POST /api/upload/file`): images/PDF/Office/text/zip, **4MB cap** (Vercel body limit). Prod → Vercel Blob `files/` prefix (best-effort `del()` on remove); dev → `server/data/files/` at `/files` (vite proxy added). Image attachments = thumbnails; others = name links.
+4. **Markdown speed typing** (`client/src/components/markdown-textarea.tsx`): toolbar + **Ctrl+B / Ctrl+I / Ctrl+Shift+8 / Ctrl+Shift+7 / Ctrl+Alt+1-3** + **Enter auto-continues lists** + **paste-screenshot → upload → `![](url)`**. Wired into meeting dialog, contact-detail conversation editor, contact prep-note forms.
+5. Backup paths now cover **26 tables**, `_meta.version` **4** (server `buildExport`/import + client `TABLES_PARENT_FIRST`).
+6. `prep-note-markdown` CSS styles h1–h3 + constrains inline images.
 
-Then `git push` (auto-deploys) and verify on https://searchbook-three.vercel.app: /meetings shows pencil/trash icons; edit a meeting; add a prep note + attachment (attachment upload exercises Vercel Blob `files/` prefix — first prod use).
+**Gotchas captured this session:**
+- The client **build** (`tsc -b`, used by Vercel `build:vercel`) enforces `noUnusedLocals`; the `typecheck` script (`tsc --noEmit`) does not. **Run `npm run build --prefix client` before pushing UI changes**, or prepush alone can pass while the deploy fails (that happened; fixed in `d718ffa`).
+- `npx prisma db push` resolves `file:./dev.db` against the **CWD**; the runtime (`db.ts`) resolves it against `server/prisma/`. Push with: `cd server; $env:DATABASE_URL='file:./prisma/dev.db'; npx prisma db push`. A stray empty `server/dev.db` from before this was caught still exists — **safe to delete** (gitignored).
+- The Turso auth token commented out in `server/.env` is **stale (401)**. The user runs console DDL instead; if a script run is ever needed, get a fresh token first (`server/scripts/migrate-turso-phase2-touchups.js` shows the pattern).
+- Local dev photo/file binaries under `server/data/` are tracked in git (existing convention).
 
-### What Was Just Completed (2026-06-12, third session) — Phase 2 touch-ups
+### What's Next — Search Upgrade (user-requested)
 
-User-requested additions to the Phase 2 meetings work (commit `e099388`):
+**Plan of record: `.planning/SEARCH-UPGRADE-PLAN.md`.** Read it fully (it's short), then build top-to-bottom:
 
-1. **Edit/delete everywhere**: every card on `/meetings` has Edit (pencil) and Delete (trash + confirm dialog). The Quick Log dialog is now the **canonical meeting editor** — `useQuickLog().openEdit(id)` loads the full record (title/date/type/summary/notes/next steps/anchor contact/org/participants **with per-person notes**/attendees description/tags) and PUTs on save. Server PUT/DELETE already existed; this was client-only plus payload includes.
-2. **Meeting prep notes** (`ConversationPrepNote` table + `/api/conversation-prepnotes`, mirrors company-prepnotes): on ANY meeting, not just contact-anchored ones. For notes **in advance**: quick-log the meeting with a future date, then add prep notes (in create mode they're staged locally and saved right after the meeting POST). Shown in an amber block on meeting cards and inside the editor.
-3. **Attachments** (`ConversationAttachment` table + `/api/conversation-attachments` + `POST /api/upload/file`): screenshots/decks/PDFs/Office/text/zip, **4MB cap** (Vercel ~4.5MB serverless body limit). Prod → Vercel Blob (`files/` prefix, best-effort `del()` on remove); dev → `server/data/files/` served at `/files` (vite proxy added). Images render as 16×16 thumbnails on cards, other files as name links.
-4. **Markdown speed typing** (`client/src/components/markdown-textarea.tsx`): toolbar (H3/bold/italic/bullets/numbered) + shortcuts **Ctrl+B / Ctrl+I / Ctrl+Shift+8 (bullets) / Ctrl+Shift+7 (numbered) / Ctrl+Alt+1-3 (# ## ###)** + **Enter auto-continues lists** (numbered lists auto-increment; Enter on an empty item ends the list) + **paste a screenshot → auto-upload → `![](url)` inserted**. Wired into: meeting dialog notes + prep notes, contact-detail conversation notes, contact prep-note add/edit forms.
-5. Both backup paths updated (**26 tables now**, `_meta.version` 4): server `buildExport`/import + client `TABLES_PARENT_FIRST`.
-6. `prep-note-markdown` CSS now styles h1–h3 and constrains inline images.
+- **Task S.1** — server: full field coverage (incl. contact `personalDetails`, tags everywhere, meeting takeaways/prep notes, org activity log), `scopes` + `sort` params, multi-term AND with quoted phrases, match-evidence snippets. No schema changes, no Turso DDL.
+- **Task S.2** — client `/search`: scope chips (URL + localStorage), sort dropdown, highlighted snippets, per-group "show all" deep links.
+- **Task S.3** — mobile (390px) + prod perf validation.
 
-All verified in-browser locally (edit→save→card refresh, prep note add/delete, attachment upload/serve/remove, delete-with-confirm, bullet auto-continue, Ctrl+B). Typecheck passes. Test artifacts were cleaned up.
+After that: back to the adaptation plan — **Phase 3** (blocked on D8/D9) / **Phase 4** (blocked on D5/D6). The user said login changes + AI features wait ~2 weeks for info they don't yet have — **don't push on D5–D9 until they raise them.**
 
-**Gotchas discovered this session:**
-- `npx prisma db push` resolves `file:./dev.db` against the **CWD** (Prisma 7 + prisma.config.ts), but runtime `db.ts` resolves it against `server/prisma/`. Run pushes as: `$env:DATABASE_URL='file:./prisma/dev.db'; npx prisma db push` from `server/`. A stray empty `server/dev.db` was created before this was caught — **delete `server/dev.db`** (it's gitignored, harmless, but confusing).
-- Local dev photo/file binaries under `server/data/` are **tracked in git** (existing convention for photos; files follows it).
-- The Turso token in `server/.env` is stale (401) — see above.
+### Suggested verification at session start (2 min)
 
-### What's Next
-
-1. **Search upgrade — plan of record: `.planning/SEARCH-UPGRADE-PLAN.md`** (user-requested; 3 tasks S.1–S.3, no schema changes). Read that file; start with Task S.1.
-2. Then back to the adaptation plan: **Phase 3** (gated on D8/D9 for auth-before-stance-data) / **Phase 4** (gated on D5/D6). Decisions D5–D9 still open (list in `NCQA-ADAPTATION-PLAN.md`); the user said login changes + AI features wait ~2 weeks for info they don't have yet — don't push on these until they raise them.
+Live site smoke test if the user hasn't already: /meetings → edit a meeting, add a prep note, upload an attachment (first prod use of Blob `files/` prefix), delete a throwaway meeting.
 
 ### Carry-over items (pre-dating, lower priority)
 
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
-2. Two desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
+2. Desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
 3. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
 4. Company near-duplicate scan (LinkedIn-variant suffixes).
-5. Meeting-editor parity backlog: the contact-detail conversation dialog still has its own (older) editor with actions/links/photo sections; the global meeting dialog doesn't do follow-up actions yet. Consider consolidating when it next causes friction.
+5. Meeting-editor parity: contact-detail's embedded editor still has its own actions/links/photo sections; the global dialog doesn't do follow-up actions yet. Consolidate when it next causes friction.
 
 ### Open Bugs / Known Caveats
 
-- No confirmed bugs. Attachment binaries (like photo binaries) are NOT in the daily cloud DB backup — by design.
-- Attachment `DELETE` removes the DB row and best-effort deletes the Vercel Blob; orphaned blobs are possible and harmless.
-- Vercel Blob `files/` uploads not yet exercised in prod (first use comes after this deploy).
+- No confirmed bugs. Attachment binaries (like photos) are NOT in the daily cloud DB backup — by design. Attachment delete may orphan a blob (harmless).
 
 ### Working branch
 
-Local `main`, two commits ahead of `origin/main` (`e099388`, `68e8eaa`) — push blocked on the Turso DDL above. Standing permission to push to `main` once DDL is applied.
+`main`, clean and pushed; Vercel deploy of `d718ffa` verified live (new bundle + healthy DB).

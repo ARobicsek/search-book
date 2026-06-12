@@ -36,6 +36,10 @@
 | Meeting capture | Paste MS Copilot recaps → Claude API extraction → mandatory review screen → normal CRUD (AI never writes directly) | 2026-06-12 |
 | Calendar | Outlook via published ICS feed (server-side secret env var), v1; Graph OAuth only if ICS staleness hurts | 2026-06-12 |
 | Git workflow | Owner granted standing permission to commit/push directly to `main` (prepush typecheck first; Turso DDL before schema code) | 2026-06-12 |
+| Meeting prep notes & attachments | Per-conversation tables (`ConversationPrepNote`, `ConversationAttachment`); advance prep = future-dated meeting + prep notes; attachments ≤4MB via server pass-through (Vercel Blob `files/` prefix in prod, `server/data/files/` in dev); binaries excluded from daily DB backup (photo precedent) | 2026-06-12 |
+| Meeting editor | Quick Log dialog is the canonical create+edit meeting editor app-wide (`useQuickLog().openEdit(id)`); contact-detail keeps its legacy embedded editor for now | 2026-06-12 |
+| Markdown speed input | Shared `MarkdownTextarea` (toolbar + Ctrl+B/I, Ctrl+Shift+8/7, Ctrl+Alt+1-3, Enter list auto-continue, paste-screenshot→upload→`![](url)`) instead of a rich-text editor | 2026-06-12 |
+| Search upgrade | Plan of record `.planning/SEARCH-UPGRADE-PLAN.md`: full-field coverage, scope groups (People-profile / People-notes / Orgs / Meetings / Actions / Ideas), multi-term AND, 4 sorts, match snippets; plain `LIKE`, no FTS5 at current scale | 2026-06-12 |
 
 ## User Feedback Summary
 
@@ -60,6 +64,7 @@ For full history, see SESSION-HISTORY.md.
 
 | Date | What Happened |
 |------|---------------|
+| 2026-06-12 | **Phase 2 touch-ups built + deployed** (third session, commits `e099388`…`d718ffa`). Edit/delete on `/meetings` (Quick Log dialog → canonical editor with edit mode); meeting prep notes (`ConversationPrepNote`); attachments (`ConversationAttachment` + `POST /api/upload/file`); `MarkdownTextarea` speed-typing component; backup paths → 26 tables, version 4. User ran the 2 additive CREATE TABLEs in the Turso console. One Vercel build failure (unused var caught by `tsc -b` but not `tsc --noEmit` — client build is stricter than typecheck) fixed in `d718ffa`. **Search upgrade plan written** (`.planning/SEARCH-UPGRADE-PLAN.md`) — next build target. Gotcha: `npx prisma db push` resolves `file:./dev.db` against CWD, runtime against `server/prisma/` — push with `$env:DATABASE_URL='file:./prisma/dev.db'`; stray empty `server/dev.db` left behind, safe to delete. |
 | 2026-06-12 | **Phase 1 built + deployed.** Taxonomy retheme (`08568e0`) + action direction/Waiting For (`71cd9b0`) on `main`; user ran the Turso migration in the web console (legacy ecosystem/status remaps + `Action.direction` column), verified clean. Discovered during impl: company `AWAITING_RESPONSE` status existed only client-side — added to eliminate set. Turso table names are PascalCase model names (`"Contact"`). |
 | 2026-06-12 | **NCQA Adaptation Plan created** (`.planning/NCQA-ADAPTATION-PLAN.md`, plan of record): 6 phases — taxonomy retheme, meetings overhaul (Groups/fuzzy attendance/multi-subject), stakeholder stance+leverage, Copilot-recap AI ingest, Outlook ICS daily briefing, backlog extras. Session docs made agent-agnostic (root `AGENTS.md`, updated Gemini start/end prompts, CLAUDE.md). Decisions D1–D9 pending user sign-off. |
 | 2026-02-28 | Conversation Participants — separate junction from "discussed", analytics drilldown updated. |

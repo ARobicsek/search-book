@@ -222,7 +222,7 @@ Display name resolves `title → contact name → company → attendees descript
 
 Edit/delete affordances on `/meetings` (Quick Log dialog became the canonical create+edit meeting editor); **meeting-level prep notes** (`ConversationPrepNote`, incl. advance notes via future-dated meetings); **attachments** (`ConversationAttachment` + generic `POST /api/upload/file`, Vercel Blob `files/` prefix in prod, 4MB cap); **markdown speed toolbar/shortcuts/list-auto-continue/paste-screenshot** (`MarkdownTextarea`, wired into meeting + conversation + prep-note editors). Both backup paths now cover 26 tables (`_meta.version` 4).
 **Commit:** `feat(meetings): edit/delete affordances + meeting prep notes, attachments, markdown speed toolbar`
-**STATUS:** ✅ Code complete 2026-06-12 (commit `e099388`), verified locally in-browser. ⚠️ **Turso DDL (2 additive CREATE TABLEs) pending — do NOT push to main before it runs** (script: `server/scripts/migrate-turso-phase2-touchups.js`; the `.env` Turso token is stale/401, see NEXT-SESSION-PROMPT).
+**STATUS:** ✅ DEPLOYED 2026-06-12 (commits `e099388`…`d718ffa`). Turso CREATE TABLEs run by the user in the console; verified locally in-browser; live deploy + health confirmed. (One Vercel build failure fixed in `d718ffa` — note the client **build** runs `tsc -b` with `noUnusedLocals`, stricter than the `typecheck` script.)
 
 > **Related new plan:** `.planning/SEARCH-UPGRADE-PLAN.md` (user-requested global search overhaul — scoped, full-coverage, sortable; precedes/complements Task 6.2 semantic search).
 

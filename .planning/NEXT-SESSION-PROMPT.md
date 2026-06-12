@@ -15,13 +15,18 @@ This file is the handoff document for the next AI session (Claude Code **or** Ge
 
 Session-management docs were updated to make the protocol explicitly agent-agnostic (this file + `Gemini_session_start.md`/`Gemini_session_end.md` + new root `AGENTS.md`).
 
+**Later the same day (2026-06-12), the user resolved D1–D4** and the plan was updated in place: final ecosystem list (new list + keep `RECRUITER`; `ROLODEX`/`TARGET`/`INFLUENCER`/`INTRO_SOURCE` → `NETWORK`), trimmed statuses with a blank/`'NONE'`-sentinel option (contacts: 4 values; companies: 4 values with `ENGAGED`/`PARTNER` renames), and — the big one — **Phase 2 redesigned around title-based meeting series instead of Groups** (D4: the user wants to name conversations after calendar event names with minimal effort and find them by title later).
+
 **Standing permission:** the user has authorized committing/pushing directly to `main` (auto-deploys to Vercel) so they can test. Typecheck + local smoke test first; never push schema-touching code before the Turso DDL is applied (procedure at the top of the adaptation plan).
 
-### What's Next — Phase 1 of the NCQA Adaptation Plan
+### What's Next — Build Phase 1 (decisions D1–D4 resolved 2026-06-12)
 
-1. **First: collect decisions D1–D3** from the user (final ecosystem & status lists — proposals are in the plan, they just need sign-off). The full decision checklist (D1–D9) is at the top of `NCQA-ADAPTATION-PLAN.md`.
-2. **Task 1.4 (action direction / Waiting-For) has no blockers** — it can be built immediately, even before D1–D3 are answered.
-3. Then Tasks 1.1–1.3 (taxonomy), then Phase 2 (meetings overhaul — note Task 2.1 contains the plan's riskiest migration: making `Conversation.contactId` nullable requires a SQLite table rebuild on Turso; backup first).
+The user answered D1–D4 (final taxonomies + the meetings redesign); the plan doc reflects them, including **exact migration SQL** in Tasks 1.1–1.3 (note: table names are PascalCase — `"Contact"`, `"Company"`, `"Action"`).
+
+1. **All Phase 1 tasks are unblocked but need Turso access** (data UPDATEs for 1.1–1.3; `ADD COLUMN` for 1.4). The user must be at their desktop (creds in local `server/.env`, temporarily uncommented) — batch all four statements into one migration moment, after a fresh backup.
+2. Code for Tasks 1.1–1.4 can be written and tested locally beforehand, but per standing rule do **not** push schema/taxonomy-dependent code to `main` until the Turso statements have run.
+3. **Phase 2 was redesigned per D4: NO Groups feature.** Recurring meetings are identified by repeated, autocompleted **titles** (matching Outlook event names, e.g. "Weekly VP meeting"), with a series view + title search. Read the revised Phase 2 design section before building. Task 2.1 still contains the riskiest migration (nullable `contactId` = table rebuild).
+4. Remaining open decisions: **D5–D9** (Copilot sample, API key, ICS availability, auth choice, policy check).
 
 ### Carry-over items (pre-dating the adaptation plan, lower priority)
 

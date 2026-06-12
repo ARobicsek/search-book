@@ -30,7 +30,9 @@
 | CORS | Exact allow-list (localhost + prod domain), no `*.vercel.app` wildcard; header-auth is the real gate | 2026-06-04 |
 | App mission | Adapt SearchBook (vs. replace) into NCQA CMO stakeholder-management system; plan of record = `.planning/NCQA-ADAPTATION-PLAN.md` | 2026-06-12 |
 | Legacy data | No archiving; legacy ecosystem values stay valid (additive taxonomy), reclassify opportunistically | 2026-06-12 |
-| Meetings model | Conversation = meeting with 5 optional "who" facets (contact anchor, org anchor, Groups, named participants w/ per-person notes, free-text attendees description; ≥1 required); multi-subject via markdown `### Topic` headings + conversation tags, NOT per-topic child records; group links are live references, not snapshots | 2026-06-12 |
+| Meetings model | Conversation = meeting with title + 4 optional "who" facets (contact anchor, org anchor, named participants w/ per-person notes, free-text attendees description; ≥1 of title/facets required); multi-subject via markdown `### Topic` headings + conversation tags, NOT per-topic child records | 2026-06-12 |
+| Recurring meetings (D4) | **No Groups feature** — series identified by repeated, autocompleted `title` matching the Outlook event name; series view + title search; Groups deferred to backlog | 2026-06-12 |
+| Taxonomy (D1–D3) | Ecosystems: new NCQA list + keep RECRUITER; ROLODEX/TARGET/INFLUENCER/INTRO_SOURCE→NETWORK. Contact statuses: RESEARCHING/CONNECTED/AWAITING_RESPONSE/FOLLOW_UP_NEEDED + blank. Company: RESEARCHING/ENGAGED/PARTNER/CONNECTED + blank. Blank = `'NONE'` sentinel (no table rebuild) | 2026-06-12 |
 | Meeting capture | Paste MS Copilot recaps → Claude API extraction → mandatory review screen → normal CRUD (AI never writes directly) | 2026-06-12 |
 | Calendar | Outlook via published ICS feed (server-side secret env var), v1; Graph OAuth only if ICS staleness hurts | 2026-06-12 |
 | Git workflow | Owner granted standing permission to commit/push directly to `main` (prepush typecheck first; Turso DDL before schema code) | 2026-06-12 |

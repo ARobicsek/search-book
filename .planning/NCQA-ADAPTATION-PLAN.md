@@ -1,7 +1,7 @@
 # SearchBook — NCQA Adaptation Plan
 
 **Created:** 2026-06-12
-**Status:** Phase 1 not started. Taxonomy proposals below need user sign-off before Task 1.1 (see "Decisions needed from the user").
+**Status:** **D1–D4 resolved (2026-06-12)** — Phase 1 is fully specified and ready to build (note: Tasks 1.1–1.4 need Turso access for data UPDATEs/DDL, so the user must be at their desktop or supply creds). Phase 2 redesigned per D4: **no Groups feature** — recurring meetings are identified by repeated, autocompleted **titles** ("meeting series"). Remaining open decisions: D5–D9.
 **Why this exists:** The owner is starting as Chief Medical Officer of NCQA. SearchBook moves from job-search networking CRM to an **executive stakeholder-management system**: mapping who's aligned with two agendas (modernizing healthcare quality measurement; bringing measurement into the AI age), tracking how each person can help (speaking, publishing, funding, amplification, collaboration, advising, intros), and surviving a heavy meeting load with reliable capture and compound follow-ups.
 
 This document is the **plan of record**. Any AI agent (Claude Code or Gemini/Antigravity) picking up work starts here after reading `CLAUDE.md` and `.planning/NEXT-SESSION-PROMPT.md`.
@@ -34,10 +34,6 @@ Prisma `db push` only migrates **local SQLite**. Production Turso needs DDL run 
 
 | # | Decision | Proposal on the table | Needed for |
 |---|----------|----------------------|------------|
-| D1 | Final **ecosystem** list + handling of legacy values | See Task 1.1 (additive approach, legacy values stay valid) | Task 1.1 |
-| D2 | Final **contact status** list | See Task 1.2 (keep most, swap `LEAD_TO_PURSUE`, add `DORMANT`) | Task 1.2 |
-| D3 | Final **company status** list | See Task 1.3 | Task 1.3 |
-| D4 | Seed **Groups** (e.g., "My VPs", standing committees) | Collect 3–6 names | Task 2.4 |
 | D5 | One real (sanitized) **MS Copilot meeting recap** pasted in, to tune the extraction prompt | — | Task 4.2 |
 | D6 | `ANTHROPIC_API_KEY` set in Vercel + `server/.env` **[USER ACTION]** | — | Task 4.1 |
 | D7 | Can NCQA's M365 publish an **ICS calendar link**? (Outlook → Settings → Calendar → Shared calendars → Publish) **[USER ACTION]** | If blocked, fall back to paste-an-agenda (Task 5.4) | Phase 5 |
@@ -45,10 +41,15 @@ Prisma `db push` only migrates **local SQLite**. Production Turso needs DDL run 
 | D9 | Comfort/policy check: candid stance notes about named industry figures will live in this personal app — confirm that's acceptable under NCQA policy **[USER ACTION]** | — | Phase 3 |
 
 **Already decided (2026-06-12):**
-- Keep SearchBook (vs. switching to a commercial CRM); adapt in place, same database. **No archiving** of job-search-era contacts — legacy data stays live and gets reclassified opportunistically.
+- Keep SearchBook (vs. switching to a commercial CRM); adapt in place, same database. **No archiving** of job-search-era contacts.
 - Note-taker is **MS Copilot** (Teams recaps will be pasted in); calendar is **Outlook**.
-- Meetings model: group references are *current-membership references, not snapshots*; multiple subjects handled via markdown topic headings + conversation tags, **not** per-topic DB segments (rejected as over-engineering for a single user).
-- Single optional company anchor on a conversation (not multi-org anchors); multi-org meetings use groups/description/named participants.
+- **D1 (ecosystems):** adopt the new list (Task 1.1) **plus keep `RECRUITER`**; bulk-remap `ROLODEX`→`NETWORK`, `TARGET`→`NETWORK`; eliminate all other legacy values (`INFLUENCER`, `INTRO_SOURCE` also remapped to `NETWORK` — implementer's interpretation of "eliminate remaining legacy categories"; user may spot-reclassify e.g. influencers into `POLICY`/`MEDIA` afterward).
+- **D2 (contact statuses):** only `RESEARCHING`, `CONNECTED`, `AWAITING_RESPONSE`, `FOLLOW_UP_NEEDED`, **plus a blank/None option**. All other current values remap to None.
+- **D3 (company statuses):** only `RESEARCHING`, `ENGAGED` (was `IN_DISCUSSIONS`), `PARTNER` (was `ACTIVE_TARGET`), `CONNECTED`, plus blank/None.
+- **D4 (recurring meetings): no Groups feature.** Recurring meetings are identified by their **title**, ideally matching the Outlook event name ("Weekly VP meeting"), entered with autocomplete so the series stays consistent — and prefilled automatically once Phases 4/5 land. Finding "all notes from weekly VP meetings" = search/click the title, mirroring today's search-the-person habit. Groups deferred to the Phase 6 backlog.
+- Meetings model: multiple subjects handled via markdown topic headings + conversation tags, **not** per-topic DB segments (rejected as over-engineering for a single user).
+- Single optional company anchor on a conversation (not multi-org anchors); multi-org meetings use description/named participants.
+- Status fields use a `'NONE'` **sentinel value rendered as blank** instead of making the columns nullable — identical UX, avoids a risky SQLite table rebuild of the central `Contact`/`Company` tables.
 
 ---
 
@@ -56,60 +57,83 @@ Prisma `db push` only migrates **local SQLite**. Production Turso needs DDL run 
 
 *Goal: the app speaks NCQA instead of job-search, and follow-ups distinguish "I owe them" from "they owe me." Small, contained changes; ship within a session.*
 
-## Task 1.1 — NCQA ecosystem taxonomy (additive)
+## Task 1.1 — NCQA ecosystem taxonomy (DECIDED — D1)
 
 **Problem:** `Contact.ecosystem` values (`RECRUITER, ROLODEX, TARGET, INFLUENCER, ACADEMIA, INTRO_SOURCE`) encode a job hunt.
 
-**Approach — additive, no bulk migration.** A one-shot mapping would miscategorize (e.g., `TARGET` contacts are now a mix of payers, vendors, and academics). Instead: add the new values, keep legacy values valid, render legacy ones in a visually distinct "Legacy" group in dropdowns/filters, and reclassify contacts as they come up. No data is touched at migration time.
+**Final list (D1):**
 
-**Proposed new list (pending D1):**
+| Value | Label | Notes |
+|-------|-------|-------|
+| `PAYER` | Payer / Health Plan | |
+| `PROVIDER` | Provider / Health System | |
+| `GOVERNMENT` | Government (CMS, ONC, states) | |
+| `ACADEMIA` | Academia | value already exists — carries over untouched |
+| `HEALTH_TECH` | Health Tech / Vendor | |
+| `POLICY` | Policy / Association / Think Tank | |
+| `MEDIA` | Media / Press | |
+| `FUNDER` | Funder / Philanthropy | |
+| `NCQA` | NCQA Internal | |
+| `NETWORK` | General Network | absorbs the legacy buckets |
+| `RECRUITER` | Recruiter | kept per D1 (exec recruiters stay relevant) |
 
-| Value | Label |
-|-------|-------|
-| `PAYER` | Payer / Health Plan |
-| `PROVIDER` | Provider / Health System |
-| `GOVERNMENT` | Government (CMS, ONC, states) |
-| `ACADEMIA` | Academia *(value already exists — carries over untouched)* |
-| `HEALTH_TECH` | Health Tech / Vendor |
-| `POLICY` | Policy / Association / Think Tank |
-| `MEDIA` | Media / Press |
-| `FUNDER` | Funder / Philanthropy |
-| `NCQA` | NCQA Internal |
-| `NETWORK` | General Network |
+**Data migration (Turso, after backup — note PascalCase table names, no `@@map` in schema):**
+```sql
+UPDATE "Contact" SET ecosystem='NETWORK'
+WHERE ecosystem IN ('ROLODEX','TARGET','INFLUENCER','INTRO_SOURCE');
+```
+`RECRUITER` and `ACADEMIA` rows untouched. (`INFLUENCER`/`INTRO_SOURCE`→`NETWORK` is the implementer's reading of "eliminate remaining legacy categories" — user may spot-reclassify into `POLICY`/`MEDIA` afterward.) Run the same UPDATE against local SQLite dev data.
 
-**Changes:**
-- `client/src/lib/types.ts` — extend `Ecosystem` union + `ECOSYSTEM_OPTIONS` (new list first, then a legacy group: `RECRUITER`, `ROLODEX`, `TARGET`, `INFLUENCER`, `INTRO_SOURCE` labeled e.g. "Recruiter (legacy)").
-- Server input allow-lists (the Task 18-style validation in `server/src/routes/contacts.ts`) — accept new + legacy values.
-- Contact list/filter UI + analytics ecosystem breakdown: render both groups.
-- No schema change (`ecosystem` is a plain string).
+**Code changes:**
+- `client/src/lib/types.ts` — replace `Ecosystem` union + `ECOSYSTEM_OPTIONS` with the final list.
+- Server input allow-list in `server/src/routes/contacts.ts` — final list only.
+- Schema DDL default stays `'RECRUITER'` (changing it needs a table rebuild — not worth it); instead the **client form defaults to `NETWORK`** and always sends `ecosystem` explicitly.
+- Contact list/filter UI + analytics ecosystem breakdown use the new list; render any unknown stragglers as their raw value (defensive, in case a row is missed).
 
-**Acceptance:** can assign new ecosystems; legacy contacts display correctly; filters work for both; analytics doesn't break on mixed values.
-**Commit:** `feat(taxonomy): NCQA ecosystem values alongside legacy ones`
-**STATUS:** Not started. Blocked on D1.
+**Acceptance:** no contact left on an eliminated value after migration; filters/analytics show the new list; new-contact form defaults to General Network.
+**Commit:** `feat(taxonomy): NCQA ecosystems + legacy remap`
+**STATUS:** Not started. Unblocked; needs Turso access for the UPDATE (desktop session or creds).
 
-## Task 1.2 — Contact status lifecycle
+## Task 1.2 — Contact statuses (DECIDED — D2)
 
-**Problem:** Statuses are a job-search funnel. Most actually transfer fine; only a couple are wrong.
+**Final list (D2):** `RESEARCHING`, `CONNECTED`, `AWAITING_RESPONSE`, `FOLLOW_UP_NEEDED`, plus a **blank/None** option. All other values eliminated.
 
-**Proposed (pending D2):** keep `NEW`, `RESEARCHING`, `CONNECTED`, `AWAITING_RESPONSE`, `FOLLOW_UP_NEEDED`, `ON_HOLD`, `CLOSED` (operationally still right); **replace** `LEAD_TO_PURSUE` with `ACTIVE_ALLY` (label "Active Ally / Collaborator"); **add** `DORMANT` (label "Dormant — worth reviving"). Existing `LEAD_TO_PURSUE` rows get a one-line UPDATE to `ACTIVE_ALLY` (this one *is* a safe bulk map — confirm with user).
+**Implementation of "None": sentinel value `'NONE'`, rendered as blank ("—").** Making the column truly nullable would require a SQLite table rebuild of `Contact` (the central table) on Turso; the sentinel needs zero DDL. Client/server treat `'NONE'` as "no status" (no badge rendered; filterable as "No status").
 
-**Changes:** `types.ts` options, server allow-list, status-history display, analytics status chart, Turso `UPDATE contacts SET status='ACTIVE_ALLY' WHERE status='LEAD_TO_PURSUE'` (+ same in `contact_status_history.newStatus/oldStatus` — or leave history verbatim; recommend leaving history untouched and only mapping live status; note the decision).
-**Acceptance:** all statuses selectable; no contact stranded on a value the UI can't render.
-**Commit:** `feat(taxonomy): relationship-lifecycle contact statuses`
-**STATUS:** Not started. Blocked on D2.
+**Data migration (Turso, after backup):**
+```sql
+UPDATE "Contact" SET status='NONE'
+WHERE status IN ('NEW','LEAD_TO_PURSUE','ON_HOLD','CLOSED');
+```
+`ContactStatusHistory` rows are left verbatim (history is history).
 
-## Task 1.3 — Company status + relabel "Companies" → "Organizations"
+**Code changes:** `types.ts` options (4 + None), server allow-list, status badge/filter components render None as blank, analytics status chart includes a "No status" bucket. New-contact form default stays `CONNECTED` (long-standing UX preference — most people are added right after meeting them); schema DDL default `'NEW'` untouched (client always sends status explicitly).
+**Acceptance:** only the 4 statuses + blank selectable; no contact stranded on an eliminated value; clearing a status works.
+**Commit:** `feat(taxonomy): trimmed contact statuses + blank option`
+**STATUS:** Not started. Unblocked; needs Turso access for the UPDATE.
 
-**Proposed (pending D3):** `RESEARCHING`, `ENGAGED` (was `IN_DISCUSSIONS`), `PARTNER` (was `ACTIVE_TARGET`), `CONNECTED`, `ON_HOLD`, `CLOSED`. UI-only relabel of the nav/headers from "Companies" to "Organizations" (route paths, API, and schema keep `companies` — pure label change, zero migration).
+## Task 1.3 — Company statuses + relabel "Companies" → "Organizations" (DECIDED — D3)
+
+**Final list (D3):** `RESEARCHING`, `ENGAGED` (was `IN_DISCUSSIONS`), `PARTNER` (was `ACTIVE_TARGET`), `CONNECTED`, plus blank/None (same `'NONE'` sentinel pattern as Task 1.2).
+
+**Data migration (Turso, after backup):**
+```sql
+UPDATE "Company" SET status='ENGAGED' WHERE status='IN_DISCUSSIONS';
+UPDATE "Company" SET status='PARTNER' WHERE status='ACTIVE_TARGET';
+UPDATE "Company" SET status='NONE'    WHERE status IN ('ON_HOLD','CLOSED');
+```
+`CompanyStatusHistory` left verbatim.
+
+Also: UI-only relabel of nav/headers from "Companies" to "Organizations" (routes, API, schema keep `companies` — pure label change, zero migration).
 **Commit:** `feat(taxonomy): organization statuses + relabel companies nav`
-**STATUS:** Not started. Blocked on D3.
+**STATUS:** Not started. Unblocked; needs Turso access for the UPDATEs.
 
 ## Task 1.4 — Action direction: "I owe them" vs. "waiting on them"
 
 **Problem:** Actions only model the owner's to-dos. At CMO meeting volume, half the follow-up burden is things *other people* promised.
 
 **Changes:**
-- Schema: `Action.direction String @default("OWED_BY_ME")` // `OWED_BY_ME`, `WAITING_ON_THEM`. Turso: `ALTER TABLE actions ADD COLUMN direction TEXT NOT NULL DEFAULT 'OWED_BY_ME'` (per migration procedure).
+- Schema: `Action.direction String @default("OWED_BY_ME")` // `OWED_BY_ME`, `WAITING_ON_THEM`. Turso: `ALTER TABLE "Action" ADD COLUMN direction TEXT NOT NULL DEFAULT 'OWED_BY_ME'` (per migration procedure).
 - Action form: a two-option toggle ("My task" / "Waiting on them"), default My task.
 - Actions page: a **Waiting For** section/filter; overdue logic identical (an overdue WAITING_ON_THEM = time to nudge).
 - Dashboard: small "Waiting on others" card (count + top 3 oldest).
@@ -125,63 +149,72 @@ Prisma `db push` only migrates **local SQLite**. Production Turso needs DDL run 
 
 *Goal: any real-world meeting can be logged in 30 seconds at minimum fidelity, or in full detail, without contorting the data model.*
 
-### Design (worked through 2026-06-12)
+### Design (worked through 2026-06-12; **revised same day per D4 — titles, not Groups**)
 
 **Scenarios this must support:**
 - **S1** — classic 1:1 (legacy behavior, must keep working unchanged).
-- **S2** — *weekly VP check-in*: recurring group, 5 topics, a couple of per-person observations, 3 follow-ups.
+- **S2** — *"Weekly VP meeting"*: recurring meeting named after the calendar event, 5 topics, a couple of per-person observations, 3 follow-ups. Later: "show me all notes from Weekly VP meetings."
 - **S3** — *"met a bunch of people from Arcadia, two names worth recording"*: org-anchored, fuzzy headcount, 2 named participants (created as contacts), the rest just described.
-- **S4** — *"I met with my VPs"* minimal log: group + date + one-liner. Must take <30 seconds.
+- **S4** — minimal log: title + date + one-liner. Must take <30 seconds.
 - **S5** — conference panel / large event: type EVENT, free-text audience description, maybe 2–3 named people.
 
-**Model — a Conversation becomes a Meeting record with five independent "who" facets, all optional, at least one required:**
+**Model — a Conversation becomes a Meeting record with a title plus four independent "who" facets, all optional, at least one required:**
 
-1. `contactId` (existing, becomes **nullable**) — the 1:1 anchor; kept for back-compat and the common 1:1 case.
-2. `companyId` (**new**, nullable) — org anchor ("with Arcadia"). One org max; multi-org meetings use facets 3–5. (Distinct from `ConversationCompany`, which stays "companies *discussed*.")
-3. **Groups** (new `Group` / `GroupContact` / `ConversationGroup`) — named recurring sets ("My VPs", "Measurement Modernization Workgroup"). A group link means *this group met*; membership is a **live reference, not a snapshot** — if exact attendance matters, also name participants. Groups double as a filter dimension ("all VP check-ins this quarter").
+1. `title` (**new**, nullable) — **the primary identity for non-1:1 meetings and the series key.** Lowest-effort path (D4): type the calendar event's name once; thereafter **autocomplete from previously used titles** keeps the series consistent ("Weekly VP meeting", not three spelling variants). Phase 5 prefills it from the Outlook event subject and Phase 4 from the Copilot recap header — at which point the effort drops to zero typing.
+2. `contactId` (existing, becomes **nullable**) — the 1:1 anchor; kept for back-compat and the common 1:1 case.
+3. `companyId` (**new**, nullable) — org anchor ("with Arcadia"). One org max. (Distinct from `ConversationCompany`, which stays "companies *discussed*.")
 4. **Named participants** (existing `ConversationParticipant`) — individuals worth recording, now with an optional per-person `note` ("skeptical of digital-first HEDIS"; "offered intro to Moy at CMS"). These notes surface on the contact's detail page as a "meeting takeaways" timeline — this is where stakeholder intelligence (Phase 3) gets its raw material.
 5. `attendeesDescription` (**new**, free text) — the fuzz: "~10 Arcadia folks incl. analytics team", "all my direct reports", "panel audience ≈100".
 
-Plus: `title` (**new**, nullable — "Weekly VP check-in"; display name resolves `title → contact → group(s) → company → description`).
+**Finding meetings by name (the D4 requirement).** Today the user finds a 1:1 by searching the person; the equivalent for recurring meetings must work by title:
+- Global search (`/search`) covers conversation `title` (+ summary/notes).
+- The Meetings page has a title filter with the same autocomplete.
+- **Series view:** clicking a meeting's title anywhere shows all meetings sharing that title (case-insensitive match), newest first — chronological notes for "Weekly VP meeting" in two taps.
+
+Display name resolves `title → contact name → company → attendees description`.
+
+**Groups: NOT built** (D4). A named-contact-set feature is deferred to the Phase 6 backlog; title-series covers the recurring-meeting need without the user maintaining membership lists.
 
 **Multiple subjects:** one `notes` field, structured with markdown `### Topic` headings (already rendered via ReactMarkdown), **plus** conversation-level tags (new `ConversationTag` junction reusing the existing `Tag` entity) for filtering ("everything tagged `digital-measures`"). Actions created from the meeting link to the relevant *subset* of people via the existing `ActionContact` junction. Rejected alternative: per-topic child records with their own notes/actions — more clicks per meeting, no real query win for a single user.
 
-**Validation rule:** a conversation needs ≥1 of {anchor contact, company, group, named participant, attendeesDescription}.
+**Validation rule:** a conversation needs ≥1 of {title, anchor contact, company, named participant, attendeesDescription}. Title alone is a valid meeting ("Weekly VP meeting", no individuals recorded).
 
 ## Task 2.1 — Schema: meeting facets
 
 - `Conversation`: `contactId` → optional (**table rebuild on Turso** — see migration procedure), add `title String?`, `companyId Int?` (FK → Company, `onDelete: SetNull`), `attendeesDescription String?`.
-- New: `Group` (`id`, `name @unique`, `description?`), `GroupContact` (composite PK), `ConversationGroup` (composite PK).
 - `ConversationParticipant`: add `note String?` (plain `ADD COLUMN`).
 - New: `ConversationTag` (composite PK, FK → existing `Tag`).
-- Server: extend conversation create/update allow-lists + the new junction writes (transactional, following the existing participants pattern in `server/src/routes/conversations.ts`); enforce the ≥1-who validation server-side.
-- **Backup/restore must keep working:** add the new tables to the export/import table list (the all-23-tables lesson from the hardening plan — it's now 26+ tables; update both server export and browser-direct Turso path + the restore ordering for FKs).
+- Server: extend conversation create/update allow-lists + junction writes (transactional, following the existing participants pattern in `server/src/routes/conversations.ts`); enforce the ≥1-who validation server-side.
+- New lightweight endpoint `GET /api/conversations/titles` → distinct non-null titles (for autocomplete; follows the `/companies/names` precedent).
+- **Backup/restore must keep working:** add `ConversationTag` to the export/import table lists (server export AND browser-direct Turso path) + restore ordering.
 
-**Commit:** `feat(meetings): schema for groups, org anchor, fuzzy attendees, participant notes, conversation tags`
+**Commit:** `feat(meetings): titles, org anchor, fuzzy attendees, participant notes, conversation tags`
 **STATUS:** Not started. ⚠️ Largest migration in the plan (contactId nullable rebuild). Backup first.
 
-## Task 2.2 — Groups CRUD
+## Task 2.2 — Quick Log + full meeting editor
 
-Settings-adjacent "Groups" management (list, create, rename, edit members via the existing contact combobox pattern, delete with impact count). Seed the user's groups (D4).
-**Commit:** `feat(meetings): groups CRUD`
-**STATUS:** Not started. Depends on 2.1.
-
-## Task 2.3 — Quick Log + full meeting editor
-
-- **Quick Log dialog** (open from command palette + a prominent button): date (default today), type, then *one* "who" picker that searches contacts, groups, and orgs together, a one-line summary, optional attendees description. Save. That's S4 in <30 seconds.
-- **Full editor**: extends the existing conversation dialog with title, group multi-select, org anchor, attendees description, per-participant note inputs (inline next to each participant chip), conversation tags. Keep the prep-notes two-column layout.
-- Display name resolution per the design; conversation cards show group/org chips + description.
+- **Quick Log dialog** (command palette + a prominent button): **title with autocomplete** (default focus), date (default today), type, optional one-line summary/notes, optional who-pickers (contact/org/participants) and attendees description. Title+date+save = S4 in <30 seconds.
+- **Full editor**: extends the existing conversation dialog with title (autocomplete), org anchor, attendees description, per-participant note inputs (inline next to each participant chip), conversation tags. Keep the prep-notes two-column layout.
+- Conversation cards show resolved display name + org chip + description.
 
 **Commit:** `feat(meetings): quick log dialog + full meeting editor`
-**STATUS:** Not started. Depends on 2.1 (+2.2 for group pickers).
+**STATUS:** Not started. Depends on 2.1.
 
-## Task 2.4 — Global Meetings page + contact takeaways
+## Task 2.3 — Global Meetings page, series view, search coverage
 
-- New route `/meetings`: paginated list of all conversations (no longer reachable only via a contact), filters: group, organization, tag, type, date range, free text. Server endpoint follows the existing list-endpoint conventions (explicit `select`, no `_count`, pagination envelope).
+- New route `/meetings`: paginated list of all conversations (no longer reachable only via a contact), filters: **title (autocomplete)**, organization, tag, type, date range, free text. Server endpoint follows the existing list-endpoint conventions (explicit `select`, no `_count`, pagination envelope).
+- **Series view:** meeting titles are links → `/meetings?title=…` (case-insensitive exact match), newest first.
+- Global search (`server/src/routes/search.ts` + `/search` page): include conversation titles in matching and render meeting hits.
+
+**Commit:** `feat(meetings): global meetings page + title series view + search coverage`
+**STATUS:** Not started. Depends on 2.1.
+
+## Task 2.4 — Contact takeaways + org meetings
+
 - Contact detail: "Meeting takeaways" — the per-participant notes from every meeting they attended, newest first.
 - Company detail: meetings anchored to that org.
 
-**Commit:** `feat(meetings): global meetings page + per-contact takeaways timeline`
+**Commit:** `feat(meetings): per-contact takeaways timeline + org meeting list`
 **STATUS:** Not started. Depends on 2.1.
 
 ---
@@ -233,8 +266,8 @@ Per D8/D9. Recommended: **Cloudflare Access** (free ≤50 users) in front of the
 ### Design
 
 - **Never writes directly.** The AI produces a *draft*; a review screen lets the user fix attendee matches and discard noise; commit uses the normal CRUD endpoints. (LLM extraction is good but not trusted blind.)
-- **Pipeline:** `POST /api/ai/ingest-meeting { rawText }` → server assembles matching context (contact names+ids+org, group names, initiative names — reuse the lightweight names endpoints) → one Claude API call with a JSON-schema'd tool → returns draft:
-  `{ title, date, type, summary, notesMarkdown (### topic headings), attendees: [{ name, matchedContactId | null, note? }], groupGuess?, companyGuess?, attendeesDescription?, actions: [{ title, direction, dueDate?, ownerContactId? }], peopleDiscussed, companiesDiscussed, stanceSignals: [{ contactId, initiative, signal, quote }] }`
+- **Pipeline:** `POST /api/ai/ingest-meeting { rawText }` → server assembles matching context (contact names+ids+org, **known meeting titles** for series matching, initiative names — reuse the lightweight names/titles endpoints) → one Claude API call with a JSON-schema'd tool → returns draft:
+  `{ title (matched to an existing series title when close), date, type, summary, notesMarkdown (### topic headings), attendees: [{ name, matchedContactId | null, note? }], companyGuess?, attendeesDescription?, actions: [{ title, direction, dueDate?, ownerContactId? }], peopleDiscussed, companiesDiscussed, stanceSignals: [{ contactId, initiative, signal, quote }] }`
 - **Copilot specifics:** Teams recaps have stable sections (meeting title/date/attendees, AI-notes bullets grouped by topic, "Follow-up tasks" with named owners). Prompt maps *task owner = me* → `OWED_BY_ME`, *owner = someone else* → `WAITING_ON_THEM`. Tune against a real sample (D5). Must degrade gracefully on arbitrary raw notes.
 - **Constraints:** Vercel 30s / client 28s timeout → default to a fast model (`claude-haiku-4-5-20251001`; model id in an env var `AI_INGEST_MODEL` so it can be upgraded without a deploy), cap input ~20k chars with a clear truncation warning, cap output tokens. Rate-limit the route (e.g., 60/hr, same `express-rate-limit` pattern). **[USER ACTION]** D6: `ANTHROPIC_API_KEY`.
 
@@ -266,7 +299,7 @@ New `server/src/routes/ai.ts` per the design (Anthropic SDK, tool-forced JSON ou
 **STATUS:** Not started. Blocked on D7.
 
 ## Task 5.2 — Daily Briefing view
-New `/briefing` (and make it the natural morning landing alongside the dashboard): each meeting → matched attendees (photo, title, org, influence/stance chips), last meeting summary + takeaway note, open questions, prep notes due today (reuse `PrepNote` by date — already exists), open Waiting-For items per attendee. Buttons per meeting: **Prep** (jump to prep notes) and **Log** (pre-filled Quick Log / Ingest with date+attendees).
+New `/briefing` (and make it the natural morning landing alongside the dashboard): each meeting → matched attendees (photo, title, org, influence/stance chips), last meeting summary + takeaway note, open questions, prep notes due today (reuse `PrepNote` by date — already exists), open Waiting-For items per attendee. Buttons per meeting: **Prep** (jump to prep notes) and **Log** (pre-filled Quick Log / Ingest with **title = event subject**, date, attendees — this is what makes D4's "name the conversation after the calendar event" zero-effort).
 **Commit:** `feat(briefing): daily briefing view joining calendar, prep, stance, history`
 **STATUS:** Not started. Depends on 5.1, Phases 2–3.
 
@@ -287,6 +320,7 @@ Only if D7 fails: textarea on `/briefing` → AI parse (reuse Phase 4 plumbing) 
 - **6.2 Semantic search over meeting notes:** embeddings in Turso (libsql vector columns) over conversation notes/summaries; answers "who mentioned FHIR-based measure calculation?" **Supersedes ROADMAP Phase 8** (Google Drive doc search) — meeting notes now live in-app, which was most of Phase 8's motivation; revisit Drive search only if a real need persists.
 - **6.3 Weekly digest:** in-app panel (no email infra): who you met, what you committed to, what you're owed, allies gone quiet (no touch in N weeks, by influence tier).
 - **6.4 Speaking/publishing pipeline:** if leverage tracking proves out, a light view of open opportunities (talk invitations, paper collabs) — possibly just a saved Ideas/Tags convention rather than new schema. Decide later.
+- **6.5 Groups (deferred from Phase 2 per D4):** named contact sets ("My VPs") with membership, linkable to meetings. Only build if title-series proves insufficient — e.g., if the user wants "every meeting any of my VPs attended" or stance-by-group rollups.
 
 **STATUS:** Backlog — sequence after Phases 1–5 or pull forward by user request.
 
@@ -297,7 +331,8 @@ Only if D7 fails: textarea on `/briefing` → AI parse (reuse Phase 4 plumbing) 
 - **No multi-user / sharing** — single-user assumptions run deep (auth, autosave, backup) and that's the right size.
 - **No Microsoft Graph OAuth in v1** — ICS first; Graph only if staleness hurts (see Phase 5 design).
 - **No per-topic conversation child records** — markdown headings + tags (see Phase 2 design).
-- **No group-membership snapshots** — named participants are the historical record when it matters.
+- **No Groups feature up front (D4)** — recurring meetings are identified by repeated, autocompleted titles; named participants are the historical attendance record when it matters. Groups live in the Phase 6 backlog.
+- **No nullable-status table rebuilds** — `'NONE'` sentinel rendered as blank (Tasks 1.2/1.3).
 - **No automatic Copilot/Teams API pull** — paste is the v1 contract; revisit once D5/D7 reveal what NCQA IT allows.
 - **No bulk remap of legacy ecosystems** (except `LEAD_TO_PURSUE`→`ACTIVE_ALLY` status, pending D2) — additive taxonomy, reclassify as you go.
 

@@ -144,14 +144,24 @@ function MeetingsCalendar() {
 
   const events = meetings.map((m) => {
     const c = meetingTypeCalendarColors[m.type] || meetingTypeCalendarColors.OTHER
+    const title = conversationDisplayName(m)
+    const firstParticipant = m.participants?.[0]?.contact.name
+    // Hover tooltip: the first connected participant + the summary. De-dupe the
+    // participant when the title already IS that name (1:1 fallback) so it isn't
+    // "Name — Name"; lead with summary in that case.
+    const tooltip = [
+      firstParticipant && firstParticipant !== title ? firstParticipant : null,
+      m.summary,
+    ].filter(Boolean).join(' — ')
     return {
       id: m.id.toString(),
-      title: conversationDisplayName(m),
+      title,
       date: m.date,
       allDay: true,
       backgroundColor: c.bg,
       borderColor: c.bg,
       textColor: c.text,
+      extendedProps: { tooltip },
     }
   })
 
@@ -184,8 +194,15 @@ function MeetingsCalendar() {
         events={events}
         eventClick={handleEventClick}
         datesSet={handleDatesSet}
+        eventDidMount={(info) => {
+          // Native hover tooltip: first participant + summary (a11y-safe, zero deps).
+          const tip = info.event.extendedProps.tooltip as string | undefined
+          if (tip) info.el.title = tip
+        }}
         height="auto"
-        dayMaxEvents={isMobile ? 2 : 4}
+        // Show every meeting in a day inline (the cell/row grows with height="auto")
+        // rather than capping with a "+N more" link — owner wants all visible.
+        dayMaxEvents={false}
         noEventsText="No meetings in this range"
       />
     </div>

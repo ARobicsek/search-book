@@ -1,124 +1,83 @@
 # Next Session Prompt
 
-This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
+This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
+protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (2026-06-14, build session) — owner's 5-item follow-up list SHIPPED
+### What Was Just Completed (2026-06-14, build session) — Actions/Ideas polish batch: 3 of 5 tasks shipped
 
-Plan of record: `.planning/CALENDAR-FAVORITES-BACKUP-PLAN.md`. All 5 items done; one atomic commit
-per chunk, each `npm run prepush` + `tsc -b` green and smoke-tested desktop + 390px, pushed to
-`main`. **No schema changes anywhere.** Open decisions were confirmed with the owner up front.
+Plan of record: `.planning/ACTIONS-IDEAS-POLISH-PLAN.md`. Decisions A1/B1/C1 confirmed with owner up
+front; D1 was already resolved (and the #6 Baylor handling confirmed = **low-confidence bucket**). Session
+had ~half a token budget, so the work was deliberately scoped: **ship the 3 schema-free tasks; do NOT
+start the schema-touching one in a constrained budget** (a half-applied migration breaks prod).
 
-- **Item 3 — Favorite organizations** (`80911ff`). Schema-free mirror of favorite contacts:
-  reserved `Favorite` `CompanyTag` + `GET /companies/favorites` / `PATCH /companies/:id/favorite`
-  (copied the contacts impl; `/favorites` declared before `/:id`). Star toggle + amber quick-add
-  chips in **Quick Log "Organizations"** ([quick-log-dialog.tsx](../client/src/components/quick-log-dialog.tsx))
-  and **Ideas "Related Companies"** ([idea-list.tsx](../client/src/pages/ideas/idea-list.tsx)).
-  Owner scope: **those two surfaces only.** Verified API round-trip + in-browser (desktop/390px).
-- **Items 1 & 2 — Calendar polish** (`85ab6ec`, both in `MeetingsCalendar`,
-  [meetings.tsx](../client/src/pages/meetings.tsx)). **(1)** Owner chose **expand the day cell
-  inline** over a popover: `dayMaxEvents={false}` so a busy day renders *every* meeting inline and
-  the row grows (`height="auto"`); no filtering — calendar still shows all meetings by date.
-  **(2)** Hover tooltip via `eventDidMount` `el.title` = first participant + summary (data already
-  in the `/meetings` range fetch — no API change); de-dupes the 1:1 case to summary-only.
-  Calendar-only. Verified with a 10-meeting test day (created + deleted): all inline on desktop
-  grid + mobile list, tooltips correct, event click still opens the editor.
-- **Item 4 — Backup-coverage audit** (`c5c18b5`). All **27** Prisma models confirmed in both
-  backup paths. Fixed two real gaps + the stale labels: **(a)** the manual ZIP bundled photos
-  only — `photo-backup.ts` now bundles photos **+ `ConversationAttachment` files + markdown-embedded
-  screenshots** (`collectBinaryRefs`/`buildBinariesZip`; download renamed `searchbook-photos.zip`
-  → **`searchbook-files.zip`**); **(b)** local-disk dev backup/restore now also copies `data/files`;
-  **(c)** `/cron` returns a `tables` count derived from the export (no more hardcoded `24`).
-  Deliverable: **`.planning/BACKUP-COVERAGE-AUDIT.md`** (model × path matrix + binary classes).
-  Verified: collector unit test (3 classes + URL dedup) + real data (11 binaries fetched, **Blob
-  CORS from browser now confirmed working**).
-- **Item 5 — Restore test** (`7d67dc5` harness; executed this session). **✅ DONE — real prod→scratch
-  run PASSED.** `server/scripts/restore-test.mjs` bootstraps a scratch schema (DDL replay), restores
-  a backup JSON FK-ordered (mirrors the production `importViaTurso` path), and verifies per-table
-  counts + relationships + binary reachability. Prod-safe: requires `--confirm`, refuses if
-  `--target == --forbid-url`, only writes the target. **Real run** (owner supplied scratch Turso creds
-  + the `2026-06-14T18-36-42` prod backup): **27/27 tables match exactly (2,604 rows)**, relationship
-  spot-checks resolve, **15/15 sampled Blob URLs reachable** (of 69), exit 0; prod untouched
-  (`--forbid-url` = real prod URL). Owner deleted the scratch DB afterward. Runbook (now marked
-  EXECUTED): **`.planning/RESTORE-TEST-RUNBOOK.md`**.
-- **Backup completeness + usability proof** (`3df6184`, this session). Closed the two questions the
-  restore test left implicit. **(a)** Read-only `count(*)` diff of the backup vs **live prod**
-  (`server/scripts/prod-count-diff.mjs`): **all 27 tables identical, delta 0, 2,604 rows** — the
-  backup is an exact copy of prod. **(b)** Restored the backup into local SQLite and **booted the
-  app on it** (`server/scripts/app-smoke.mjs` + rendered Dashboard/Contacts/Analytics/contact-detail):
-  every heavy endpoint 200, all charts populated. Both scripts are read-only/local-only and kept as
-  reusable tools. (The expired prod token in `server/.env` was *not* updated; the owner declined to
-  rotate the read-only token used for the diff — acceptable, read-only + password-gated app.)
+- **Task 1 — Markdown formatting in Actions & Ideas** (`6588def`). Swapped the description `<Textarea>`
+  for the existing `MarkdownTextarea` in the Action form and the Idea create/edit dialog; Ideas card
+  display now renders `ReactMarkdown` + `prep-note-markdown` (Actions detail already did). Descriptions
+  only (A1). Verified in-browser: a typed `- ` bullet renders as •.
+- **Task 2 — Progressive disclosure on the Action form** (`6588def`, same commit — shared file
+  `action-form.tsx`, combined to conserve budget). Type+Priority folded behind a collapsed "More options"
+  caret (· indicator when non-default); "Related To" is now a collapsed caret (count indicator). Mirrors
+  Quick Log's "Who was there". Create **and** edit (B1); collapsed fields stay in form state so they
+  auto-save/submit. Smoke-tested desktop + 390px.
+- **Task 4 — Company near-dup LinkedIn variants** (`7723ffb`). Reworked
+  [duplicates.ts](../server/src/routes/duplicates.ts) `normalizeCompanyNameForDedupe` + matching:
+  punctuation normalize (&→and, hyphen/comma→space, drop apostrophes/diacritics/periods), `healthcare`→
+  `health` fold + trailing-descriptor stripping, token-subset match, and a **low-confidence shared-prefix
+  bucket** (score 0.5) for #6 Baylor. **Verified against real local data — all 6 owner pairs surface**,
+  tiered correctly; FP guards (Mass General H./Brigham, UCSF/UC Berkeley) excluded. Server-only, no schema.
 
-### What's Next
+All three commits: `npm run prepush` + `tsc -b` green, smoke-tested, pushed to `main` (live on Vercel).
 
-The owner's 5-item follow-up list is now **fully closed** (restore test executed + PASSED; backup
-proven == prod). The owner has queued a new batch for next session.
+### What's Next — finish the batch (2 tasks remain), then back to NCQA
 
-1. **NEXT SESSION plan of record = `.planning/ACTIONS-IDEAS-POLISH-PLAN.md`** (owner-requested
-   2026-06-14). Five tasks: (1) markdown formatting in Actions & Ideas, (2) progressive disclosure on
-   the Action form (Type/Priority/Related-To behind carets), (3) **rework "Who owes it"** into a
-   people-list (default *me*, removable, +0…N contacts, favorites quick-add, collapsed) — **schema-
-   touching, needs Turso DDL**, (4) company near-dup LinkedIn variants, (5) long-lived PrismaClient.
-   **Confirm decisions A1/B1/C1 at the top of that plan first** (D1 is already resolved — 6 real
-   example company pairs + the normalization rules they imply are in Task 4). Suggested order + file
-   pointers are in the plan.
-2. **After that batch ships, the standing plan of record returns to the NCQA adaptation plan**
-   (`.planning/NCQA-ADAPTATION-PLAN.md`, Phase 3+) — gated on decisions D5–D9. **Don't push on
-   D5–D9 until the owner raises them.**
+1. **Task 3 — Rework "Who owes it" into a people list (SCHEMA-TOUCHING).** This is the clean first pick.
+   C1 is confirmed: additive `Action.owedByMe` (bool, default 1) + `Action.owerContactIds` (JSON), with
+   `direction` kept **derived**. **The plan now has an explicit DDL-FIRST safe sequencing** (apply the two
+   additive `ADD COLUMN`s + the backfill to Turso *before* writing/pushing code, so prod is safe at every
+   checkpoint) — follow it. See Task 3 STATUS in `ACTIONS-IDEAS-POLISH-PLAN.md`. The rw Turso token in
+   `server/.env` is commented but present (JWT has no `exp` → expected valid); uncomment per the NCQA-plan
+   DDL procedure. NOTE: Task 2 left the old "Who owes it" `direction` Select visible/standalone on the
+   form — Task 3 replaces it and tucks it into a collapsed disclosure.
+2. **Task 5 — Long-lived PrismaClient** (retire per-request `resetPrisma()`). Last / its own session;
+   carries real serverless risk — must verify against the live deploy after an idle period before done.
+3. **After the batch ships, the standing plan of record returns to the NCQA adaptation plan**
+   (`.planning/NCQA-ADAPTATION-PLAN.md`, Phase 3+) — gated on D5–D9. **Don't push on D5–D9 until the
+   owner raises them.**
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
-2. **Prod search perf** — owner signed off on live Phase B (B3); treat as closed unless it regresses.
-3. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until raised.
-4. ~~Restore into scratch Turso DB~~ → **DONE** (Item 5 executed + PASSED 2026-06-14; runbook marked EXECUTED).
-5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient. → **scheduled** as Task 5 in `ACTIONS-IDEAS-POLISH-PLAN.md`.
-6. Company near-duplicate scan (LinkedIn-variant suffixes). → **scheduled** as Task 4 in `ACTIONS-IDEAS-POLISH-PLAN.md`.
-7. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
-8. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
+2. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until raised.
+3. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
+4. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
 
 ### Open Bugs / Known Caveats
-- No confirmed bugs. The `Favorite` tag (contacts **and** now companies) is a normal tag and
-  appears in tag dropdowns by design; it is covered by backups (a `ContactTag` / `CompanyTag` row).
-- **Meetings calendar:** now shows **all** of a day's meetings inline (`dayMaxEvents={false}`),
-  so a very heavy day makes that week's row tall — acceptable per owner; revisit only if it bothers.
-  Still fetches ≤100 meetings per visible range and applies no list filters (navigates by date).
-- **Backup binaries:** the daily **cron deliberately excludes binaries** (keeps cloud backups
-  small). A full restore therefore needs the manual `searchbook-files.zip` for photos/attachments.
-  Binary *restore* is manual (DB rows keep the same Blob URLs, so they resolve without re-upload;
-  re-upload only needed if Blob itself is lost). See BACKUP-COVERAGE-AUDIT.md.
-- **Quick Log autosave:** selecting an *existing* org/participant (numeric id) triggers an autosave
-  POST that creates the meeting — expected (free-text new entries still persist only on Done).
-- The `tsc -b` build (`noUnusedLocals`) remains the gate that catches unused imports the
-  `typecheck` script misses — run it (not just `npm run prepush`) before every push.
+- No confirmed bugs. **Transient UI state:** after Task 2, the Action form's old "Who owes it" `direction`
+  Select sits as a lone visible field in the Action Info card — intentional; Task 3 removes/relocates it.
+- Company dedup is review-then-merge: the new low-confidence shared-prefix bucket (score 0.5, "review")
+  can surface distinct same-parent entities with a long shared prefix (e.g. UC San Francisco vs UC San
+  Diego) — by design (owner chose recall for Baylor). High-confidence matches sort first.
+- The `tsc -b` build (`noUnusedLocals`) remains the gate that catches unused imports the `typecheck`
+  script misses — run it (not just `npm run prepush`) before every push.
+- Dev smoke-testing note: the chrome-devtools-mcp automation profile can get orphaned/locked; if a
+  navigate/list_pages call errors with "browser is already running", stop the stale `chrome.exe`
+  processes whose command line contains `chrome-devtools-mcp` (they use the dedicated `.cache` profile,
+  NOT the owner's daily Chrome). Local app has no `APP_PASSWORD`, so the login gate accepts any password
+  (pre-seed `localStorage.searchbook_password`).
 
 ### Working branch
-`main`, clean and fully pushed. Prior session: `80911ff` (fav orgs), `85ab6ec` (calendar),
-`c5c18b5` (backup audit), `7d67dc5` (restore harness). This session: `c47eff6` (record restore-test
-PASSED) + `3df6184` (prove backup == prod via count diff + app-boot verification, w/ reusable
-scripts). All live on Vercel.
+`main`, clean and fully pushed. This session: `6588def` (Tasks 1+2), `7723ffb` (Task 4). Both live on Vercel.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file, then **`.planning/ACTIONS-IDEAS-POLISH-PLAN.md`** —
-> that batch plan is the **plan of record for this session** (the prior 5-item list and the restore
-> test are fully done). Five tasks, suggested order in the plan: (1) markdown formatting in Actions &
-> Ideas (swap in the existing `MarkdownTextarea`; Ideas also needs a `ReactMarkdown` display), (2)
-> progressive disclosure on the Action form (mirror Quick Log's "Who was there" chevron — hide
-> Type/Priority/Related-To), (3) **rework "Who owes it"** into a people list (default *me*, removable,
-> +0…N contacts, favorite-contact quick-add, collapsed) — **this one is schema-touching: run the Turso
-> DDL before pushing code** (procedure atop the NCQA plan), (4) extend company near-dup detection for
-> LinkedIn-style name variants, (5) retire per-request `resetPrisma()` for a long-lived PrismaClient
-> (prod-verify before declaring done; consider its own session).
->
-> **Before building, confirm decisions A1/B1/C1** at the top of the batch plan — most importantly the
-> "Who owes it" model (C1: recommended = additive `owedByMe` bool + `owerContactIds` JSON, with
-> `direction` kept as a derived mirror so the dashboard/analytics are unaffected). D1 is already
-> resolved: Task 4 lists 6 real example company pairs + the normalization rules they imply (and the
-> #6 "Baylor" shared-prefix false-positive trap to avoid).
->
-> One atomic commit per task; `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before each
-> push. After the batch ships, the standing plan of record returns to the **NCQA adaptation plan**
-> (Phase 3+, gated on D5–D9 — don't push on those until raised). Standing owner action still open:
-> set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel (carry-over #1).
+> Read `CLAUDE.md` / `AGENTS.md`, then this file, then **`.planning/ACTIONS-IDEAS-POLISH-PLAN.md`** (still
+> the plan of record — Tasks 1/2/4 shipped 2026-06-14; **Tasks 3 & 5 remain**). Start with **Task 3
+> (rework "Who owes it" into a people list)** — it's SCHEMA-TOUCHING and C1 is already confirmed (additive
+> `owedByMe` + `owerContactIds`, `direction` derived). **Follow the DDL-FIRST safe sequencing in the
+> Task 3 STATUS block** — apply the two additive `ADD COLUMN`s + backfill to Turso *before* writing/pushing
+> code, so prod stays safe if you run low. Then Task 5 (long-lived PrismaClient — its own session, verify
+> live). One atomic commit per task; `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before
+> each push. After the batch, the standing plan of record returns to the NCQA adaptation plan (Phase 3+,
+> gated on D5–D9 — don't push on those until the owner raises them). Standing owner action: set
+> `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.

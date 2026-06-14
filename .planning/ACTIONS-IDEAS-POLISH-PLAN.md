@@ -1,9 +1,15 @@
 # SearchBook — Actions/Ideas Polish + Engineering Cleanup
 
 **Created:** 2026-06-14 (for the **next** session)
-**Status:** PLANNED — not started. This is the **plan of record for the next session's batch.**
-After it ships, the standing plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+,
-gated on D5–D9).
+**Status:** IN PROGRESS — **Tasks 1, 2, 4 SHIPPED 2026-06-14** (commits `6588def`, `7723ffb`).
+**Tasks 3 & 5 remain** (both deliberately deferred — see below). After they ship, the standing plan
+of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on D5–D9).
+
+> **Deferral note (2026-06-14):** the build session had ~half a token budget. Tasks 1/2/4 (schema-free,
+> self-contained) were completed and pushed. **Task 3 was NOT started on purpose** — it is the only
+> schema-touching task, and a half-applied schema migration (code pushed without the Turso DDL, or vice
+> versa) breaks prod, which is the exact "run out mid-task" risk the owner flagged. It is fully specified
+> (C1 confirmed) and is the clean first pick next session. Task 5 was always its own session.
 **Origin:** owner request (2026-06-14) — three small UX fixes for Actions/Ideas, plus two carried-over
 engineering items (company near-duplicate LinkedIn variants; long-lived PrismaClient) pulled in here.
 
@@ -18,10 +24,10 @@ engineering items (company near-duplicate LinkedIn variants; long-lived PrismaCl
 ## Decisions to confirm at session start
 | # | Decision | Recommendation |
 |---|----------|----------------|
-| A1 | Formatting (Task 1) applies to the **description** fields of Actions & Ideas only (titles stay plain). | Yes — descriptions only |
-| B1 | Progressive disclosure (Task 2) applies to **both** create *and* edit Action screens, or create only? | Both, for consistency |
-| C1 | **"Who owes it" data model (Task 3)** — reuse the `direction` enum vs. add a real owers list (see Task 3). | Additive columns: `owedByMe` bool + `owerContactIds` JSON, keep `direction` *derived* for the dashboard |
-| D1 | Company dedup (Task 4): real example pairs to tune against. | ✅ **RESOLVED** — owner supplied 6 pairs (see Task 4). |
+| A1 | Formatting (Task 1) applies to the **description** fields of Actions & Ideas only (titles stay plain). | ✅ **CONFIRMED** — descriptions only |
+| B1 | Progressive disclosure (Task 2) applies to **both** create *and* edit Action screens, or create only? | ✅ **CONFIRMED** — both |
+| C1 | **"Who owes it" data model (Task 3)** — reuse the `direction` enum vs. add a real owers list (see Task 3). | ✅ **CONFIRMED** — additive `owedByMe` bool + `owerContactIds` JSON, keep `direction` *derived* |
+| D1 | Company dedup (Task 4): real example pairs to tune against. | ✅ **RESOLVED + CONFIRMED** — 6 pairs; #6 Baylor = **low-confidence bucket** (owner chose to surface it) |
 
 ## Suggested ordering
 1 (formatting — tiny, isolated) → 2 (disclosure — UI only) → 3 (who-owes-it — schema-touching, highest
@@ -43,7 +49,10 @@ value) → 4 (company dedup — needs examples) → 5 (PrismaClient — do last 
 **Approach:** swap the two `description` `<Textarea>`s for `<MarkdownTextarea>`; wrap the Ideas description
 display in `ReactMarkdown`. Verify image paste/drag works (uses `api.uploadFile`, already wired).
 **Files:** action-form.tsx, idea-list.tsx (+ confirm action-detail needs no change).
-**STATUS:** Not started.
+**STATUS:** ✅ DONE 2026-06-14 (commit `6588def`). MarkdownTextarea swapped into both description editors;
+Ideas display now renders ReactMarkdown + prep-note-markdown (verified: a `- ` bullet renders as •).
+action-detail needed no change. Smoke-tested desktop + 390px. *(Combined with Task 2 in one commit —
+shared file action-form.tsx — to conserve session budget.)*
 
 ## Task 2 — Progressive disclosure on the Action form
 **Ask:** on the Action create screen, hide **Type**, **Priority**, and the **Related To** elements behind a
@@ -58,7 +67,10 @@ so hiding is safe.
 **Approach:** wrap Type+Priority and the Related-To content in collapsible sections (chevron toggles,
 collapsed by default). Mind autosave in edit mode (collapsed fields must still submit). Apply per B1.
 **Files:** [action-form.tsx](../client/src/pages/actions/action-form.tsx).
-**STATUS:** Not started.
+**STATUS:** ✅ DONE 2026-06-14 (commit `6588def`). Type+Priority folded behind a collapsed "More options"
+caret (· indicator when non-default); "Related To" card is now a collapsed caret (count indicator).
+Mirrors Quick Log's "Who was there". Applies to create **and** edit; collapsed fields stay in form state
+so they auto-save/submit. Title/Description/Due Date stay visible. Smoke-tested desktop + 390px.
 
 ## Task 3 — Rework "Who owes it" into a people list (SCHEMA-TOUCHING)
 **Ask:** "Who owes it" should **default to 'me'**, let me **remove 'me'** and **add 0…N contacts**, support
@@ -81,7 +93,22 @@ MultiCombobox + favorite-contact quick-add chips (reuse the Quick Log favorites 
 **Files:** schema.prisma (+ Turso DDL), [server/src/routes/actions.ts](../server/src/routes/actions.ts),
 [action-form.tsx](../client/src/pages/actions/action-form.tsx), [lib/types.ts](../client/src/lib/types.ts);
 verify dashboard/analytics still read `direction`.
-**STATUS:** Not started. **Schema migration required — run Turso DDL before pushing code.**
+**STATUS:** NOT STARTED — **deferred to next session** (token budget; schema task = worst to leave
+half-done). C1 confirmed (additive `owedByMe` + `owerContactIds`, `direction` derived).
+**Safe sequencing to use next session (protects prod at every checkpoint):**
+1. Back up (see NCQA plan top). 2. **Apply the Turso DDL FIRST** — both are additive `ADD COLUMN`, so
+   prod stays compatible even before any code ships: `ALTER TABLE "Action" ADD COLUMN "owedByMe" BOOLEAN
+   NOT NULL DEFAULT 1;` and `ALTER TABLE "Action" ADD COLUMN "owerContactIds" TEXT;` (JSON string array).
+   Then backfill: `UPDATE "Action" SET "owedByMe" = 0 WHERE "direction" = 'OWED_TO_ME';`
+   (the rw token in `server/.env` is commented out but present; JWT has no `exp` → expected valid).
+3. Mirror in schema.prisma + local `db push` + `npx prisma generate`. 4. Server `/actions` create+update
+   accept/persist the two fields and **derive** `direction = (owedByMe && owerContactIds empty) ?
+   'OWED_BY_ME' : 'OWED_TO_ME'`. 5. Client: rework "Who owes it" into a collapsed people list (removable
+   *me* chip default-on, contacts MultiCombobox, favorite-contact quick-add chips — reuse the Quick Log
+   favorites pattern already in this file's Task 2 area). 6. Verify dashboard "Waiting on others" +
+   `?filter=waiting` + analytics still read `direction`. 7. Smoke desktop+390px. **8. Push code LAST**
+   (DDL already applied). Note: the form's "Who owes it" Select is currently still visible/standalone
+   (Task 2 left it in place); this task replaces it and tucks it into a collapsed disclosure.
 
 ## Task 4 — Company near-duplicate scan: catch LinkedIn-style variants
 **Ask:** the Duplicates page misses company near-dupes that differ by LinkedIn-style descriptor words.
@@ -119,7 +146,13 @@ threshold. Confirm with owner whether the extra recall on #6 is worth the false-
 already match vs. miss — then add only the rules needed. The page is review-then-merge, so favor **recall**, but keep
 #6-style shared-prefix matches clearly ranked as low-confidence.
 **Files:** [server/src/routes/duplicates.ts](../server/src/routes/duplicates.ts) (isolated; no schema change).
-**STATUS:** Not started. D1 resolved (examples above).
+**STATUS:** ✅ DONE 2026-06-14 (commit `7723ffb`). New `normalizeCompanyPunctuation` (&→and,
+hyphen/slash/comma→space, drop apostrophes/diacritics/periods), `healthcare`→`health` fold + trailing
+descriptor stripping in the core normalizer, token-subset match (punctuation-only form, reuses
+`tokensMatch`), and a low-confidence shared-prefix bucket (≥3 non-stopword shared leading tokens,
+score 0.5). **Verified against real local data: all 6 owner pairs surface** — #1/#2/#4/#5 "Same core
+name" [1.0], #3 "One name contains the other" [0.9], #6 Baylor "Shared prefix — low confidence" [0.5];
+FP guards (Mass General H./Brigham, UCSF/UC Berkeley, Baylor/College of Medicine) correctly excluded.
 
 ## Task 5 — Long-lived PrismaClient (retire per-request `resetPrisma()`)
 **Ask:** stop rebuilding a `PrismaClient` + libsql adapter on every request in production.

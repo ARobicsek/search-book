@@ -639,8 +639,8 @@ router.get('/', async (req: Request, res: Response) => {
       summary: conv.summary,
       date: conv.date,
       type: conv.type,
-      // Display-name fallback mirrors the client: title → contact → company → description
-      displayName: conv.title || conv.contact?.name || conv.company?.name || conv.attendeesDescription || 'Meeting',
+      // Display-name fallback mirrors the client: title → contact → company → first participant → description
+      displayName: conv.title || conv.contact?.name || conv.company?.name || conv.participants?.[0]?.contact?.name || conv.attendeesDescription || 'Meeting',
       contact: conv.contact,
       company: conv.company,
       matches: conv._matches,

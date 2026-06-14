@@ -369,7 +369,7 @@ export function MeetingsPage() {
                         </Button>
                       </div>
                     </div>
-                    {/* Display name: title (→ series view) → contact → company → description */}
+                    {/* Display name: title (→ series view) → contact → company → first participant → description */}
                     {conv.title ? (
                       <button
                         type="button"
@@ -385,6 +385,10 @@ export function MeetingsPage() {
                     ) : conv.company ? (
                       <Link to={`/companies/${conv.company.id}`} className="block text-sm font-semibold hover:underline">
                         {hl(conv.company.name)}
+                      </Link>
+                    ) : conv.participants && conv.participants.length > 0 ? (
+                      <Link to={`/contacts/${conv.participants[0].contact.id}`} className="block text-sm font-semibold hover:underline">
+                        {hl(conv.participants[0].contact.name)}
                       </Link>
                     ) : (
                       <p className="text-sm font-semibold">{conv.attendeesDescription ? hl(conv.attendeesDescription) : 'Meeting'}</p>

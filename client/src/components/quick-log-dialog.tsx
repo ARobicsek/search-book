@@ -38,9 +38,11 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
-import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
+import { MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { TitleAutocomplete } from '@/components/title-autocomplete'
 import { MarkdownTextarea } from '@/components/markdown-textarea'
+import { SaveStatusIndicator } from '@/components/save-status'
+import type { SaveStatus } from '@/hooks/use-auto-save'
 import { toast } from 'sonner'
 import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
@@ -130,7 +132,6 @@ function QuickLogDialog({
   const [summary, setSummary] = useState('')
   const [notes, setNotes] = useState('')
   const [nextSteps, setNextSteps] = useState('')
-  const [contactId, setContactId] = useState('')
   // Orgs the meeting was with: first becomes the anchor companyId, the rest go
   // to the ConversationOrg junction. Values are ids or free-text new names.
   const [orgValues, setOrgValues] = useState<string[]>([])
@@ -142,6 +143,17 @@ function QuickLogDialog({
   const [showExtras, setShowExtras] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loadingEdit, setLoadingEdit] = useState(false)
+
+  // Autosave: the live conversation id (= editId in edit mode, or the id created
+  // by the first autosave POST in create mode). `savedIdRef` mirrors it for
+  // synchronous reads inside the serialized save chain.
+  const [savedId, setSavedId] = useState<number | null>(null)
+  const savedIdRef = useRef<number | null>(null)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const lastSnapshotRef = useRef<string | null>(null)   // JSON of the last autosaved body (skips no-ops)
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve())  // serializes autosave + finalize
+  const savedFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const recordExists = savedId !== null
 
   // Prep notes & attachments. In edit mode these are live records; in create
   // mode they're staged locally and persisted right after the meeting is created.
@@ -182,7 +194,6 @@ function QuickLogDialog({
     setSummary('')
     setNotes('')
     setNextSteps('')
-    setContactId('')
     setOrgValues([])
     setParticipantIds([])
     setParticipantNotes({})
@@ -198,6 +209,14 @@ function QuickLogDialog({
     setExistingActions([])
     setNewActions([])
     setSeriesContext(null)
+
+    // Autosave bookkeeping. In edit mode the record already exists (= editId);
+    // in create mode it's created by the first valid autosave POST.
+    setSavedId(editId)
+    savedIdRef.current = editId
+    setSaveStatus('idle')
+    lastSnapshotRef.current = null
+    saveChainRef.current = Promise.resolve()
 
     api.get<string[]>('/conversations/titles').then(setTitles).catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
@@ -225,12 +244,11 @@ function QuickLogDialog({
           setSummary(conv.summary || '')
           setNotes(conv.notes || '')
           setNextSteps(conv.nextSteps || '')
-          setContactId(conv.contactId?.toString() || '')
-          const orgVals = [
-            ...(conv.companyId ? [conv.companyId.toString()] : []),
-            ...(conv.orgs || []).map((o) => o.company.id.toString()),
-          ]
-          setOrgValues([...new Set(orgVals)])
+          const orgIds = [...new Set([
+            ...(conv.companyId ? [conv.companyId] : []),
+            ...(conv.orgs || []).map((o) => o.company.id),
+          ])]
+          setOrgValues(orgIds.map((id) => id.toString()))
           setParticipantIds(conv.participants?.map((p) => p.contact.id.toString()) || [])
           const pNotes: Record<string, string> = {}
           for (const p of conv.participants || []) {
@@ -242,9 +260,26 @@ function QuickLogDialog({
           setPrepNotes(conv.prepNotes || [])
           setAttachments(conv.attachments || [])
           setExistingActions(conv.actions || [])
-          // Expand sections that already have content
+          // Expand sections that already have content. The 1:1 anchor field is
+          // gone, but a legacy anchor (conv.companyId/contactId) still means
+          // there's "who" context worth showing.
           setShowWho(!!(conv.contactId || conv.companyId || conv.orgs?.length || conv.participants?.length || conv.attendeesDescription))
           setShowExtras(!!(conv.nextSteps || conv.tags?.length || conv.actions?.length || conv.attachments?.length))
+          // Seed the autosave snapshot from the loaded record so opening an edit
+          // doesn't trigger an immediate no-op PUT. Mirrors buildAutosaveBody().
+          lastSnapshotRef.current = JSON.stringify({
+            title: conv.title?.trim() || null,
+            date: conv.date,
+            type: conv.type,
+            summary: conv.summary?.trim() || null,
+            notes: conv.notes?.trim() || null,
+            nextSteps: conv.nextSteps?.trim() || null,
+            attendeesDescription: conv.attendeesDescription?.trim() || null,
+            companyId: orgIds[0] ?? null,
+            orgIds: orgIds.slice(1),
+            participants: (conv.participants || []).map((p) => ({ contactId: p.contact.id, note: p.note?.trim() || null })),
+            tagIds: (conv.tags || []).map((t) => t.tag.id),
+          })
         })
         .catch(() => {
           toast.error('Failed to load meeting')
@@ -276,6 +311,93 @@ function QuickLogDialog({
     }, 400)
     return () => clearTimeout(timer)
   }, [title, titles, open, editId, date])
+
+  // ── Autosave ──────────────────────────────────────────────
+  // The autosave body carries only the scalar fields + the *numeric* (already
+  // resolved) participants/orgs/tags. It deliberately omits `contactId` (never
+  // re-anchor a legacy meeting) and `createActions` / free-text entities (a PUT
+  // would re-create those on every keystroke). Free-text names and actions are
+  // persisted by the explicit "Done" finalize instead.
+  function buildAutosaveBody() {
+    const numericOrgIds = orgValues.filter((v) => /^\d+$/.test(v)).map(Number)
+    const participants = participantIds
+      .filter((v) => /^\d+$/.test(v))
+      .map((v) => ({ contactId: Number(v), note: participantNotes[v]?.trim() || null }))
+    const numericTagIds = tagIds.filter((v) => /^\d+$/.test(v)).map(Number)
+    return {
+      title: title.trim() || null,
+      date,
+      type,
+      summary: summary.trim() || null,
+      notes: notes.trim() || null,
+      nextSteps: nextSteps.trim() || null,
+      attendeesDescription: attendeesDescription.trim() || null,
+      companyId: numericOrgIds[0] ?? null,
+      orgIds: numericOrgIds.slice(1),
+      participants,
+      tagIds: numericTagIds,
+    }
+  }
+
+  // Server `hasWho` accepts a meeting only with a title / org / participant /
+  // attendees description — notes or summary alone are not enough to POST.
+  function autosaveValid(body: ReturnType<typeof buildAutosaveBody>) {
+    return !!(
+      body.date &&
+      (body.title || body.companyId !== null || body.orgIds.length > 0 ||
+        body.participants.length > 0 || body.attendeesDescription)
+    )
+  }
+
+  // Serialize every save (autosave + finalize) so the first POST sets the id
+  // before any later PUT runs — never two POSTs, never a PUT before the POST.
+  function enqueueSave(fn: () => Promise<void>): Promise<void> {
+    const next = saveChainRef.current.then(fn, fn)
+    saveChainRef.current = next
+    return next
+  }
+
+  function flashSaved() {
+    setSaveStatus('saved')
+    if (savedFlashRef.current) clearTimeout(savedFlashRef.current)
+    savedFlashRef.current = setTimeout(() => setSaveStatus('idle'), 2500)
+  }
+
+  async function persistAutosave(body: ReturnType<typeof buildAutosaveBody>, snapshot: string) {
+    setSaveStatus('saving')
+    try {
+      if (savedIdRef.current === null) {
+        const created = await api.post<{ id: number }>('/conversations', body)
+        savedIdRef.current = created.id
+        setSavedId(created.id)
+        // A brand-new meeting should show up in the lists behind the dialog.
+        window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
+      } else {
+        await api.put(`/conversations/${savedIdRef.current}`, body)
+      }
+      lastSnapshotRef.current = snapshot
+      flashSaved()
+    } catch {
+      setSaveStatus('error')
+    }
+  }
+
+  // Debounced autosave: fires ~1.5s after the last edit to a savable field.
+  useEffect(() => {
+    if (!open || loadingEdit) return
+    const body = buildAutosaveBody()
+    if (!autosaveValid(body)) return
+    const snapshot = JSON.stringify(body)
+    if (snapshot === lastSnapshotRef.current) return
+    const timer = setTimeout(() => {
+      void enqueueSave(() => persistAutosave(body, snapshot))
+    }, 1500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, loadingEdit, title, date, type, summary, notes, nextSteps,
+    attendeesDescription, orgValues, participantIds, participantNotes, tagIds])
+
+  useEffect(() => () => { if (savedFlashRef.current) clearTimeout(savedFlashRef.current) }, [])
 
   // Resolve free-text combobox entries into real records (same pattern as the full editor)
   async function resolveWho() {
@@ -321,85 +443,125 @@ function QuickLogDialog({
     return { resolvedOrgIds, participants, resolvedTagIds }
   }
 
+  // Finalize ("Done"): resolves free-text names into real records, persists the
+  // full payload (incl. follow-up actions), flushes any staged prep notes /
+  // attachments, then closes. Runs through the same save chain as autosave so it
+  // can't race the first POST. Never sends `contactId` → legacy anchors untouched.
   async function handleSave() {
     if (!date) {
       toast.error('Date is required')
       return
     }
-    if (!title.trim() && !contactId && orgValues.length === 0 && participantIds.length === 0 && !attendeesDescription.trim()) {
+    if (!title.trim() && orgValues.length === 0 && participantIds.length === 0 && !attendeesDescription.trim()) {
       toast.error('Add a title (or someone who was there)')
       return
     }
     setSaving(true)
+    setSaveStatus('saving')
     try {
-      const { resolvedOrgIds, participants, resolvedTagIds } = await resolveWho()
+      await enqueueSave(async () => {
+        const { resolvedOrgIds, participants, resolvedTagIds } = await resolveWho()
 
-      const payload = {
-        title: title.trim() || null,
-        date,
-        type,
-        summary: summary.trim() || null,
-        notes: notes.trim() || null,
-        nextSteps: nextSteps.trim() || null,
-        contactId: contactId && /^\d+$/.test(contactId) ? Number(contactId) : null,
-        // First org anchors companyId (backward compat); the rest are junction rows
-        companyId: resolvedOrgIds[0] ?? null,
-        orgIds: resolvedOrgIds.slice(1),
-        participants,
-        attendeesDescription: attendeesDescription.trim() || null,
-        tagIds: resolvedTagIds,
-        createActions: newActions
-          .filter((a) => a.title.trim())
-          .map((a) => ({
-            title: a.title.trim(),
-            type: a.type,
-            dueDate: a.dueDate || null,
-            priority: a.priority,
-          })),
-      }
+        const payload = {
+          title: title.trim() || null,
+          date,
+          type,
+          summary: summary.trim() || null,
+          notes: notes.trim() || null,
+          nextSteps: nextSteps.trim() || null,
+          // First org anchors companyId (backward compat); the rest are junction rows
+          companyId: resolvedOrgIds[0] ?? null,
+          orgIds: resolvedOrgIds.slice(1),
+          participants,
+          attendeesDescription: attendeesDescription.trim() || null,
+          tagIds: resolvedTagIds,
+          createActions: newActions
+            .filter((a) => a.title.trim())
+            .map((a) => ({
+              title: a.title.trim(),
+              type: a.type,
+              dueDate: a.dueDate || null,
+              priority: a.priority,
+            })),
+        }
 
-      let conversationId = editId
-      if (isEdit) {
-        await api.put(`/conversations/${editId}`, payload)
-      } else {
-        const created = await api.post<{ id: number }>('/conversations', payload)
-        conversationId = created.id
-      }
+        let conversationId = savedIdRef.current
+        if (conversationId !== null) {
+          await api.put(`/conversations/${conversationId}`, payload)
+        } else {
+          const created = await api.post<{ id: number }>('/conversations', payload)
+          conversationId = created.id
+          savedIdRef.current = created.id
+          setSavedId(created.id)
+        }
+        // Mark the finalized state as saved so a trailing autosave is a no-op.
+        lastSnapshotRef.current = JSON.stringify(buildAutosaveBody())
+        setNewActions([])
 
-      // Persist staged prep notes / attachments (create mode; in edit mode they
-      // were saved live as they were added)
-      const stagedPrep = [...pendingPrepNotes]
-      if (newPrepContent.trim()) stagedPrep.push({ content: newPrepContent.trim(), date })
-      for (const note of stagedPrep) {
-        await api.post('/conversation-prepnotes', {
-          conversationId,
-          content: note.content,
-          date: note.date,
-        })
-      }
-      for (const att of pendingAttachments) {
-        await api.post('/conversation-attachments', { conversationId, ...att })
-      }
+        // Persist staged prep notes / attachments (those added before the record
+        // existed; ones added afterwards were saved live).
+        const stagedPrep = [...pendingPrepNotes]
+        if (newPrepContent.trim()) stagedPrep.push({ content: newPrepContent.trim(), date })
+        for (const note of stagedPrep) {
+          await api.post('/conversation-prepnotes', {
+            conversationId,
+            content: note.content,
+            date: note.date,
+          })
+        }
+        for (const att of pendingAttachments) {
+          await api.post('/conversation-attachments', { conversationId, ...att })
+        }
+      })
 
       toast.success(isEdit ? 'Meeting updated' : 'Meeting logged')
       // Pages that list meetings (e.g. /meetings) listen for this to refresh
       window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
       onOpenChange(false)
     } catch (err) {
+      setSaveStatus('error')
       toast.error(err instanceof Error ? err.message : 'Failed to save meeting')
     } finally {
       setSaving(false)
     }
   }
 
+  // Discard the autosaved (or edited) meeting entirely.
+  async function handleDeleteMeeting() {
+    if (savedIdRef.current === null) return
+    if (!window.confirm('Delete this meeting? This cannot be undone.')) return
+    setSaving(true)
+    try {
+      await api.delete(`/conversations/${savedIdRef.current}`)
+      toast.success('Meeting deleted')
+      window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
+      onOpenChange(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete meeting')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Closing via Cancel / X / Escape keeps whatever autosave already persisted;
+  // refresh the lists so they reflect the latest autosaved state.
+  function handleDialogOpenChange(next: boolean) {
+    if (!next && savedIdRef.current !== null) {
+      window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
+    }
+    onOpenChange(next)
+  }
+
   // ── Prep notes ────────────────────────────────────────────
   async function addPrepNote() {
     const content = newPrepContent.trim()
     if (!content) return
-    if (isEdit) {
+    // Once the meeting record exists (edit mode, or after the first autosave),
+    // persist live; otherwise stage until the record is created.
+    if (savedIdRef.current !== null) {
       try {
         const created = await api.post<ConversationPrepNote>('/conversation-prepnotes', {
-          conversationId: editId,
+          conversationId: savedIdRef.current,
           content,
           date: new Date().toLocaleDateString('en-CA'),
         })
@@ -458,9 +620,9 @@ function QuickLogDialog({
           mimeType: uploaded.mimeType,
           size: uploaded.size,
         }
-        if (isEdit) {
+        if (savedIdRef.current !== null) {
           const created = await api.post<ConversationAttachment>('/conversation-attachments', {
-            conversationId: editId,
+            conversationId: savedIdRef.current,
             ...meta,
           })
           setAttachments((prev) => [...prev, created])
@@ -608,22 +770,12 @@ function QuickLogDialog({
       >
         {showWho ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         Who was there
-        {(contactId || orgValues.length > 0 || participantIds.length > 0 || attendeesDescription) && (
+        {(orgValues.length > 0 || participantIds.length > 0 || attendeesDescription) && (
           <span className="text-xs text-primary">·</span>
         )}
       </button>
       {showWho && (
         <div className="grid gap-4 rounded-md border p-3">
-          <div className="space-y-2">
-            <Label>Contact (1:1 anchor)</Label>
-            <Combobox
-              options={contactOptions}
-              value={contactId}
-              onChange={(v) => setContactId(v)}
-              placeholder="Link to one contact..."
-              searchPlaceholder="Search contacts..."
-            />
-          </div>
           <div className="space-y-2">
             <Label>Participants</Label>
             {quickAddFavorites.length > 0 && (
@@ -910,14 +1062,17 @@ function QuickLogDialog({
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className={cn('max-h-[90vh] w-[95vw] overflow-y-auto', showPanel ? 'sm:max-w-5xl' : 'sm:max-w-xl')}>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit Meeting' : 'Quick Log Meeting'}</DialogTitle>
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <DialogTitle>{isEdit ? 'Edit Meeting' : 'Quick Log Meeting'}</DialogTitle>
+            <SaveStatusIndicator status={saveStatus} />
+          </div>
           <DialogDescription>
             {isEdit
               ? 'Update any detail of this meeting.'
-              : 'Title + date is enough — add people or notes if you have a minute.'}
+              : 'Title + date is enough — it autosaves as you type.'}
           </DialogDescription>
         </DialogHeader>
         {loadingEdit ? (
@@ -962,11 +1117,29 @@ function QuickLogDialog({
         ) : (
           formBody
         )}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || loadingEdit}>
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Log Meeting'}
-          </Button>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {recordExists ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto"
+              onClick={handleDeleteMeeting}
+              disabled={saving}
+            >
+              <Trash2 className="mr-1 h-4 w-4" />
+              Delete this meeting
+            </Button>
+          ) : (
+            <span className="hidden sm:block" />
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
+              {recordExists ? 'Close' : 'Cancel'}
+            </Button>
+            <Button onClick={handleSave} disabled={saving || loadingEdit}>
+              {saving ? 'Saving...' : isEdit ? 'Save Changes' : recordExists ? 'Done' : 'Log Meeting'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -52,19 +52,19 @@ is the active build target first.)
 - [client/src/lib/types.ts](client/src/lib/types.ts): add `'CONSULTANT'` to the `Ecosystem` union and a `{ value:'CONSULTANT', label:'Consultant' }` entry in `ECOSYSTEM_OPTIONS`.
 - Server ecosystem allow-list in [server/src/routes/contacts.ts](server/src/routes/contacts.ts) — add `'CONSULTANT'`.
 - Color maps: add `CONSULTANT` to `ecosystemColors` in [client/src/pages/search.tsx:45](client/src/pages/search.tsx#L45) and sibling maps (grep `ecosystemColors` across `client/src`). `|| ''` fallbacks make any missed spot degrade gracefully.
-- **STATUS:** Not started.
+- **STATUS:** Done (2026-06-13). Client-only: added `CONSULTANT` to the `Ecosystem` union + `ECOSYSTEM_OPTIONS` (label "Consultant"), all four `ecosystemColors` maps (`bg-teal-100 text-teal-800`), and the CSV-import synonym map. **No server allow-list exists** — `ecosystem` is a plain passthrough TEXT column with no validation, so no server change was needed (plan's assumption corrected). Verified: option renders in the new-contact ecosystem dropdown.
 
 **A2 — Clickable search in the top bar (#1).** Commit: `feat(ui): clickable top-bar search + mobile clear`
 - [client/src/components/layout.tsx:52-57](client/src/components/layout.tsx#L52): replace the non-clickable `Ctrl + K` hint with a clickable desktop search **Button** (Search icon + "Search", kbd hint as adornment) → `useCommandPalette().open()`. Keep the existing mobile search button.
-- **STATUS:** Not started.
+- **STATUS:** Done (2026-06-13). Desktop top-bar hint → outline `Button` ("Search" + Ctrl+K adornment) wired to `useCommandPalette().open`; mobile icon button unchanged. Verified desktop (opens palette) + 390px (button hidden, icon button remains).
 
 **A3 — One-tap clear on Search (#11).** (same commit as A2)
 - [client/src/pages/search.tsx](client/src/pages/search.tsx) input (~L712): absolute-right **X** clear button shown when `query` non-empty → `setQuery('')`; touch-sized hit area on mobile. Add the same to the Meetings "Search text" input ([client/src/pages/meetings.tsx:287](client/src/pages/meetings.tsx#L287)).
-- **STATUS:** Not started.
+- **STATUS:** Done (2026-06-13). Search input: `pr-12` + absolute `h-10 w-10` X button (touch-sized) shown when `query`. Meetings "Search text": wrapped in relative div with `h-9 w-9` X button shown when `qInput`. Verified clear works on Search (desktop + 390px) and Meetings.
 
 **A4 — Apply markdown formatting *before* typing (#6).** Commit: `feat(notes): apply markdown format before typing`
 - [client/src/components/markdown-textarea.tsx](client/src/components/markdown-textarea.tsx). Bold/italic already wrap the caret and work button-first. Bug is **headings/lists on an empty line**: `prefixLines`' `allPrefixed` treats an empty line as already-prefixed (`!l.trim()`→true) → strips → no-op. Fix so an empty/whitespace-only selection **always adds** the prefix and parks the caret right after it.
-- **STATUS:** Not started.
+- **STATUS:** Done (2026-06-13). Added an early branch in `prefixLines`: when no selected line has content (`!lines.some(l => l.trim())`), insert `makePrefix(0)` and park the caret right after it. Verified: caret on empty Notes → click H3 → `### ` inserted, caret at col 4, typing "Agenda" → `### Agenda`.
 
 ---
 

@@ -2,44 +2,60 @@
 
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
 
-### What Was Just Completed (2026-06-12, fourth session) — meeting tweaks + search upgrade, ALL DEPLOYED
+### What Was Just Completed (2026-06-13, planning session) — UX/Search/Meetings plan APPROVED, no code yet
 
-Commits `4f70e35`, `bb870e6`, `9c0f8fd`, `1dea764` all pushed & live. The `ConversationOrg` Turso DDL was run by the user in the console mid-session, then the multi-org commit was pushed and the new bundle + `/api/health` verified. Local dev.db has the table too (`prisma db push`).
+This was a **planning-only** session. The owner brought a 13-item worklist; after a codebase read we
+produced and the owner **approved** a build plan. **No code was written.** The plan of record for the next
+build session is **`.planning/UX-SEARCH-MEETINGS-PLAN.md`** (Phases A → E, top-to-bottom).
 
-Suggested 2-min smoke test if the user hasn't already: open /meetings on the live site (first prod read through the `orgs` include), edit a meeting → add a second organization → save → org filter finds it; try a search with the Aa (match case) toggle.
+Three decisions locked in this session:
+- **Unify on the Quick Log dialog** as the one meeting editor app-wide (retire the contact-page inline editor; seed the originating contact as a Participant; add autosave; drop the "1:1 anchor" field). This is the root fix for "Log Meeting doesn't autosave," "two encounter types," and "scrap the 1:1 anchor."
+- **LinkedIn import stays paste-text only** (no screenshot/AI-vision path this session).
+- **Separate Meetings calendar** (meetings-only), distinct from the actions calendar.
 
-1. **Quick Log dialog upgrades** (`4f70e35`): left-side **Prep Notes panel** on ALL meetings (live notes in edit mode, staged in create mode, composer, plus "Last Meeting in Series" context box when the title matches a known series), fixed-height so prep stays visible while the form scrolls; **follow-up actions** (add multiple inline; existing linked actions listed) using the API's existing `createActions`; **favorite participants** — star a participant to favorite them (reserved `Favorite` tag via `ContactTag`, no schema change), favorites render as one-click amber quick-add chips. New endpoints `GET /contacts/favorites`, `PATCH /contacts/:id/favorite`.
-2. **Search upgrade S.1 server** (`bb870e6`): scopes (`people-profile,people-notes,orgs,meetings,actions,ideas`), sorts (`relevance|newest|oldest|alpha|recent-contact`), **caseSensitive=true** (user ask: DB fetches insensitive LIKE superset, JS verifies exact case), multi-term AND + quoted phrases, per-hit `matches: [{field, snippet}]` evidence, per-group `totals`, `[TIMING]` log line per query. All field gaps from the plan closed (personalDetails, tags everywhere, takeaways, prep notes, activity log, attachment names, …).
-3. **Search upgrade S.2 client** (`9c0f8fd`): scope chips + sort dropdown + match-case (Aa) toggle persisted in URL (`?q&scopes&sort&cs`) + localStorage; `<mark>` highlighting of all terms in names/titles and evidence snippets (React nodes, no innerHTML); tab counts from totals; "Show all N" deep links (`/contacts?search=`, `/companies?search=` — both list pages now seed from the URL — and `/meetings?q=`). S.3 verified: 390px wraps cleanly, local all-scopes timings 12–137ms.
-4. **Multi-org meetings** (`1dea764`, HELD): `ConversationOrg` junction (orgs the meeting was WITH; `companyId` stays primary; `ConversationCompany` still = orgs discussed). Quick Log org field is now multi-select; /meetings org filter + cards and search cover additional orgs; **backup = 27 tables, `_meta.version` 5**.
+Two diagnostic conclusions worth carrying:
+- The ~20s search is **Turso round-trip count**, not data volume — `includeRelated=true` fans out ~150 queries. Fix is lazy-load-related + parallelize (Phase B3). **No FTS** needed at this scale.
+- **No item in the plan needs a schema change** → no Turso DDL, lower risk.
 
-**Verification done locally** (chrome-devtools): prep panel, favorites star + chip round-trip, case-sensitive "AI" (drops the gm**ai**l noise), multi-term "boston partner" AND-across-fields with dual evidence, multi-org create/filter/PUT/search/delete via API. Test data cleaned up.
+### What's Next — implement `.planning/UX-SEARCH-MEETINGS-PLAN.md`
 
-**Gotchas captured this session:**
-- PowerShell 5.1 mangles multi-line `git commit -m` here-strings containing double quotes — write the message to a temp file and use `git commit -F`.
-- Never round-trip source files through PS `Get-Content -Raw | Set-Content` — it corrupted UTF-8 (em-dashes) in types.ts once; use the Edit tool.
-- `recent-contact` sort computes last-meeting dates with plain `findMany` + JS max (NOT `groupBy`/`_count` — Turso adapter gotcha).
-- In case-sensitive mode, `totals` are the verified count of the fetched superset (capped at 3×limit), not exact DB counts.
+Build top-to-bottom, low-risk → high-risk, one atomic commit per chunk; `npm run prepush` + a client
+build + a desktop/390px smoke test before each push (owner has standing permission to push to `main`):
 
-### What's Next
+1. **Phase A (quick wins):** A1 `Consultant` ecosystem · A2 clickable top-bar search · A3 one-tap clear on Search · A4 markdown formatting-before-typing.
+2. **Phase B (search):** B1 participant takeaways surface the *person* card · B2 weighted Meetings free-text ranking (title > people > org/attendees > rest) · B3 lazy related + parallelize (the ~20s fix).
+3. **Phase C (biggest):** unify on Quick Log — C1a autosave + drop 1:1 anchor + participant-first display; C1b retire the contact-page inline editor + seed participant.
+4. **Phase D:** dedicated Meetings calendar (List|Calendar toggle on `/meetings`).
+5. **Phase E:** relabel "Conversations" → "Meetings" in the UI (labels only).
 
-- **Prod search perf check** (S.3 leftover, 2 min): after using prod search once, check the Vercel function logs for the `[TIMING] search …` line; local was 12–137ms, Turso adds per-query latency. If slow, the first lever is dropping `includeRelated` related-entity fan-out (pre-existing behavior, ~60 queries at limit=20).
-- Back to the adaptation plan — **Phase 3** (blocked on D8/D9) / **Phase 4** (blocked on D5/D6). The user is waiting on info for login changes + AI features (D5–D9); **don't push on them until the user raises them.**
+Each task has its files, commit message, and a verification step in the plan doc.
 
 ### Carry-over items (pre-dating, lower priority)
-
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
-2. Desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
-3. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
-4. Company near-duplicate scan (LinkedIn-variant suffixes).
-5. Meeting-editor parity: contact-detail's embedded editor still has its own actions/links/photo/orgs(single) sections. Consolidate when it next causes friction.
-6. A stray empty `server/dev.db` (root of server/, gitignored) is safe to delete.
+2. **Prod search perf check** — superseded by Phase B3; after B3 ships, confirm the prod `[TIMING] search …` line is healthy.
+3. NCQA adaptation plan (`.planning/NCQA-ADAPTATION-PLAN.md`): Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until the owner raises them.
+4. Desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
+5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
+6. Company near-duplicate scan (LinkedIn-variant suffixes).
+7. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
+8. Stray empty `server/dev.db` (gitignored) safe to delete.
 
 ### Open Bugs / Known Caveats
-
-- No confirmed bugs. The `Favorite` tag is a normal tag and will appear in tag dropdowns — by design (zero-DDL favorites).
-- Attachment binaries (like photos) are NOT in the daily cloud DB backup — by design.
+- No confirmed bugs. Reminder: the `Favorite` tag is a normal tag and appears in tag dropdowns (by design).
+- After Phase C deletions, watch for unused-var build failures — the client **build** (`tsc -b`, `noUnusedLocals`) is stricter than the `typecheck` script.
 
 ### Working branch
+`main`, clean and fully pushed (last code session 2026-06-12). This planning session added only `.planning/` docs — commit them (and CLAUDE.md status if desired) before starting the build.
 
-`main`, clean and fully pushed; deploy verified live (new bundle + healthy DB). No held commits, no pending DDL.
+---
+
+### Suggested kickoff prompt for the next session
+
+> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md` and the approved plan of
+> record `.planning/UX-SEARCH-MEETINGS-PLAN.md`. We're implementing that plan top-to-bottom.
+> Start with **Phase A** (A1 Consultant ecosystem → A2 clickable top-bar search → A3 one-tap clear on
+> Search → A4 markdown-format-before-typing), one atomic commit per chunk. Before each push run
+> `npm run prepush` **and** a client build, and smoke-test at desktop + 390px. Update each task's STATUS
+> line in the plan doc as you go. No schema changes are expected anywhere in this plan — flag it
+> immediately if you think one is needed. Pause after Phase A so I can eyeball it before we move to the
+> search work (Phase B) and the bigger Quick Log unification (Phase C).

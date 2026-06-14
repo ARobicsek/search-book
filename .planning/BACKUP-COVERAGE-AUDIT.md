@@ -85,6 +85,16 @@ gathers all three (deduped by URL); `buildBinariesZip` fetches the bytes and pac
 - `buildBinariesZip` against **real local data**: 11 photo binaries (Vercel Blob URLs) fetched,
   0 skipped, 2.6 MB ZIP built — confirms Blob CORS works from the browser. ✓
 - `tsc -b` (client) + `tsc --noEmit` (server) green.
+- **End-to-end completeness + usability proof (2026-06-14)** — answers "is a backup a full,
+  restorable, *working* copy of prod?":
+  1. **prod == backup, exactly.** Read-only `count(*)`-per-table diff of the
+     `2026-06-14T18-36-42` backup against live prod (`server/scripts/prod-count-diff.mjs`):
+     **all 27 tables identical, 2,604 rows, delta 0 on every table.** ✓
+  2. **Backup restores losslessly.** `restore-test.mjs` into a scratch Turso DB: 27/27 tables
+     match, relationships + binaries verified (see [RESTORE-TEST-RUNBOOK.md](RESTORE-TEST-RUNBOOK.md)). ✓
+  3. **App runs on the restored data.** Restored into local SQLite + booted the app
+     (`server/scripts/app-smoke.mjs` + rendered Dashboard/Contacts/Analytics/contact-detail):
+     every heavy endpoint 200, all charts populated. ✓
 
 ## Notes / residual
 - `_meta.version` is **5** in both export paths; the restore (`importViaTurso` / `/import`) keys

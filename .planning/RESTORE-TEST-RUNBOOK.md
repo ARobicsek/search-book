@@ -5,6 +5,11 @@
 > (2,604 rows)**, relationship spot-checks resolve, **15/15 sampled Blob URLs reachable** (of 69),
 > exit 0. Prod untouched (`--forbid-url` = real prod URL). Scratch DB deleted afterward. This runbook
 > is retained for re-running the test against future backups.
+>
+> Two companion checks the same day made the proof airtight: a **read-only prod↔backup `count(*)`
+> diff** (`server/scripts/prod-count-diff.mjs`) showed **all 27 tables identical to prod, delta 0**;
+> and the backup was restored into a local SQLite DB and the **app was booted on it**
+> (`server/scripts/app-smoke.mjs` + rendered pages) — every page/chart worked. See BACKUP-COVERAGE-AUDIT.md.
 
 **Goal:** prove a production backup can be **fully** restored — every table, relationship, and
 binary — into a *throwaway* database, **without ever touching live data.**

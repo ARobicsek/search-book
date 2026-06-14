@@ -18,9 +18,73 @@ const meetingListInclude = {
   attachments: true,
 };
 
+// Free-text ranking needs the discussed people/orgs too, so a meeting that
+// matched only via a discussed name scores (instead of silently ranking 0).
+const meetingRankInclude = {
+  ...meetingListInclude,
+  contactsDiscussed: { include: { contact: { select: { id: true, name: true } } } },
+  companiesDiscussed: { include: { company: { select: { id: true, name: true } } } },
+};
+
+// Free-text (`q`) coverage: every meeting field, mirroring search.ts'
+// conversationClausesFor so the Meetings box and global Search agree.
+function meetingMatchClauses(term: string): Record<string, unknown>[] {
+  return [
+    { title: { contains: term } },
+    { summary: { contains: term } },
+    { notes: { contains: term } },
+    { nextSteps: { contains: term } },
+    { attendeesDescription: { contains: term } },
+    { tags: { some: { tag: { name: { contains: term } } } } },
+    { prepNotes: { some: { content: { contains: term } } } },
+    { attachments: { some: { name: { contains: term } } } },
+    { contact: { name: { contains: term } } },
+    { company: { name: { contains: term } } },
+    { orgs: { some: { company: { name: { contains: term } } } } },
+    { participants: { some: { contact: { name: { contains: term } } } } },
+    { participants: { some: { note: { contains: term } } } },
+    { contactsDiscussed: { some: { contact: { name: { contains: term } } } } },
+    { companiesDiscussed: { some: { company: { name: { contains: term } } } } },
+  ];
+}
+
+// Relevance weight for a meeting against a free-text term (case-insensitive,
+// matching SQLite LIKE). Highest matching field wins:
+//   title=4 > people in the meeting=3 > org names + attendees desc=2 > rest=1.
+function scoreMeeting(conv: any, termLower: string): number {
+  let score = 0;
+  const has = (v: string | null | undefined) => !!v && v.toLowerCase().includes(termLower);
+  const bump = (n: number) => { if (n > score) score = n; };
+
+  if (has(conv.title)) bump(4);
+  // People in the meeting (anchor contact + participants)
+  if (has(conv.contact?.name)) bump(3);
+  for (const p of conv.participants || []) if (has(p.contact?.name)) bump(3);
+  // Org names + attendees description
+  if (has(conv.company?.name)) bump(2);
+  for (const o of conv.orgs || []) if (has(o.company?.name)) bump(2);
+  if (has(conv.attendeesDescription)) bump(2);
+  // Everything else
+  if (has(conv.summary)) bump(1);
+  if (has(conv.notes)) bump(1);
+  if (has(conv.nextSteps)) bump(1);
+  for (const t of conv.tags || []) if (has(t.tag?.name)) bump(1);
+  for (const pn of conv.prepNotes || []) if (has(pn.content)) bump(1);
+  for (const a of conv.attachments || []) if (has(a.name)) bump(1);
+  for (const p of conv.participants || []) if (has(p.note)) bump(1);
+  for (const cd of conv.contactsDiscussed || []) if (has(cd.contact?.name)) bump(1);
+  for (const cc of conv.companiesDiscussed || []) if (has(cc.company?.name)) bump(1);
+
+  return score;
+}
+
+// Cap for the free-text ranking path: fetch a superset, rank in JS, then
+// paginate the ranked array (same fetch-all-then-slice shape as series view).
+const RANK_FETCH_CAP = 300;
+
 // GET /api/meetings — paginated list of all conversations with filters.
 // Filters: title (series view: case-insensitive exact), companyId, tagId, type,
-// from/to (date range), q (free text), id (single-meeting deep link from search).
+// from/to (date range), q (weighted free text), id (single-meeting deep link).
 // Returns the standard pagination envelope.
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -40,20 +104,9 @@ router.get('/', async (req: Request, res: Response) => {
     if (tagId) AND.push({ tags: { some: { tagId: parseInt(tagId as string) } } });
     if (from) AND.push({ date: { gte: from as string } });
     if (to) AND.push({ date: { lte: to as string } });
-    if (q && typeof q === 'string' && q.trim()) {
-      const term = q.trim();
-      AND.push({
-        OR: [
-          { title: { contains: term } },
-          { summary: { contains: term } },
-          { notes: { contains: term } },
-          { attendeesDescription: { contains: term } },
-          { contact: { name: { contains: term } } },
-          { company: { name: { contains: term } } },
-          { participants: { some: { contact: { name: { contains: term } } } } },
-        ],
-      });
-    }
+
+    const qTerm = typeof q === 'string' && q.trim() ? q.trim() : null;
+    if (qTerm) AND.push({ OR: meetingMatchClauses(qTerm) });
 
     // Series filter: SQLite `contains` is case-insensitive; narrow in the DB,
     // then enforce exact (case-insensitive) match in JS. A single series is
@@ -74,6 +127,29 @@ router.get('/', async (req: Request, res: Response) => {
       );
       const total = exact.length;
       const data = exact.slice(skip, skip + take);
+      res.json({
+        data,
+        pagination: { total, limit: take, offset: skip, hasMore: skip + data.length < total },
+      });
+      return;
+    }
+
+    // Weighted free-text path: fetch a capped superset of the filtered set,
+    // score each meeting, then sort by score desc, date desc and paginate.
+    if (qTerm) {
+      const rows = await prisma.conversation.findMany({
+        where,
+        include: meetingRankInclude,
+        orderBy: { date: 'desc' },
+        take: RANK_FETCH_CAP,
+      });
+      const termLower = qTerm.toLowerCase();
+      const ranked = rows
+        .map((r) => ({ r, score: scoreMeeting(r, termLower) }))
+        .sort((a, b) => b.score - a.score || (b.r.date || '').localeCompare(a.r.date || ''))
+        .map((x) => x.r);
+      const total = ranked.length;
+      const data = ranked.slice(skip, skip + take);
       res.json({
         data,
         pagination: { total, limit: take, offset: skip, hasMore: skip + data.length < total },

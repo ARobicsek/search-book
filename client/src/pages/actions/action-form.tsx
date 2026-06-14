@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Action, Contact, Company, LinkRecord } from '@/lib/types'
-import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, ACTION_DIRECTION_OPTIONS } from '@/lib/types'
+import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, Star, X } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 
@@ -37,7 +37,8 @@ type FormData = {
   description: string
   type: string
   priority: string
-  direction: string
+  owedByMe: boolean
+  owerIds: string[]
   dueDate: string
   contactIds: string[]
   companyIds: string[]
@@ -52,7 +53,8 @@ const emptyForm: FormData = {
   description: '',
   type: 'OTHER',
   priority: 'MEDIUM',
-  direction: 'OWED_BY_ME',
+  owedByMe: true,
+  owerIds: [],
   dueDate: '',
   contactIds: [],
   companyIds: [],
@@ -60,6 +62,17 @@ const emptyForm: FormData = {
   recurringIntervalDays: '',
   recurringEndDate: '',
   links: [],
+}
+
+// Parse the stored owerContactIds JSON ("[3,7]") into combobox string values.
+function parseOwerIds(json: string | null | undefined): string[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? parsed.map((x) => String(x)) : []
+  } catch {
+    return []
+  }
 }
 
 function actionToForm(action: Action): FormData {
@@ -76,7 +89,8 @@ function actionToForm(action: Action): FormData {
     description: action.description ?? '',
     type: action.type,
     priority: action.priority,
-    direction: action.direction ?? 'OWED_BY_ME',
+    owedByMe: action.owedByMe ?? true,
+    owerIds: parseOwerIds(action.owerContactIds),
     dueDate: action.dueDate ?? '',
     contactIds,
     companyIds,
@@ -93,7 +107,8 @@ function formToPayload(form: FormData) {
     description: form.description.trim() || null,
     type: form.type,
     priority: form.priority,
-    direction: form.direction,
+    owedByMe: form.owedByMe,
+    owerContactIds: form.owerIds.map((id) => parseInt(id)).filter((n) => !Number.isNaN(n)),
     dueDate: form.dueDate || null,
     contactIds: form.contactIds.map((id) => parseInt(id)),
     companyIds: form.companyIds.map((id) => parseInt(id)),
@@ -124,6 +139,7 @@ export function ActionFormPage() {
   const [originalForm, setOriginalForm] = useState<FormData | null>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
+  const [favorites, setFavorites] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -133,6 +149,9 @@ export function ActionFormPage() {
   // Collapsed fields still live in `form`, so they submit/auto-save regardless.
   const [showOptions, setShowOptions] = useState(false)
   const [showRelated, setShowRelated] = useState(false)
+  // "Who owes it" — collapsed by default (defaults to just "me"); auto-expand in edit
+  // mode when the saved value is non-default so it's visible without a click.
+  const [showOwers, setShowOwers] = useState(false)
 
   // Options for comboboxes
   const contactOptions: ComboboxOption[] = contacts.map((c) => ({
@@ -144,6 +163,10 @@ export function ActionFormPage() {
     label: c.name,
   }))
 
+  // Favorite contacts not already in the owers list — shown as quick-add chips
+  // (mirrors the Quick Log "Who was there" favorites pattern).
+  const quickAddOwerFavorites = favorites.filter((f) => !form.owerIds.includes(f.id.toString()))
+
   // Track existing link IDs for deletion tracking
   const [existingLinkIds, setExistingLinkIds] = useState<number[]>([])
 
@@ -152,6 +175,7 @@ export function ActionFormPage() {
       setContacts(data as Contact[])
     }).catch(() => toast.error('Failed to load contacts'))
     api.get<Company[]>('/companies').then(setCompanies).catch(() => toast.error('Failed to load companies'))
+    api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
 
     if (isEdit && id) {
       Promise.all([
@@ -166,6 +190,8 @@ export function ActionFormPage() {
           setForm(formData)
           setOriginalForm(formData)
           setExistingLinkIds(links.map((l) => l.id))
+          // Reveal "Who owes it" when it's been customized (not the default "just me").
+          if (!formData.owedByMe || formData.owerIds.length > 0) setShowOwers(true)
         })
         .catch((err) => {
           toast.error(err.message)
@@ -282,7 +308,8 @@ export function ActionFormPage() {
         description: form.description.trim() || null,
         type: form.type,
         priority: form.priority,
-        direction: form.direction,
+        owedByMe: form.owedByMe,
+        owerContactIds: form.owerIds.map((oid) => parseInt(oid)).filter((n) => !Number.isNaN(n)),
         dueDate: form.dueDate || null,
         contactIds: finalContactIds,
         companyIds: finalCompanyIds,
@@ -451,20 +478,70 @@ export function ActionFormPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="direction">Who owes it</Label>
-              <Select value={form.direction} onValueChange={(v) => set('direction', v)}>
-                <SelectTrigger id="direction" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTION_DIRECTION_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-2 sm:col-span-2">
+              <button
+                type="button"
+                className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+                onClick={() => setShowOwers((v) => !v)}
+              >
+                {showOwers ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                Who owes it
+                {(!form.owedByMe || form.owerIds.length > 0) && (
+                  <span className="text-xs text-primary">·</span>
+                )}
+              </button>
+              {showOwers && (
+                <div className="space-y-3 rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Defaults to you. Remove “Me” and/or add the people you’re waiting on.
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {form.owedByMe ? (
+                      <span className="flex items-center gap-1 rounded-full border bg-primary/10 px-2 py-0.5 text-xs text-foreground">
+                        Me
+                        <button
+                          type="button"
+                          onClick={() => set('owedByMe', false)}
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Remove me"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => set('owedByMe', true)}
+                        className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+                        title="Add me back"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Me
+                      </button>
+                    )}
+                    {quickAddOwerFavorites.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, owerIds: [...prev.owerIds, f.id.toString()] }))}
+                        className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                        title="Add to who owes it"
+                      >
+                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                        {f.name}
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    ))}
+                  </div>
+                  <MultiCombobox
+                    options={contactOptions}
+                    values={form.owerIds}
+                    onChange={(vals) => setForm((prev) => ({ ...prev, owerIds: vals }))}
+                    placeholder="Add people who owe it..."
+                    searchPlaceholder="Search contacts..."
+                  />
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

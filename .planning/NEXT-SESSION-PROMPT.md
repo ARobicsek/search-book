@@ -3,44 +3,34 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (2026-06-14, build session) — Actions/Ideas polish batch: 3 of 5 tasks shipped
+### What Was Just Completed (2026-06-14, build session) — Task 3 shipped; 4 of 5 batch tasks done
 
-Plan of record: `.planning/ACTIONS-IDEAS-POLISH-PLAN.md`. Decisions A1/B1/C1 confirmed with owner up
-front; D1 was already resolved (and the #6 Baylor handling confirmed = **low-confidence bucket**). Session
-had ~half a token budget, so the work was deliberately scoped: **ship the 3 schema-free tasks; do NOT
-start the schema-touching one in a constrained budget** (a half-applied migration breaks prod).
+Plan of record: `.planning/ACTIONS-IDEAS-POLISH-PLAN.md`. Tasks 1/2/4 shipped earlier on 2026-06-14;
+**this session shipped Task 3**. Only **Task 5** (long-lived PrismaClient) remains in the batch.
 
-- **Task 1 — Markdown formatting in Actions & Ideas** (`6588def`). Swapped the description `<Textarea>`
-  for the existing `MarkdownTextarea` in the Action form and the Idea create/edit dialog; Ideas card
-  display now renders `ReactMarkdown` + `prep-note-markdown` (Actions detail already did). Descriptions
-  only (A1). Verified in-browser: a typed `- ` bullet renders as •.
-- **Task 2 — Progressive disclosure on the Action form** (`6588def`, same commit — shared file
-  `action-form.tsx`, combined to conserve budget). Type+Priority folded behind a collapsed "More options"
-  caret (· indicator when non-default); "Related To" is now a collapsed caret (count indicator). Mirrors
-  Quick Log's "Who was there". Create **and** edit (B1); collapsed fields stay in form state so they
-  auto-save/submit. Smoke-tested desktop + 390px.
-- **Task 4 — Company near-dup LinkedIn variants** (`7723ffb`). Reworked
-  [duplicates.ts](../server/src/routes/duplicates.ts) `normalizeCompanyNameForDedupe` + matching:
-  punctuation normalize (&→and, hyphen/comma→space, drop apostrophes/diacritics/periods), `healthcare`→
-  `health` fold + trailing-descriptor stripping, token-subset match, and a **low-confidence shared-prefix
-  bucket** (score 0.5) for #6 Baylor. **Verified against real local data — all 6 owner pairs surface**,
-  tiered correctly; FP guards (Mass General H./Brigham, UCSF/UC Berkeley) excluded. Server-only, no schema.
+- **Task 3 — Rework "Who owes it" into a people list (SCHEMA-TOUCHING).** Additive `Action.owedByMe`
+  (bool, default 1) + `Action.owerContactIds` (JSON id array). `direction` is now a **derived server-side
+  mirror** — `resolveOwers()` in [actions.ts](../server/src/routes/actions.ts) sets `direction =
+  owedByMe && owers empty ? 'OWED_BY_ME' : 'WAITING_ON_THEM'`. **Important correction:** C1's prose said
+  `OWED_TO_ME`, but the real enum value the dashboard/list/detail read is **`WAITING_ON_THEM`** — that's
+  what's derived, so the "Waiting on others" card / `?filter=waiting` / badges are unchanged. The client
+  form's old standalone "Who owes it" Select is replaced by a **collapsed disclosure**: removable
+  default-on **Me** chip + contacts MultiCombobox + favorite-contact quick-add chips (Quick Log pattern);
+  auto-expands in edit when non-default. Verified end-to-end against local SQLite (all derive cases + a
+  full create/edit through the UI; the derived "Waiting on them" badge renders); `npm run prepush` +
+  `tsc -b` green; smoke-tested desktop + 390px. **Turso DDL applied by the owner via the web dashboard
+  SQL console** (see caveat below). Migration script committed for audit:
+  [server/scripts/migrate-actions-owers.js](../server/scripts/migrate-actions-owers.js).
 
-All three commits: `npm run prepush` + `tsc -b` green, smoke-tested, pushed to `main` (live on Vercel).
+### What's Next — finish the batch (1 task remains), then back to NCQA
 
-### What's Next — finish the batch (2 tasks remain), then back to NCQA
-
-1. **Task 3 — Rework "Who owes it" into a people list (SCHEMA-TOUCHING).** This is the clean first pick.
-   C1 is confirmed: additive `Action.owedByMe` (bool, default 1) + `Action.owerContactIds` (JSON), with
-   `direction` kept **derived**. **The plan now has an explicit DDL-FIRST safe sequencing** (apply the two
-   additive `ADD COLUMN`s + the backfill to Turso *before* writing/pushing code, so prod is safe at every
-   checkpoint) — follow it. See Task 3 STATUS in `ACTIONS-IDEAS-POLISH-PLAN.md`. The rw Turso token in
-   `server/.env` is commented but present (JWT has no `exp` → expected valid); uncomment per the NCQA-plan
-   DDL procedure. NOTE: Task 2 left the old "Who owes it" `direction` Select visible/standalone on the
-   form — Task 3 replaces it and tucks it into a collapsed disclosure.
-2. **Task 5 — Long-lived PrismaClient** (retire per-request `resetPrisma()`). Last / its own session;
-   carries real serverless risk — must verify against the live deploy after an idle period before done.
-3. **After the batch ships, the standing plan of record returns to the NCQA adaptation plan**
+1. **Task 5 — Long-lived PrismaClient** (retire per-request `resetPrisma()` in
+   [server/src/db.ts](../server/src/db.ts) + middleware in `app.ts`). **Its own focused session** —
+   carries real serverless risk (the per-request pattern fixed a real stale-libsql-connection bug). Reuse
+   one client; recreate only on a connection error (catch + one retry), keep the `Proxy` indirection.
+   **Must verify against the live deploy after an idle period** (hit endpoints after the instance goes
+   cold) before declaring done. Schema-free.
+2. **After Task 5 ships, the standing plan of record returns to the NCQA adaptation plan**
    (`.planning/NCQA-ADAPTATION-PLAN.md`, Phase 3+) — gated on D5–D9. **Don't push on D5–D9 until the
    owner raises them.**
 
@@ -48,36 +38,42 @@ All three commits: `npm run prepush` + `tsc -b` green, smoke-tested, pushed to `
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until raised.
 3. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
-4. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
+4. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete — and note the gotcha below.
 
 ### Open Bugs / Known Caveats
-- No confirmed bugs. **Transient UI state:** after Task 2, the Action form's old "Who owes it" `direction`
-  Select sits as a lone visible field in the Action Info card — intentional; Task 3 removes/relocates it.
-- Company dedup is review-then-merge: the new low-confidence shared-prefix bucket (score 0.5, "review")
-  can surface distinct same-parent entities with a long shared prefix (e.g. UC San Francisco vs UC San
-  Diego) — by design (owner chose recall for Baylor). High-confidence matches sort first.
+- **⚠ The committed Turso rw token in `server/.env` is STALE** — it's structurally a valid no-expiry rw
+  JWT but Turso rejects it with a hard **401** (rotated/revoked server-side; Vercel holds the live one).
+  For the next schema task, either mint a **fresh** rw token from the Turso dashboard (Databases →
+  searchbook-arobicsek → Create Token, no expiry) and paste it, or apply the DDL via the **Turso web
+  dashboard SQL console** (what was done for Task 3). The Vercel CLI is installed but **not logged in**.
+- **⚠ `prisma db push` local-path gotcha:** run from `server/`, `npx prisma db push` resolves
+  `file:./dev.db` to the **stray empty `server/dev.db`**, NOT the populated `server/prisma/dev.db` that
+  the running server opens (db.ts resolves relative to `__dirname` → `prisma/dev.db`). Net effect: db push
+  reports "in sync" but the server still 500s with `column ... does not exist`. Fix: apply the DDL
+  directly to `server/prisma/dev.db` (e.g. better-sqlite3 `ALTER TABLE`), or `db push --url
+  file:./prisma/dev.db`.
 - The `tsc -b` build (`noUnusedLocals`) remains the gate that catches unused imports the `typecheck`
   script misses — run it (not just `npm run prepush`) before every push.
-- Dev smoke-testing note: the chrome-devtools-mcp automation profile can get orphaned/locked; if a
-  navigate/list_pages call errors with "browser is already running", stop the stale `chrome.exe`
-  processes whose command line contains `chrome-devtools-mcp` (they use the dedicated `.cache` profile,
-  NOT the owner's daily Chrome). Local app has no `APP_PASSWORD`, so the login gate accepts any password
-  (pre-seed `localStorage.searchbook_password`).
+- Dev smoke-testing note: orphaned dev processes pile up — this session found several leftover
+  `concurrently`/`ts-node-dev`/`vite` instances holding ports 3001 + 5173–5176, and a locked
+  chrome-devtools-mcp profile. Stop the stale project `node` processes (CommandLine matches `searchbook` +
+  `vite|ts-node-dev|concurrently`) and the stale `chrome.exe` whose command line contains
+  `chrome-devtools-mcp` (dedicated `.cache` profile, NOT the owner's daily Chrome) before starting fresh.
+  Local app has no `APP_PASSWORD`, so the login gate accepts any password (pre-seed
+  `localStorage.searchbook_password`).
 
 ### Working branch
-`main`, clean and fully pushed. This session: `6588def` (Tasks 1+2), `7723ffb` (Task 4). Both live on Vercel.
+`main`. This session: Task 3 commit (live on Vercel after push). Tasks 1/2/4 were `6588def` + `7723ffb`.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file, then **`.planning/ACTIONS-IDEAS-POLISH-PLAN.md`** (still
-> the plan of record — Tasks 1/2/4 shipped 2026-06-14; **Tasks 3 & 5 remain**). Start with **Task 3
-> (rework "Who owes it" into a people list)** — it's SCHEMA-TOUCHING and C1 is already confirmed (additive
-> `owedByMe` + `owerContactIds`, `direction` derived). **Follow the DDL-FIRST safe sequencing in the
-> Task 3 STATUS block** — apply the two additive `ADD COLUMN`s + backfill to Turso *before* writing/pushing
-> code, so prod stays safe if you run low. Then Task 5 (long-lived PrismaClient — its own session, verify
-> live). One atomic commit per task; `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before
-> each push. After the batch, the standing plan of record returns to the NCQA adaptation plan (Phase 3+,
-> gated on D5–D9 — don't push on those until the owner raises them). Standing owner action: set
-> `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.
+> Read `CLAUDE.md` / `AGENTS.md`, then this file, then **`.planning/ACTIONS-IDEAS-POLISH-PLAN.md`** (Tasks
+> 1/2/3/4 shipped 2026-06-14; **only Task 5 remains**). Do **Task 5 — long-lived PrismaClient** (retire
+> per-request `resetPrisma()`): reuse one client, recreate only on a connection error (catch + one retry),
+> keep the `Proxy` indirection. It's schema-free but carries real serverless risk — **verify against the
+> live deploy after an idle/cold period** before declaring done. One atomic commit; `npm run prepush`
+> **and** `tsc -b` + desktop/390px smoke before push; push to main is authorized. After Task 5, the
+> standing plan of record returns to the NCQA adaptation plan (Phase 3+, gated on D5–D9 — don't push on
+> those until the owner raises them). Standing owner action: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.

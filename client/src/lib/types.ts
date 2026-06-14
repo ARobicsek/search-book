@@ -116,7 +116,9 @@ export interface Action {
   conversationId: number | null;
   conversation: { id: number; summary: string | null } | null;
   priority: ActionPriority;
-  direction: ActionDirection;
+  direction: ActionDirection; // derived mirror of owedByMe/owerContactIds — still read by dashboard/list/detail
+  owedByMe: boolean; // Task 3: the removable "me" chip
+  owerContactIds: string | null; // Task 3: JSON array of contact ids who owe it
   recurring: boolean;
   recurringIntervalDays: number | null;
   recurringEndDate: string | null;

@@ -296,7 +296,9 @@ model Action {
   conversationId        Int?
   conversation          Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   priority              String        @default("MEDIUM") // HIGH, MEDIUM, LOW
-  direction             String        @default("OWED_BY_ME") // OWED_BY_ME, WAITING_ON_THEM
+  direction             String        @default("OWED_BY_ME") // OWED_BY_ME, WAITING_ON_THEM — DERIVED mirror of owedByMe/owerContactIds (kept so dashboard "Waiting on others" + ?filter=waiting + analytics read it unchanged)
+  owedByMe              Boolean       @default(true) // Task 3: am I on the hook? (the removable "me" chip)
+  owerContactIds        String?       // Task 3: JSON array of contact ids who owe it (null/empty = nobody specific)
   recurring             Boolean       @default(false)
   recurringIntervalDays Int?
   recurringEndDate      String?

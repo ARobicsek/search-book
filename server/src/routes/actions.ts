@@ -27,6 +27,39 @@ const actionListIncludes = {
   },
 };
 
+// Task 3 — "Who owes it" people model. The client sends `owedByMe` (the removable
+// "me" chip) + `owerContactIds` (contacts who owe it). We persist both and keep the
+// legacy `direction` enum as a DERIVED mirror so the dashboard "Waiting on others"
+// card / ?filter=waiting / list+detail badges keep reading `direction` unchanged.
+// Also accepts a bare legacy `direction` (back-compat) and infers the new fields.
+// Returns null when none of the three are present (so partial updates stay untouched).
+function resolveOwers(body: Record<string, unknown>): { owedByMe: boolean; owerContactIds: string | null; direction: string } | null {
+  const hasOwedByMe = body.owedByMe !== undefined;
+  const hasOwers = body.owerContactIds !== undefined;
+  const hasDirection = body.direction !== undefined;
+  if (!hasOwedByMe && !hasOwers && !hasDirection) return null;
+
+  // Normalize the owers list (array of ids, or a JSON string) → number[]
+  let owerIds: number[] = [];
+  const raw = body.owerContactIds;
+  if (Array.isArray(raw)) {
+    owerIds = raw.map((x) => parseInt(String(x))).filter((n) => !Number.isNaN(n));
+  } else if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) owerIds = parsed.map((x) => parseInt(String(x))).filter((n) => !Number.isNaN(n));
+    } catch { /* ignore malformed JSON */ }
+  }
+
+  // owedByMe: explicit wins; otherwise infer from a legacy direction; otherwise default true.
+  const owedByMe = hasOwedByMe
+    ? Boolean(body.owedByMe)
+    : hasDirection ? body.direction === 'OWED_BY_ME' : true;
+
+  const direction = owedByMe && owerIds.length === 0 ? 'OWED_BY_ME' : 'WAITING_ON_THEM';
+  return { owedByMe, owerContactIds: owerIds.length ? JSON.stringify(owerIds) : null, direction };
+}
+
 // GET /api/actions — list all actions with optional filters
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -125,15 +158,17 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/actions — create
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { title, contactIds, companyIds, ...rest } = req.body;
+    const { title, contactIds, companyIds, owedByMe, owerContactIds, direction, ...rest } = req.body;
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       res.status(400).json({ error: 'Title is required' });
       return;
     }
+    const owers = resolveOwers({ owedByMe, owerContactIds, direction });
     const action = await prisma.action.create({
       data: {
         title: title.trim(),
         ...rest,
+        ...(owers ?? {}),
         actionContacts: contactIds?.length
           ? { create: (contactIds as number[]).map((cId) => ({ contactId: cId })) }
           : undefined,
@@ -167,9 +202,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       req.body.title = req.body.title.trim();
     }
 
-    const { contactIds, companyIds, _expectedUpdatedAt, ...rest } = req.body;
+    const { contactIds, companyIds, _expectedUpdatedAt, owedByMe, owerContactIds, direction, ...rest } = req.body;
     // Task 8: optimistic-concurrency guard (only when the client sends _expectedUpdatedAt).
     const expectedUpdatedAt = parseExpectedUpdatedAt(_expectedUpdatedAt);
+    // Task 3: derive owedByMe/owerContactIds/direction together (null = client sent none → leave untouched).
+    const owers = resolveOwers({ owedByMe, owerContactIds, direction });
 
     // If contactIds or companyIds provided, update junction tables
     const junctionUpdates: Record<string, unknown> = {};
@@ -199,7 +236,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       }
       return tx.action.update({
         where: { id },
-        data: { ...rest, ...junctionUpdates },
+        data: { ...rest, ...(owers ?? {}), ...junctionUpdates },
         include: actionIncludes,
       });
     });
@@ -254,6 +291,8 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
             type: existing.type,
             priority: existing.priority,
             direction: existing.direction,
+            owedByMe: existing.owedByMe,
+            owerContactIds: existing.owerContactIds,
             dueDate: nextDueDate,
             contactId: existing.contactId,
             companyId: existing.companyId,

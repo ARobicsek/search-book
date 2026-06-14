@@ -1,9 +1,9 @@
 # SearchBook — Actions/Ideas Polish + Engineering Cleanup
 
 **Created:** 2026-06-14 (for the **next** session)
-**Status:** IN PROGRESS — **Tasks 1, 2, 4 SHIPPED 2026-06-14** (commits `6588def`, `7723ffb`).
-**Tasks 3 & 5 remain** (both deliberately deferred — see below). After they ship, the standing plan
-of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on D5–D9).
+**Status:** IN PROGRESS — **Tasks 1, 2, 3, 4 SHIPPED** (commits `6588def`, `7723ffb`, + Task 3 2026-06-14).
+**Only Task 5 remains** (long-lived PrismaClient — its own focused session). After it ships, the standing
+plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on D5–D9).
 
 > **Deferral note (2026-06-14):** the build session had ~half a token budget. Tasks 1/2/4 (schema-free,
 > self-contained) were completed and pushed. **Task 3 was NOT started on purpose** — it is the only
@@ -93,22 +93,26 @@ MultiCombobox + favorite-contact quick-add chips (reuse the Quick Log favorites 
 **Files:** schema.prisma (+ Turso DDL), [server/src/routes/actions.ts](../server/src/routes/actions.ts),
 [action-form.tsx](../client/src/pages/actions/action-form.tsx), [lib/types.ts](../client/src/lib/types.ts);
 verify dashboard/analytics still read `direction`.
-**STATUS:** NOT STARTED — **deferred to next session** (token budget; schema task = worst to leave
-half-done). C1 confirmed (additive `owedByMe` + `owerContactIds`, `direction` derived).
-**Safe sequencing to use next session (protects prod at every checkpoint):**
-1. Back up (see NCQA plan top). 2. **Apply the Turso DDL FIRST** — both are additive `ADD COLUMN`, so
-   prod stays compatible even before any code ships: `ALTER TABLE "Action" ADD COLUMN "owedByMe" BOOLEAN
-   NOT NULL DEFAULT 1;` and `ALTER TABLE "Action" ADD COLUMN "owerContactIds" TEXT;` (JSON string array).
-   Then backfill: `UPDATE "Action" SET "owedByMe" = 0 WHERE "direction" = 'OWED_TO_ME';`
-   (the rw token in `server/.env` is commented out but present; JWT has no `exp` → expected valid).
-3. Mirror in schema.prisma + local `db push` + `npx prisma generate`. 4. Server `/actions` create+update
-   accept/persist the two fields and **derive** `direction = (owedByMe && owerContactIds empty) ?
-   'OWED_BY_ME' : 'OWED_TO_ME'`. 5. Client: rework "Who owes it" into a collapsed people list (removable
-   *me* chip default-on, contacts MultiCombobox, favorite-contact quick-add chips — reuse the Quick Log
-   favorites pattern already in this file's Task 2 area). 6. Verify dashboard "Waiting on others" +
-   `?filter=waiting` + analytics still read `direction`. 7. Smoke desktop+390px. **8. Push code LAST**
-   (DDL already applied). Note: the form's "Who owes it" Select is currently still visible/standalone
-   (Task 2 left it in place); this task replaces it and tucks it into a collapsed disclosure.
+**STATUS:** ✅ DONE 2026-06-14 (Task 3 commit). Additive `Action.owedByMe` (bool, default 1) +
+`Action.owerContactIds` (JSON id array) added; `direction` kept a **derived server-side mirror** via
+`resolveOwers()` in [actions.ts](../server/src/routes/actions.ts) — `owedByMe && owers empty ?
+'OWED_BY_ME' : 'WAITING_ON_THEM'`. **Correction:** the plan prose earlier said `OWED_TO_ME`, but the
+real enum value (read by dashboard/list/detail) is **`WAITING_ON_THEM`** — that's what's derived, so the
+"Waiting on others" card / `?filter=waiting` / badges are unchanged. `resolveOwers()` also accepts a bare
+legacy `direction` (back-compat) and is null when none of the 3 are sent (partial updates untouched);
+recurring auto-create copies the two fields. Client form: old standalone "Who owes it" Select replaced by
+a **collapsed disclosure** — removable default-on **Me** chip, contacts MultiCombobox, favorite-contact
+quick-add chips (Quick Log pattern); auto-expands in edit when non-default. Verified end-to-end against
+local SQLite (all derive cases + create/edit through the UI; derived "Waiting on them" badge renders);
+prepush + `tsc -b` green; smoke desktop + 390px.
+**DDL note:** the committed `server/.env` rw token was **stale (hard 401, rotated server-side)** — the
+owner applied the 2 additive `ADD COLUMN`s + `UPDATE "Action" SET "owedByMe"=0 WHERE
+"direction"='WAITING_ON_THEM'` via the Turso **web dashboard SQL console** instead. Migration script
+([server/scripts/migrate-actions-owers.js](../server/scripts/migrate-actions-owers.js)) is committed for
+audit/reproducibility (run with a *fresh* token next time). **Local-dev gotcha hit:** `npx prisma db push`
+from `server/` resolves `file:./dev.db` to the stray empty `server/dev.db`, **not** the populated
+`server/prisma/dev.db` the running server opens — the columns had to be applied directly to
+`prisma/dev.db`.
 
 ## Task 4 — Company near-duplicate scan: catch LinkedIn-style variants
 **Ask:** the Duplicates page misses company near-dupes that differ by LinkedIn-style descriptor words.

@@ -620,7 +620,7 @@ export function ContactDetailPage() {
                     </p>
                     <ul className="list-inside list-disc text-muted-foreground">
                       {deleteImpact.conversations > 0 && (
-                        <li>{deleteImpact.conversations} conversation log(s)</li>
+                        <li>{deleteImpact.conversations} meeting log(s)</li>
                       )}
                       {deleteImpact.prepNotes > 0 && (
                         <li>{deleteImpact.prepNotes} prep note(s)</li>
@@ -662,7 +662,7 @@ export function ContactDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="conversations" className="shrink-0">
             <MessageSquare className="mr-1 h-4 w-4" />
-            Conversations
+            Meetings
             {conversations.length > 0 && (
               <>
                 <span className="ml-1 text-xs text-muted-foreground">({conversations.length})</span>
@@ -1846,13 +1846,13 @@ function PrepSheetTab({
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Prep Sheet</h2>
       <p className="text-sm text-muted-foreground">
-        Quick reference for preparing before a conversation with {contact.name}.
+        Quick reference for preparing before a meeting with {contact.name}.
       </p>
 
       {/* Last Conversation */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Last Conversation</CardTitle>
+          <CardTitle className="text-base">Last Meeting</CardTitle>
         </CardHeader>
         <CardContent>
           {lastConversation ? (
@@ -1881,7 +1881,7 @@ function PrepSheetTab({
               )}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No conversations logged yet.</p>
+            <p className="text-sm text-muted-foreground">No meetings logged yet.</p>
           )}
         </CardContent>
       </Card>
@@ -1891,7 +1891,7 @@ function PrepSheetTab({
         <CardHeader>
           <CardTitle className="text-base">Prep Notes</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Add thoughts, ideas, and links for upcoming conversations. Each note is dated so you can track prep over time.
+            Add thoughts, ideas, and links for upcoming meetings. Each note is dated so you can track prep over time.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -2007,7 +2007,7 @@ function PrepSheetTab({
                 <MarkdownTextarea
                   value={newPrepContent}
                   onChange={setNewPrepContent}
-                  placeholder="Ideas for conversation, talking points, questions to ask..."
+                  placeholder="Ideas for a meeting, talking points, questions to ask..."
                   rows={3}
                 />
               </div>

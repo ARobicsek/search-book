@@ -415,7 +415,7 @@ function ContactSearchCard({
                 {related.conversations && related.conversations.length > 0 && (
                   <div>
                     <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                      <MessageSquare className="h-3 w-3" /> Recent Conversations
+                      <MessageSquare className="h-3 w-3" /> Recent Meetings
                     </h4>
                     <ul className="space-y-1">
                       {related.conversations.map((c) => (

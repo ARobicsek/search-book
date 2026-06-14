@@ -331,10 +331,10 @@ export function ActionDetailPage() {
                 ) : null
               })()}
             </Field>
-            <Field label="Conversation">
+            <Field label="Meeting">
               {action.conversation && (
                 <span className="text-muted-foreground">
-                  {action.conversation.summary ?? `Conversation #${action.conversationId}`}
+                  {action.conversation.summary ?? `Meeting #${action.conversationId}`}
                 </span>
               )}
             </Field>

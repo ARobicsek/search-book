@@ -402,7 +402,7 @@ function ContactsTab() {
           <DialogHeader>
             <DialogTitle>Merge Contacts</DialogTitle>
             <DialogDescription>
-              Select which value to keep for each field. All conversations, actions, relationships,
+              Select which value to keep for each field. All meetings, actions, relationships,
               and other data will be combined into the kept contact.
             </DialogDescription>
           </DialogHeader>
@@ -425,7 +425,7 @@ function ContactsTab() {
                 />
                 <div className="border-t pt-4 mt-4">
                   <p className="text-sm text-muted-foreground">
-                    <strong>Automatically combined:</strong> Company associations, conversations,
+                    <strong>Automatically combined:</strong> Company associations, meetings,
                     actions, relationships, links, prep notes, and tags from both contacts.
                   </p>
                 </div>
@@ -761,7 +761,7 @@ function CompaniesTab() {
           <DialogHeader>
             <DialogTitle>Merge Companies</DialogTitle>
             <DialogDescription>
-              Select which value to keep for each field. All contacts, conversations, actions, and prep notes
+              Select which value to keep for each field. All contacts, meetings, actions, and prep notes
               will be combined into the kept company.
             </DialogDescription>
           </DialogHeader>
@@ -783,7 +783,7 @@ function CompaniesTab() {
                 />
                 <div className="border-t pt-4 mt-4">
                   <p className="text-sm text-muted-foreground">
-                    <strong>Automatically combined:</strong> Contacts, Conversations, Actions, Tags, Links, Prep Notes, Activities, and Employment History from both companies.
+                    <strong>Automatically combined:</strong> Contacts, Meetings, Actions, Tags, Links, Prep Notes, Activities, and Employment History from both companies.
                   </p>
                 </div>
               </div>

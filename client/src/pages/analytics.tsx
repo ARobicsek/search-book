@@ -459,7 +459,7 @@ export function AnalyticsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="w-5 h-5 text-muted-foreground" />
-                  Conversations by Type
+                  Meetings by Type
                 </CardTitle>
                 <div className="flex flex-wrap gap-3 pt-2">
                   {CONVERSATION_TYPE_OPTIONS.map(opt => (

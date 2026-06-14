@@ -4,7 +4,8 @@ import type { Idea, Contact, Company } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/markdown-textarea'
+import ReactMarkdown from 'react-markdown'
 import {
   Card,
   CardContent,
@@ -344,9 +345,9 @@ export function IdeaListPage() {
               </CardHeader>
               <CardContent className="flex-1">
                 {idea.description ? (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
-                    {idea.description}
-                  </p>
+                  <div className="prep-note-markdown text-sm text-muted-foreground line-clamp-4">
+                    <ReactMarkdown>{idea.description}</ReactMarkdown>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">No description</p>
                 )}
@@ -398,10 +399,10 @@ export function IdeaListPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
+              <MarkdownTextarea
                 id="description"
                 value={form.description}
-                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+                onChange={(v) => setForm((p) => ({ ...p, description: v }))}
                 placeholder="More details..."
                 rows={4}
               />

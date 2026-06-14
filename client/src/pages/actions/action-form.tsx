@@ -6,7 +6,7 @@ import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, ACTION_DIRECTION_OPTIONS 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { MarkdownTextarea } from '@/components/markdown-textarea'
 import {
   Select,
   SelectContent,
@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 
@@ -127,6 +127,12 @@ export function ActionFormPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Progressive disclosure (mirrors Quick Log's "Who was there"): keep Title /
+  // Description / Due Date front-and-center; tuck the less-used fields behind carets.
+  // Collapsed fields still live in `form`, so they submit/auto-save regardless.
+  const [showOptions, setShowOptions] = useState(false)
+  const [showRelated, setShowRelated] = useState(false)
 
   // Options for comboboxes
   const contactOptions: ComboboxOption[] = contacts.map((c) => ({
@@ -387,45 +393,62 @@ export function ActionFormPage() {
 
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
+              <MarkdownTextarea
                 id="description"
                 value={form.description}
-                onChange={(e) => set('description', e.target.value)}
+                onChange={(v) => set('description', v)}
                 placeholder="Additional details..."
                 rows={3}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
-              <Select value={form.type} onValueChange={(v) => set('type', v)}>
-                <SelectTrigger id="type" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTION_TYPE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <button
+                type="button"
+                className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+                onClick={() => setShowOptions((v) => !v)}
+              >
+                {showOptions ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                More options
+                {(form.type !== 'OTHER' || form.priority !== 'MEDIUM') && (
+                  <span className="text-xs text-primary">·</span>
+                )}
+              </button>
+              {showOptions && (
+                <div className="grid gap-4 rounded-md border p-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Type</Label>
+                    <Select value={form.type} onValueChange={(v) => set('type', v)}>
+                      <SelectTrigger id="type" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACTION_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select value={form.priority} onValueChange={(v) => set('priority', v)}>
-                <SelectTrigger id="priority" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTION_PRIORITY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select value={form.priority} onValueChange={(v) => set('priority', v)}>
+                      <SelectTrigger id="priority" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACTION_PRIORITY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -510,9 +533,28 @@ export function ActionFormPage() {
         {/* Related To */}
         <Card>
           <CardHeader>
-            <CardTitle>Related To</CardTitle>
-            <CardDescription>Connect to contacts or companies</CardDescription>
+            <button
+              type="button"
+              onClick={() => setShowRelated((v) => !v)}
+              className="flex w-full items-center gap-2 text-left"
+            >
+              {showRelated
+                ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+              <span className="flex-1">
+                <span className="font-semibold leading-none tracking-tight">
+                  Related To
+                  {(form.contactIds.length > 0 || form.companyIds.length > 0) && (
+                    <span className="ml-1 text-xs font-normal text-primary">
+                      ({form.contactIds.length + form.companyIds.length})
+                    </span>
+                  )}
+                </span>
+                <span className="block text-sm text-muted-foreground">Connect to contacts or companies</span>
+              </span>
+            </button>
           </CardHeader>
+          {showRelated && (
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Contacts</Label>
@@ -538,6 +580,7 @@ export function ActionFormPage() {
               />
             </div>
           </CardContent>
+          )}
         </Card>
 
         {/* Document Links */}

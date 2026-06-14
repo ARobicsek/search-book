@@ -12,15 +12,42 @@ material** (downloaded from the live app, which is behind the password gate).
 
 ---
 
-## What you need
-1. **Prod backup material** — from the live app → Settings → **Create Backup**:
-   - `searchbook-backup-<stamp>.json` (full DB, all 27 tables)
-   - `searchbook-files.zip` (photos + meeting attachments + pasted screenshots — the binaries)
-2. **A scratch Turso DB** — Turso dashboard → create a new DB (e.g. `searchbook-scratch`).
-   Copy its **URL** (`libsql://searchbook-scratch-<org>.turso.io`) and an **auth token**.
-3. **Your prod Turso URL** — so the harness can refuse to touch it (`--forbid-url`).
+## TL;DR — who does what
+- **You (owner), ~5 min, once:** do the 3 prerequisite steps below (download the prod backup,
+  create a scratch Turso DB, grab your prod URL), then paste the scratch URL + token to the agent.
+- **The agent:** runs one command, reads back the PASS/FAIL report, then you delete the scratch DB.
 
-> ⚠️ The scratch DB will be **wiped and overwritten**. Use a brand-new DB you can delete after.
+You do **not** need to touch any code or run the command yourself — just gather the 3 inputs.
+
+---
+
+## Owner prerequisites (gather these 3 inputs, then hand to the agent)
+
+### 1. Download the prod backup material
+On the live app **https://searchbook-three.vercel.app** → **Settings** → **Create Backup**.
+Two files download to your computer — note where they land (e.g. `Downloads/`):
+- `searchbook-backup-<stamp>.json`  — the full database (all 27 tables)
+- `searchbook-files.zip`            — the binaries (photos + meeting attachments + pasted screenshots)
+
+### 2. Create a throwaway ("scratch") Turso database
+In the **Turso dashboard** (https://app.turso.tech — the CLI needs WSL, so use the website):
+1. **Create Database** → name it `searchbook-scratch` → pick the same region as prod → Create.
+2. Open the new DB → copy its **URL** — it looks like `libsql://searchbook-scratch-<org>.turso.io`.
+3. **Create Token** (read & write) → copy the **auth token** (a long string).
+> ⚠️ This DB gets **wiped and overwritten** by the test. That's fine — it's brand-new and you
+> delete it at the end. Never reuse your prod DB here.
+
+### 3. Find your prod Turso URL (a safety guard)
+In the Turso dashboard, open your **production** DB and copy its `libsql://…` URL. The harness
+**aborts** if the target ever equals this, so the test can't touch prod by mistake.
+
+### Hand-off to the agent
+Paste these to the agent next session:
+- path to the downloaded `searchbook-backup-<stamp>.json`
+- the **scratch** DB URL + auth token (from step 2)
+- your **prod** DB URL (from step 3, for `--forbid-url`)
+
+That's everything. The agent runs Option A below and reports the result.
 
 ---
 

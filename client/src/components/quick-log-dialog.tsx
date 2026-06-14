@@ -51,10 +51,17 @@ import {
   Plus, Star, Trash2, X,
 } from 'lucide-react'
 
+// Optional prefill when opening a new meeting from a contact/company context —
+// e.g. the contact page seeds the originating person as a Participant.
+export interface QuickLogPrefill {
+  participant?: { id: number; name: string }
+  title?: string
+}
+
 // Context so the command palette, header button, and Meetings page can all
 // open the same dialog (mirrors the CommandPaletteProvider pattern).
 // `open()` = quick log a new meeting; `openEdit(id)` = full edit of an existing one.
-const QuickLogContext = createContext<{ open: () => void; openEdit: (id: number) => void }>({
+const QuickLogContext = createContext<{ open: (prefill?: QuickLogPrefill) => void; openEdit: (id: number) => void }>({
   open: () => { },
   openEdit: () => { },
 })
@@ -66,20 +73,23 @@ export function useQuickLog() {
 export function QuickLogProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const [prefill, setPrefill] = useState<QuickLogPrefill | null>(null)
 
-  const open = useCallback(() => {
+  const open = useCallback((opts?: QuickLogPrefill) => {
     setEditId(null)
+    setPrefill(opts ?? null)
     setIsOpen(true)
   }, [])
   const openEdit = useCallback((id: number) => {
     setEditId(id)
+    setPrefill(null)
     setIsOpen(true)
   }, [])
 
   return (
     <QuickLogContext.Provider value={{ open, openEdit }}>
       {children}
-      <QuickLogDialog open={isOpen} onOpenChange={setIsOpen} editId={editId} />
+      <QuickLogDialog open={isOpen} onOpenChange={setIsOpen} editId={editId} prefill={prefill} />
     </QuickLogContext.Provider>
   )
 }
@@ -121,10 +131,12 @@ function QuickLogDialog({
   open,
   onOpenChange,
   editId,
+  prefill,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   editId: number | null
+  prefill: QuickLogPrefill | null
 }) {
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
@@ -153,6 +165,10 @@ function QuickLogDialog({
   const lastSnapshotRef = useRef<string | null>(null)   // JSON of the last autosaved body (skips no-ops)
   const saveChainRef = useRef<Promise<void>>(Promise.resolve())  // serializes autosave + finalize
   const savedFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Participants present the moment the dialog opened (e.g. one seeded from a
+  // contact page). A seeded participant alone must NOT auto-create a meeting —
+  // we wait for real content first.
+  const seededParticipantCountRef = useRef(0)
   const recordExists = savedId !== null
 
   // Prep notes & attachments. In edit mode these are live records; in create
@@ -217,6 +233,22 @@ function QuickLogDialog({
     setSaveStatus('idle')
     lastSnapshotRef.current = null
     saveChainRef.current = Promise.resolve()
+    seededParticipantCountRef.current = editId === null && prefill?.participant ? 1 : 0
+
+    // Prefill a new meeting opened from a contact/company context (e.g. the
+    // contact page seeds the originating person as a Participant).
+    if (editId === null && prefill) {
+      if (prefill.title) setTitle(prefill.title)
+      if (prefill.participant) {
+        const pid = prefill.participant.id.toString()
+        const name = prefill.participant.name
+        setParticipantIds([pid])
+        setContactOptions((prev) =>
+          prev.some((o) => o.value === pid) ? prev : [{ value: pid, label: name }, ...prev]
+        )
+        setShowWho(true)
+      }
+    }
 
     api.get<string[]>('/conversations/titles').then(setTitles).catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
@@ -349,6 +381,17 @@ function QuickLogDialog({
     )
   }
 
+  // Before the record exists, require real content so merely opening "Log
+  // Meeting" from a contact (which pre-seeds a participant) doesn't auto-create
+  // an empty meeting. A participant beyond the seeded one also counts.
+  function hasMeaningfulContent(body: ReturnType<typeof buildAutosaveBody>) {
+    return !!(
+      body.title || body.summary || body.notes || body.nextSteps ||
+      body.attendeesDescription || body.companyId !== null || body.orgIds.length > 0 ||
+      body.participants.length > seededParticipantCountRef.current
+    )
+  }
+
   // Serialize every save (autosave + finalize) so the first POST sets the id
   // before any later PUT runs — never two POSTs, never a PUT before the POST.
   function enqueueSave(fn: () => Promise<void>): Promise<void> {
@@ -387,6 +430,8 @@ function QuickLogDialog({
     if (!open || loadingEdit) return
     const body = buildAutosaveBody()
     if (!autosaveValid(body)) return
+    // Don't auto-create a meeting that's empty but for a pre-seeded participant.
+    if (savedIdRef.current === null && !hasMeaningfulContent(body)) return
     const snapshot = JSON.stringify(body)
     if (snapshot === lastSnapshotRef.current) return
     const timer = setTimeout(() => {

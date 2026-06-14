@@ -234,7 +234,7 @@ export function MeetingsPage() {
             </p>
           )}
         </div>
-        <Button onClick={quickLog.open}>
+        <Button onClick={() => quickLog.open()}>
           <MessageSquarePlus className="mr-1 h-4 w-4" />
           Log Meeting
         </Button>

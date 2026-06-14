@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { cn } from '@/lib/utils'
 import type {
   Contact,
   Action,
@@ -11,11 +10,8 @@ import type {
   PrepNote,
   EmploymentHistory,
   Tag,
-  ConversationType,
   DatePrecision,
   RelationshipType,
-  ActionType,
-  ActionPriority,
 } from '@/lib/types'
 import {
   ECOSYSTEM_OPTIONS,
@@ -23,7 +19,6 @@ import {
   ACTION_TYPE_OPTIONS,
   ACTION_PRIORITY_OPTIONS,
   CONVERSATION_TYPE_OPTIONS,
-  DATE_PRECISION_OPTIONS,
   RELATIONSHIP_TYPE_OPTIONS,
   parseContactEmails,
 } from '@/lib/types'
@@ -58,8 +53,7 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
-import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
-import { TitleAutocomplete } from '@/components/title-autocomplete'
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
@@ -88,14 +82,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu"
-import { useAutoSave } from '@/hooks/use-auto-save'
+import { useQuickLog } from '@/components/quick-log-dialog'
 import { SaveStatusIndicator } from '@/components/save-status'
 import ReactMarkdown from 'react-markdown'
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable"
 
 // ─── Color maps ─────────────────────────────────────────────
 
@@ -410,23 +399,6 @@ export function ContactDetailPage() {
   const contactOptions: ComboboxOption[] = allContacts
     .filter((c) => c.id !== contact.id)
     .map((c) => ({ value: c.id.toString(), label: c.name }))
-
-  // Unfiltered (includes this contact): meetings can list the page's own
-  // contact as a named participant, so the editor must be able to label them.
-  const allContactOptions: ComboboxOption[] = allContacts.map((c) => ({
-    value: c.id.toString(),
-    label: c.name,
-  }))
-
-  const companyOptions: ComboboxOption[] = allCompanies.map((c) => ({
-    value: c.id.toString(),
-    label: c.name,
-  }))
-
-  const tagOptions: ComboboxOption[] = allTags.map((t) => ({
-    value: t.id.toString(),
-    label: t.name,
-  }))
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -1081,11 +1053,8 @@ export function ContactDetailPage() {
         <TabsContent value="conversations" className="space-y-4">
           <ConversationsTab
             contactId={contact.id}
+            contactName={contact.name}
             conversations={conversations}
-            prepNotes={prepNotes}
-            contactOptions={allContactOptions}
-            companyOptions={companyOptions}
-            tagOptions={tagOptions}
             onRefresh={loadData}
           />
         </TabsContent>
@@ -1179,462 +1148,36 @@ function MeetingTakeawaysCard({
 
 // ─── Conversations Tab component ────────────────────────────
 
-interface ActionFormEntry {
-  id?: number
-  isSaved?: boolean
-  title: string
-  type: ActionType
-  dueDate: string
-  priority: ActionPriority
-}
-
-const emptyAction: ActionFormEntry = {
-  title: '',
-  type: 'FOLLOW_UP',
-  dueDate: '',
-  priority: 'MEDIUM',
-}
-
-interface LinkEntry {
-  url: string
-  title: string
-}
-
-type ConversationForm = {
-  title: string
-  companyId: string            // numeric string = existing org; free text = create on save
-  attendeesDescription: string
-  date: string
-  datePrecision: DatePrecision
-  type: ConversationType
-  summary: string
-  notes: string
-  nextSteps: string
-  participantIds: string[]     // numeric strings = existing contacts; free text = create on save
-  participantNotes: Record<string, string>  // keyed by participantIds value
-  tagIds: string[]             // numeric strings = existing tags; free text = create on save
-  contactsDiscussed: string[]
-  companiesDiscussed: string[]
-  actions: ActionFormEntry[]
-  links: LinkEntry[]
-}
-
 function ConversationsTab({
   contactId,
+  contactName,
   conversations,
-  prepNotes,
-  contactOptions,
-  companyOptions,
-  tagOptions,
   onRefresh,
 }: {
   contactId: number
+  contactName: string
   conversations: Conversation[]
-  prepNotes: PrepNote[]
-  contactOptions: ComboboxOption[]
-  companyOptions: ComboboxOption[]
-  tagOptions: ComboboxOption[]
   onRefresh: () => void
 }) {
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [editId, setEditId] = useState<number | null>(null)
-  const editIdRef = useRef<number | null>(null)
+  // Quick Log is now the single meeting editor app-wide; this tab is a
+  // read-only list that opens it (seeded with this contact) for new + edit.
+  const quickLog = useQuickLog()
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Local copies of options that can grow when new entries are added
-  const [localContactOptions, setLocalContactOptions] = useState(contactOptions)
-  const [localCompanyOptions, setLocalCompanyOptions] = useState(companyOptions)
-
-  // Keep local options in sync with parent
+  // Refresh the list whenever Quick Log saves or deletes a meeting.
   useEffect(() => {
-    setLocalContactOptions(contactOptions)
-    setLocalCompanyOptions(companyOptions)
-  }, [contactOptions, companyOptions])
-
-  // Previously used meeting titles for the series autocomplete (D4)
-  const [knownTitles, setKnownTitles] = useState<string[]>([])
-  useEffect(() => {
-    api.get<string[]>('/conversations/titles').then(setKnownTitles).catch(() => { })
-  }, [])
-
-  // Track which conversation IDs have pending edit drafts in localStorage
-  const [editDrafts, setEditDrafts] = useState<Set<number>>(new Set())
-  useEffect(() => {
-    const drafts = new Set<number>()
-    for (const conv of conversations) {
-      if (localStorage.getItem(`draft_edit_conversation_${conv.id}`)) {
-        drafts.add(conv.id)
-      }
-    }
-    setEditDrafts(drafts)
-  }, [conversations])
-
-  // Draft auto-save for NEW conversations
-  const draftKey = `draft_conversation_${contactId}`
-
-  const getEmptyForm = (): ConversationForm => ({
-    title: '',
-    companyId: '',
-    attendeesDescription: '',
-    date: new Date().toLocaleDateString('en-CA'),
-    datePrecision: 'DAY',
-    type: 'VIDEO_CALL',
-    summary: '',
-    notes: '',
-    nextSteps: '',
-    participantIds: [],
-    participantNotes: {},
-    tagIds: [],
-    contactsDiscussed: [],
-    companiesDiscussed: [],
-    actions: [{ ...emptyAction }],
-    links: [],
-  })
-
-  const [form, setForm] = useState<ConversationForm>(getEmptyForm)
-  const formRef = useRef<ConversationForm>(getEmptyForm())
-  const [originalForm, setOriginalForm] = useState<ConversationForm | null>(null)
-  const [hasDraft, setHasDraft] = useState(false)
-
-  // Check for existing draft on mount and when dialog closes
-  useEffect(() => {
-    if (!dialogOpen) {
-      const saved = localStorage.getItem(draftKey)
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          // Check if it has any meaningful content
-          const hasContent = parsed.title || parsed.attendeesDescription || parsed.companyId ||
-            parsed.summary || parsed.notes || parsed.nextSteps ||
-            parsed.contactsDiscussed.length > 0 || parsed.companiesDiscussed.length > 0 ||
-            parsed.actions.some((a: any) => a.title) || parsed.links.length > 0
-          setHasDraft(!!hasContent)
-        } catch {
-          setHasDraft(false)
-        }
-      } else {
-        setHasDraft(false)
-      }
-    }
-  }, [dialogOpen, draftKey])
-
-  function openNew() {
-    setEditId(null)
-
-    // Restore draft immediately to prevent "save empty" race condition
-    const saved = localStorage.getItem(draftKey)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        setForm({ ...getEmptyForm(), ...parsed, participantIds: parsed.participantIds || [] })
-      } catch {
-        setForm(getEmptyForm())
-      }
-    } else {
-      setForm(getEmptyForm())
-    }
-
-    setOriginalForm(null)
-    setLocalContactOptions(contactOptions)
-    setLocalCompanyOptions(companyOptions)
-    setDialogOpen(true)
-  }
-
-  function openEdit(conv: Conversation) {
-    setEditId(conv.id)
-    setLocalContactOptions(contactOptions)
-    setLocalCompanyOptions(companyOptions)
-    // Server version — always used as originalForm for dirty detection and Cancel revert
-    const participantNotes: Record<string, string> = {}
-    for (const p of conv.participants || []) {
-      if (p.note) participantNotes[p.contact.id.toString()] = p.note
-    }
-    const serverForm: ConversationForm = {
-      title: conv.title || '',
-      companyId: conv.companyId?.toString() || '',
-      attendeesDescription: conv.attendeesDescription || '',
-      date: conv.date,
-      datePrecision: conv.datePrecision as DatePrecision,
-      type: conv.type as ConversationType,
-      summary: conv.summary || '',
-      notes: conv.notes || '',
-      nextSteps: conv.nextSteps || '',
-      participantIds: conv.participants?.map((p) => p.contact.id.toString()) || [],
-      participantNotes,
-      tagIds: conv.tags?.map((t) => t.tag.id.toString()) || [],
-      contactsDiscussed: conv.contactsDiscussed.map((cd) => cd.contact.id.toString()),
-      companiesDiscussed: conv.companiesDiscussed.map((cd) => cd.company.id.toString()),
-      actions: [{ ...emptyAction }],
-      links: [],
-    }
-    // Restore edit draft from localStorage if one exists
-    const savedDraft = localStorage.getItem(`draft_edit_conversation_${conv.id}`)
-    if (savedDraft) {
-      try {
-        const parsed = JSON.parse(savedDraft)
-        setForm({ ...serverForm, ...parsed, participantIds: parsed.participantIds || [] })
-      } catch {
-        setForm(serverForm)
-      }
-    } else {
-      setForm(serverForm)
-    }
-    setOriginalForm(serverForm)
-    setDialogOpen(true)
-  }
-
-  // Auto-save handler - only saves core fields with existing IDs (not new actions/links/entries)
-  const handleAutoSave = useCallback(async (data: ConversationForm) => {
-    if (!editId) return
-
-    // Only include existing contact/company/tag IDs (numeric strings only)
-    const existingParticipants = data.participantIds
-      .filter((val) => /^\d+$/.test(val))
-      .map((val) => ({ contactId: Number(val), note: data.participantNotes[val]?.trim() || null }))
-    const existingContactIds = data.contactsDiscussed
-      .filter((val) => /^\d+$/.test(val))
-      .map(Number)
-    const existingCompanyIds = data.companiesDiscussed
-      .filter((val) => /^\d+$/.test(val))
-      .map(Number)
-    const existingTagIds = data.tagIds
-      .filter((val) => /^\d+$/.test(val))
-      .map(Number)
-
-    // Deliberately NO contactId: the meeting may be anchored to another contact
-    // (or to none) — auto-save from this page must never re-anchor it.
-    const payload = {
-      title: data.title.trim() || null,
-      companyId: /^\d+$/.test(data.companyId) ? Number(data.companyId) : null,
-      attendeesDescription: data.attendeesDescription.trim() || null,
-      date: data.date,
-      datePrecision: data.datePrecision,
-      type: data.type,
-      summary: data.summary.trim() || null,
-      notes: data.notes.trim() || null,
-      nextSteps: data.nextSteps.trim() || null,
-      participants: existingParticipants,
-      contactsDiscussed: existingContactIds,
-      companiesDiscussed: existingCompanyIds,
-      tagIds: existingTagIds,
-      // Note: actions and links are NOT auto-saved - they save on explicit submit
-    }
-    await api.put(`/conversations/${editId}`, payload)
-  }, [editId])
-
-
-  // Save immediately on any change (synchronous)
-  useEffect(() => {
-    if (editId === null && dialogOpen) {
-      localStorage.setItem(draftKey, JSON.stringify(form))
-    }
-  }, [form, editId, dialogOpen, draftKey])
-
-  // Keep refs in sync after every render so onOpenChange never reads stale values
-  useEffect(() => {
-    editIdRef.current = editId
-    formRef.current = form
-  })
-
-  const autoSave = useAutoSave({
-    data: form,
-    originalData: originalForm,
-    onSave: handleAutoSave,
-    validate: (data) => data.date.length > 0,
-    debounceMs: 2000, // Longer debounce for complex form
-    enabled: editId !== null,
-    onRevert: setForm,
-  })
-
-  async function resolveNewEntries() {
-    // Participants carry their per-person note through resolution
-    const resolvedParticipants: { contactId: number; note: string | null }[] = []
-    for (const val of form.participantIds) {
-      const note = form.participantNotes[val]?.trim() || null
-      if (/^\d+$/.test(val)) {
-        resolvedParticipants.push({ contactId: Number(val), note })
-      } else {
-        try {
-          const newContact = await api.post<{ id: number; name: string }>('/contacts', {
-            name: val,
-            status: 'CONNECTED',
-            ecosystem: 'NETWORK',
-          })
-          resolvedParticipants.push({ contactId: newContact.id, note })
-        } catch {
-          toast.error(`Failed to create contact "${val}"`)
-        }
-      }
-    }
-
-    // Resolve the org anchor (free text creates a new company)
-    let resolvedCompanyAnchor: number | null = null
-    if (form.companyId) {
-      if (/^\d+$/.test(form.companyId)) {
-        resolvedCompanyAnchor = Number(form.companyId)
-      } else {
-        try {
-          const newCompany = await api.post<{ id: number; name: string }>('/companies', {
-            name: form.companyId,
-          })
-          resolvedCompanyAnchor = newCompany.id
-        } catch {
-          toast.error(`Failed to create company "${form.companyId}"`)
-        }
-      }
-    }
-
-    // Resolve tags (free text creates a new tag; 409 = exists, look it up)
-    const resolvedTagIds: number[] = []
-    for (const val of form.tagIds) {
-      if (/^\d+$/.test(val)) {
-        resolvedTagIds.push(Number(val))
-        continue
-      }
-      try {
-        const newTag = await api.post<{ id: number }>('/tags', { name: val })
-        resolvedTagIds.push(newTag.id)
-      } catch {
-        try {
-          const all = await api.get<Tag[]>('/tags')
-          const found = all.find((t) => t.name.toLowerCase() === val.toLowerCase())
-          if (found) resolvedTagIds.push(found.id)
-          else toast.error(`Failed to create tag "${val}"`)
-        } catch {
-          toast.error(`Failed to create tag "${val}"`)
-        }
-      }
-    }
-
-    // Create contacts for any free-text entries (non-numeric IDs)
-    const resolvedContacts: string[] = []
-    for (const val of form.contactsDiscussed) {
-      if (/^\d+$/.test(val)) {
-        resolvedContacts.push(val)
-      } else {
-        // Create new contact
-        try {
-          const newContact = await api.post<{ id: number; name: string }>('/contacts', {
-            name: val,
-            status: 'CONNECTED',
-            ecosystem: 'NETWORK',
-          })
-          resolvedContacts.push(newContact.id.toString())
-        } catch {
-          toast.error(`Failed to create contact "${val}"`)
-        }
-      }
-    }
-
-    // Create companies for any free-text entries
-    const resolvedCompanies: string[] = []
-    for (const val of form.companiesDiscussed) {
-      if (/^\d+$/.test(val)) {
-        resolvedCompanies.push(val)
-      } else {
-        try {
-          const newCompany = await api.post<{ id: number; name: string }>('/companies', {
-            name: val,
-          })
-          resolvedCompanies.push(newCompany.id.toString())
-        } catch {
-          toast.error(`Failed to create company "${val}"`)
-        }
-      }
-    }
-
-    return { resolvedParticipants, resolvedContacts, resolvedCompanies, resolvedCompanyAnchor, resolvedTagIds }
-  }
-
-  async function handleSubmit() {
-    if (!form.date) {
-      toast.error('Date is required')
-      return
-    }
-    // Cancel any pending auto-save debounce to avoid a race between it and this submit
-    autoSave.cancel()
-    setSaving(true)
-    try {
-      const { resolvedParticipants, resolvedContacts, resolvedCompanies, resolvedCompanyAnchor, resolvedTagIds } = await resolveNewEntries()
-
-      const payload: Record<string, unknown> = {
-        title: form.title.trim() || null,
-        companyId: resolvedCompanyAnchor,
-        attendeesDescription: form.attendeesDescription.trim() || null,
-        date: form.date,
-        datePrecision: form.datePrecision,
-        type: form.type,
-        summary: form.summary.trim() || null,
-        notes: form.notes.trim() || null,
-        nextSteps: form.nextSteps.trim() || null,
-        participants: resolvedParticipants,
-        contactsDiscussed: resolvedContacts.map(Number),
-        companiesDiscussed: resolvedCompanies.map(Number),
-        tagIds: resolvedTagIds,
-      }
-      // Creating from a contact page anchors to that contact (the classic 1:1 case).
-      // Edits never send contactId so they can't re-anchor a meeting (it may be
-      // anchored to another contact, or be a title-only series entry).
-      if (!editId) {
-        payload.contactId = contactId
-      }
-
-      // Multiple actions support (works for both create and edit)
-      const validActionsToCreate = form.actions.filter((a) => !a.id && a.title.trim())
-      const linkActionIds = form.actions.filter((a) => a.id).map((a) => a.id)
-
-      if (validActionsToCreate.length > 0) {
-        payload.createActions = validActionsToCreate.map((a) => ({
-          title: a.title.trim(),
-          type: a.type,
-          dueDate: a.dueDate || null,
-          priority: a.priority,
-        }))
-      }
-
-      if (linkActionIds.length > 0) {
-        payload.linkActionIds = linkActionIds
-      }
-
-      // Links
-      const validLinks = form.links.filter((l) => l.url.trim())
-      if (validLinks.length > 0) {
-        payload.links = validLinks
-      }
-
-      if (editId) {
-        await api.put(`/conversations/${editId}`, payload)
-        toast.success('Conversation updated')
-      } else {
-        await api.post('/conversations', payload)
-        toast.success('Conversation logged')
-      }
-      setDialogOpen(false)
-      // Clear draft on success
-      if (!editId) {
-        localStorage.removeItem(draftKey)
-        setHasDraft(false)
-        setForm(getEmptyForm())
-      } else {
-        localStorage.removeItem(`draft_edit_conversation_${editId}`)
-        setEditDrafts((prev) => { const s = new Set(prev); s.delete(editId); return s })
-      }
-      onRefresh()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save conversation')
-    } finally {
-      setSaving(false)
-    }
-  }
+    const onLogged = () => onRefresh()
+    window.addEventListener('searchbook:meeting-logged', onLogged)
+    return () => window.removeEventListener('searchbook:meeting-logged', onLogged)
+  }, [onRefresh])
 
   async function handleDelete() {
     if (!deleteId) return
     setDeleting(true)
     try {
       await api.delete(`/conversations/${deleteId}`)
-      toast.success('Conversation deleted')
+      toast.success('Meeting deleted')
       setDeleteId(null)
       onRefresh()
     } catch (err) {
@@ -1644,125 +1187,23 @@ function ConversationsTab({
     }
   }
 
-  function set<K extends keyof ConversationForm>(key: K, val: ConversationForm[K]) {
-    setForm((prev) => ({ ...prev, [key]: val }))
-  }
-
-  function updateAction(index: number, field: keyof ActionFormEntry, value: string) {
-    setForm((prev) => {
-      const actions = [...prev.actions]
-      actions[index] = { ...actions[index], [field]: value, isSaved: false }
-      return { ...prev, actions }
-    })
-  }
-
-  async function saveActionInline(index: number, e: React.MouseEvent) {
-    e.preventDefault()
-    const action = form.actions[index]
-    if (!action.title.trim()) {
-      toast.error('Action title is required')
-      return
-    }
-    setSaving(true)
-    try {
-      if (action.id) {
-        // Update existing inline action
-        await api.put(`/actions/${action.id}`, {
-          title: action.title.trim(),
-          type: action.type,
-          dueDate: action.dueDate || null,
-          priority: action.priority,
-        })
-        setForm((prev) => {
-          const actions = [...prev.actions]
-          actions[index] = { ...actions[index], isSaved: true }
-          return { ...prev, actions }
-        })
-        toast.success('Action updated')
-      } else {
-        // Create new inline action
-        const payload: any = {
-          title: action.title.trim(),
-          type: action.type,
-          dueDate: action.dueDate || null,
-          priority: action.priority,
-          contactId,
-          contactIds: [contactId],
-        }
-        if (editId) {
-          payload.conversationId = editId
-        }
-        const created = await api.post<{ id: number }>('/actions', payload)
-
-        setForm((prev) => {
-          const actions = [...prev.actions]
-          actions[index] = { ...actions[index], id: created.id, isSaved: true }
-          return { ...prev, actions }
-        })
-        toast.success('Action saved')
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save action')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  function addAction() {
-    setForm((prev) => ({ ...prev, actions: [...prev.actions, { ...emptyAction }] }))
-  }
-
-  function removeAction(index: number) {
-    setForm((prev) => ({
-      ...prev,
-      actions: prev.actions.filter((_, i) => i !== index),
-    }))
-  }
-
-  function addLink() {
-    setForm((prev) => ({ ...prev, links: [...prev.links, { url: '', title: '' }] }))
-  }
-
-  function updateLink(index: number, field: keyof LinkEntry, value: string) {
-    setForm((prev) => {
-      const links = [...prev.links]
-      links[index] = { ...links[index], [field]: value }
-      return { ...prev, links }
-    })
-  }
-
-  function removeLink(index: number) {
-    setForm((prev) => ({
-      ...prev,
-      links: prev.links.filter((_, i) => i !== index),
-    }))
-  }
 
   return (
     <>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Conversations</h2>
-        <Button size="sm" onClick={openNew} className={hasDraft ? "bg-amber-100 text-amber-900 hover:bg-amber-200 border-amber-200 border" : ""}>
-          {hasDraft ? (
-            <>
-              <Pencil className="mr-1 h-3 w-3" />
-              Resume Draft
-            </>
-          ) : (
-            <>
-              <Plus className="mr-1 h-3 w-3" />
-              Log Conversation
-            </>
-          )}
+        <h2 className="text-lg font-semibold">Meetings</h2>
+        <Button size="sm" onClick={() => quickLog.open({ participant: { id: contactId, name: contactName } })}>
+          <Plus className="mr-1 h-3 w-3" />
+          Log Meeting
         </Button>
       </div>
 
       {conversations.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No conversations logged yet.</p>
+        <p className="text-sm text-muted-foreground">No meetings logged yet.</p>
       ) : (
         <div className="space-y-3">
           {conversations.map((conv) => (
-            <Card key={conv.id} className={`cursor-pointer hover:bg-muted/30 ${editDrafts.has(conv.id) ? 'border-amber-300' : ''}`} onClick={() => openEdit(conv)}>
+            <Card key={conv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => quickLog.openEdit(conv.id)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 space-y-1">
@@ -1773,12 +1214,6 @@ function ConversationsTab({
                       <span className="text-sm text-muted-foreground">
                         {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
                       </span>
-                      {editDrafts.has(conv.id) && (
-                        <span className="text-xs text-amber-600 flex items-center gap-1">
-                          <Pencil className="h-3 w-3" />
-                          Resume Edit
-                        </span>
-                      )}
                     </div>
                     {conv.title && (
                       <Link
@@ -1867,639 +1302,14 @@ function ConversationsTab({
         </div>
       )}
 
-      {/* Conversation form dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => {
-        // Read from refs — never from the closure — to guarantee we always
-        // have the value that was committed in the most recent render.
-        const currentEditId = editIdRef.current
-        if (!open && currentEditId !== null) {
-          // 'x' or Escape closed the dialog in edit mode — save as draft
-          autoSave.cancel()
-          localStorage.setItem(`draft_edit_conversation_${currentEditId}`, JSON.stringify(formRef.current))
-          setEditDrafts((prev) => new Set([...prev, currentEditId]))
-          // Refresh so the card shows the latest auto-saved server content.
-          onRefresh()
-        }
-        setDialogOpen(open)
-      }}>
-        <DialogContent className={cn('max-h-[90vh] overflow-y-auto w-[95vw]', !editId && prepNotes.length > 0 ? 'sm:max-w-7xl' : 'sm:max-w-2xl')} onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle>{editId ? 'Edit Conversation' : 'Log Conversation'}</DialogTitle>
-              <div className="flex items-center gap-2">
-                {!editId && (form.summary || form.notes || form.nextSteps) && (
-                  <span className="text-xs text-muted-foreground animate-in fade-in duration-500">
-                    Draft saved
-                  </span>
-                )}
-                {editId && <SaveStatusIndicator status={autoSave.status} />}
-              </div>
-            </div>
-          </DialogHeader>
-          <div className={cn(!editId && prepNotes.length > 0 ? 'h-full flex flex-col' : '')}>
-            {/* Prep Notes panel (only when creating, and notes exist) */}
-            {!editId && prepNotes.length > 0 ? (
-              <ResizablePanelGroup orientation="horizontal" className="min-h-[50vh]">
-                <ResizablePanel defaultSize={35} minSize={20} className="pr-4 border-r mr-2">
-                  <div className="space-y-3 h-full">
-                    <h3 className="text-sm font-semibold">Prep Notes</h3>
-                    <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
-                      {prepNotes.map((note) => (
-                        <div key={note.id} className="rounded-md bg-yellow-50 p-3 space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(note.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </p>
-                          <div className="text-sm prep-note-markdown">
-                            <ReactMarkdown>{note.content}</ReactMarkdown>
-                          </div>
-                          {note.url && (
-                            <a href={note.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                              {note.urlTitle || note.url}
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {conversations.length > 0 && (
-                      <div className="pt-3 border-t">
-                        <h4 className="text-xs font-semibold mb-2">Last Conversation</h4>
-                        <div className="rounded-md bg-muted/30 p-2 space-y-1">
-                          <p className="text-xs text-muted-foreground">
-                            {formatConversationDate(conversations[0].date, conversations[0].datePrecision as DatePrecision)}
-                          </p>
-                          {conversations[0].summary && (
-                            <p className="text-xs font-medium">{conversations[0].summary}</p>
-                          )}
-                          {conversations[0].nextSteps && (
-                            <p className="text-xs text-muted-foreground">Next: {conversations[0].nextSteps}</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </ResizablePanel>
-                <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={65} minSize={30} className="pl-4">
-                  <div className="h-full overflow-y-auto pr-2 pb-4">
-                    {/* Conversation form */}
-                    <div className="grid gap-4">
-                      <div className="space-y-2">
-                        <Label>Title</Label>
-                        <TitleAutocomplete
-                          value={form.title}
-                          onChange={(v) => set('title', v)}
-                          titles={knownTitles}
-                          placeholder="Meeting name, e.g. Weekly VP meeting (optional)"
-                        />
-                      </div>
-
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label>Date</Label>
-                          <Input
-                            type="date"
-                            value={form.date}
-                            onChange={(e) => set('date', e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Precision</Label>
-                          <Select value={form.datePrecision} onValueChange={(v) => set('datePrecision', v as DatePrecision)}>
-                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {DATE_PRECISION_OPTIONS.map((o) => (
-                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Type</Label>
-                        <Select value={form.type} onValueChange={(v) => set('type', v as ConversationType)}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {CONVERSATION_TYPE_OPTIONS.map((o) => (
-                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Summary</Label>
-                        <Input
-                          value={form.summary}
-                          onChange={(e) => set('summary', e.target.value)}
-                          placeholder="Brief summary of the conversation"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Notes</Label>
-                        <MarkdownTextarea
-                          value={form.notes}
-                          onChange={(v) => set('notes', v)}
-                          placeholder="Detailed notes... (paste screenshots directly)"
-                          rows={6}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Next Steps</Label>
-                        <Textarea
-                          value={form.nextSteps}
-                          onChange={(e) => set('nextSteps', e.target.value)}
-                          placeholder="What to do next..."
-                          rows={2}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Additional Participants</Label>
-                        <MultiCombobox
-                          options={localContactOptions}
-                          values={form.participantIds || []}
-                          onChange={(v) => set('participantIds', v)}
-                          placeholder="In the meeting..."
-                          searchPlaceholder="Search participants..."
-                          allowFreeText={true}
-                        />
-                        {form.participantIds.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            {form.participantIds.map((val) => {
-                              const name = localContactOptions.find((o) => o.value === val)?.label || val
-                              return (
-                                <div key={val} className="flex items-center gap-2">
-                                  <span className="w-32 shrink-0 truncate text-xs text-muted-foreground" title={name}>{name}</span>
-                                  <Input
-                                    className="h-8 text-sm"
-                                    value={form.participantNotes[val] || ''}
-                                    onChange={(e) => set('participantNotes', { ...form.participantNotes, [val]: e.target.value })}
-                                    placeholder="Takeaway about this person (optional)"
-                                  />
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Attendees Description</Label>
-                        <Input
-                          value={form.attendeesDescription}
-                          onChange={(e) => set('attendeesDescription', e.target.value)}
-                          placeholder='e.g. "~10 Arcadia folks incl. analytics team"'
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Organization</Label>
-                        <Combobox
-                          options={localCompanyOptions}
-                          value={form.companyId}
-                          onChange={(v) => set('companyId', v)}
-                          placeholder="Org this meeting was with..."
-                          searchPlaceholder="Search or type new name..."
-                          allowFreeText={true}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>People Discussed</Label>
-                        <MultiCombobox
-                          options={localContactOptions}
-                          values={form.contactsDiscussed || []}
-                          onChange={(v) => set('contactsDiscussed', v)}
-                          placeholder="Search or type new name..."
-                          searchPlaceholder="Search contacts..."
-                          allowFreeText={true}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Companies Discussed</Label>
-                        <MultiCombobox
-                          options={localCompanyOptions}
-                          values={form.companiesDiscussed || []}
-                          onChange={(v) => set('companiesDiscussed', v)}
-                          placeholder="Search or type new name..."
-                          searchPlaceholder="Search companies..."
-                          allowFreeText={true}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Tags</Label>
-                        <MultiCombobox
-                          options={tagOptions}
-                          values={form.tagIds || []}
-                          onChange={(v) => set('tagIds', v)}
-                          placeholder="Tag topics (e.g. digital-measures)..."
-                          searchPlaceholder="Search or create tags..."
-                          allowFreeText={true}
-                        />
-                      </div>
-
-                      {/* Links */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Links</Label>
-                          <Button type="button" variant="ghost" size="sm" onClick={addLink}>
-                            <Plus className="mr-1 h-3 w-3" />
-                            Add Link
-                          </Button>
-                        </div>
-                        {form.links.map((link, i) => (
-                          <div key={i} className="flex gap-2 items-start">
-                            <div className="flex-1 grid gap-2 sm:grid-cols-2">
-                              <Input
-                                value={link.url}
-                                onChange={(e) => updateLink(i, 'url', e.target.value)}
-                                placeholder="URL (e.g. https://drive.google.com/...)"
-                              />
-                              <Input
-                                value={link.title}
-                                onChange={(e) => updateLink(i, 'title', e.target.value)}
-                                placeholder="Label (optional)"
-                              />
-                            </div>
-                            <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeLink(i)}>
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Follow-up actions (create and edit) */}
-                      <Separator />
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-muted-foreground">{editId ? 'Add Actions' : 'Follow-Up Actions'}</p>
-                        <Button type="button" variant="ghost" size="sm" onClick={addAction}>
-                          <Plus className="mr-1 h-3 w-3" />
-                          Add Action
-                        </Button>
-                      </div>
-                      {form.actions.map((action, i) => (
-                        <div key={i} className="space-y-2 rounded-md border p-3">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs text-muted-foreground flex items-center gap-2">
-                              Action {i + 1}
-                              {action.id && action.isSaved && (
-                                <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100 text-[10px] h-4 py-0 px-1 border-transparent">
-                                  <Check className="mr-1 h-3 w-3" /> Saved
-                                </Badge>
-                              )}
-                            </Label>
-                            <div className="flex items-center gap-1">
-                              {action.title.trim() && !action.isSaved && (
-                                <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs text-primary" onClick={(e) => saveActionInline(i, e)}>
-                                  Save Action
-                                </Button>
-                              )}
-                              {form.actions.length > 1 && (
-                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          <Input
-                            value={action.title}
-                            onChange={(e) => updateAction(i, 'title', e.target.value)}
-                            placeholder="e.g. Send follow-up email"
-                          />
-                          {action.title && (
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              <Select value={action.type} onValueChange={(v) => updateAction(i, 'type', v)}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {ACTION_TYPE_OPTIONS.map((o) => (
-                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Input
-                                type="date"
-                                value={action.dueDate}
-                                onChange={(e) => updateAction(i, 'dueDate', e.target.value)}
-                              />
-                              <Select value={action.priority} onValueChange={(v) => updateAction(i, 'priority', v)}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {ACTION_PRIORITY_OPTIONS.map((o) => (
-                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </ResizablePanel>
-              </ResizablePanelGroup>
-            ) : (
-              <div className="grid gap-4 py-2">
-                <div className="space-y-2">
-                  <Label>Title</Label>
-                  <TitleAutocomplete
-                    value={form.title}
-                    onChange={(v) => set('title', v)}
-                    titles={knownTitles}
-                    placeholder="Meeting name, e.g. Weekly VP meeting (optional)"
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Date</Label>
-                    <Input
-                      type="date"
-                      value={form.date}
-                      onChange={(e) => set('date', e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Precision</Label>
-                    <Select value={form.datePrecision} onValueChange={(v) => set('datePrecision', v as DatePrecision)}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {DATE_PRECISION_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select value={form.type} onValueChange={(v) => set('type', v as ConversationType)}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CONVERSATION_TYPE_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Summary</Label>
-                  <Input
-                    value={form.summary}
-                    onChange={(e) => set('summary', e.target.value)}
-                    placeholder="Brief summary of the conversation"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Notes</Label>
-                  <MarkdownTextarea
-                    value={form.notes}
-                    onChange={(v) => set('notes', v)}
-                    placeholder="Detailed notes... (paste screenshots directly)"
-                    rows={6}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Next Steps</Label>
-                  <Textarea
-                    value={form.nextSteps}
-                    onChange={(e) => set('nextSteps', e.target.value)}
-                    placeholder="What to do next..."
-                    rows={2}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Additional Participants</Label>
-                  <MultiCombobox
-                    options={localContactOptions}
-                    values={form.participantIds || []}
-                    onChange={(v) => set('participantIds', v)}
-                    placeholder="In the meeting..."
-                    searchPlaceholder="Search participants..."
-                    allowFreeText={true}
-                  />
-                  {form.participantIds.length > 0 && (
-                    <div className="space-y-1.5 pt-1">
-                      {form.participantIds.map((val) => {
-                        const name = localContactOptions.find((o) => o.value === val)?.label || val
-                        return (
-                          <div key={val} className="flex items-center gap-2">
-                            <span className="w-32 shrink-0 truncate text-xs text-muted-foreground" title={name}>{name}</span>
-                            <Input
-                              className="h-8 text-sm"
-                              value={form.participantNotes[val] || ''}
-                              onChange={(e) => set('participantNotes', { ...form.participantNotes, [val]: e.target.value })}
-                              placeholder="Takeaway about this person (optional)"
-                            />
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Attendees Description</Label>
-                  <Input
-                    value={form.attendeesDescription}
-                    onChange={(e) => set('attendeesDescription', e.target.value)}
-                    placeholder='e.g. "~10 Arcadia folks incl. analytics team"'
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Organization</Label>
-                  <Combobox
-                    options={localCompanyOptions}
-                    value={form.companyId}
-                    onChange={(v) => set('companyId', v)}
-                    placeholder="Org this meeting was with..."
-                    searchPlaceholder="Search or type new name..."
-                    allowFreeText={true}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>People Discussed</Label>
-                  <MultiCombobox
-                    options={localContactOptions}
-                    values={form.contactsDiscussed || []}
-                    onChange={(v) => set('contactsDiscussed', v)}
-                    placeholder="Search or type new name..."
-                    searchPlaceholder="Search contacts..."
-                    allowFreeText={true}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Companies Discussed</Label>
-                  <MultiCombobox
-                    options={localCompanyOptions}
-                    values={form.companiesDiscussed || []}
-                    onChange={(v) => set('companiesDiscussed', v)}
-                    placeholder="Search or type new name..."
-                    searchPlaceholder="Search companies..."
-                    allowFreeText={true}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Tags</Label>
-                  <MultiCombobox
-                    options={tagOptions}
-                    values={form.tagIds || []}
-                    onChange={(v) => set('tagIds', v)}
-                    placeholder="Tag topics (e.g. digital-measures)..."
-                    searchPlaceholder="Search or create tags..."
-                    allowFreeText={true}
-                  />
-                </div>
-
-                {/* Links */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Links</Label>
-                    <Button type="button" variant="ghost" size="sm" onClick={addLink}>
-                      <Plus className="mr-1 h-3 w-3" />
-                      Add Link
-                    </Button>
-                  </div>
-                  {form.links.map((link, i) => (
-                    <div key={i} className="flex gap-2 items-start">
-                      <div className="flex-1 grid gap-2 sm:grid-cols-2">
-                        <Input
-                          value={link.url}
-                          onChange={(e) => updateLink(i, 'url', e.target.value)}
-                          placeholder="URL (e.g. https://drive.google.com/...)"
-                        />
-                        <Input
-                          value={link.title}
-                          onChange={(e) => updateLink(i, 'title', e.target.value)}
-                          placeholder="Label (optional)"
-                        />
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeLink(i)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Follow-up actions (create and edit) */}
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-muted-foreground">{editId ? 'Add Actions' : 'Follow-Up Actions'}</p>
-                  <Button type="button" variant="ghost" size="sm" onClick={addAction}>
-                    <Plus className="mr-1 h-3 w-3" />
-                    Add Action
-                  </Button>
-                </div>
-                {form.actions.map((action, i) => (
-                  <div key={i} className="space-y-2 rounded-md border p-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs text-muted-foreground flex items-center gap-2">
-                        Action {i + 1}
-                        {action.id && action.isSaved && (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100 text-[10px] h-4 py-0 px-1 border-transparent">
-                            <Check className="mr-1 h-3 w-3" /> Saved
-                          </Badge>
-                        )}
-                      </Label>
-                      <div className="flex items-center gap-1">
-                        {action.title.trim() && !action.isSaved && (
-                          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs text-primary" onClick={(e) => saveActionInline(i, e)}>
-                            Save Action
-                          </Button>
-                        )}
-                        {form.actions.length > 1 && (
-                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <Input
-                      value={action.title}
-                      onChange={(e) => updateAction(i, 'title', e.target.value)}
-                      placeholder="e.g. Send follow-up email"
-                    />
-                    {action.title && (
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <Select value={action.type} onValueChange={(v) => updateAction(i, 'type', v)}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {ACTION_TYPE_OPTIONS.map((o) => (
-                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="date"
-                          value={action.dueDate}
-                          onChange={(e) => updateAction(i, 'dueDate', e.target.value)}
-                        />
-                        <Select value={action.priority} onValueChange={(v) => updateAction(i, 'priority', v)}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {ACTION_PRIORITY_OPTIONS.map((o) => (
-                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            {editId ? (
-              <>
-                <Button variant="outline" onClick={() => {
-                  autoSave.cancel()
-                  localStorage.removeItem(`draft_edit_conversation_${editId}`)
-                  setEditDrafts((prev) => { const s = new Set(prev); s.delete(editId!); return s })
-                  if (originalForm) setForm(originalForm)
-                  setDialogOpen(false)
-                }}>Cancel</Button>
-                <Button onClick={handleSubmit} disabled={saving}>
-                  {saving ? 'Saving...' : 'Done'}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => {
-                  setDialogOpen(false)
-                  localStorage.removeItem(draftKey)
-                  setHasDraft(false)
-                  setForm(getEmptyForm())
-                }}>Cancel</Button>
-                <Button onClick={handleSubmit} disabled={saving}>
-                  {saving ? 'Saving...' : 'Log Conversation'}
-                </Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Delete confirmation dialog */}
       <Dialog open={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Conversation</DialogTitle>
+            <DialogTitle>Delete this meeting?</DialogTitle>
             <DialogDescription>
-              This will permanently delete this conversation log. Continue?
+              This permanently removes the meeting record, its prep notes,
+              attachments, and participant takeaways. Linked actions are kept.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

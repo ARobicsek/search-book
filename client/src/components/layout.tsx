@@ -25,7 +25,7 @@ function LayoutContent() {
               variant="outline"
               size="sm"
               className="hidden sm:inline-flex"
-              onClick={quickLog.open}
+              onClick={() => quickLog.open()}
             >
               <MessageSquarePlus className="mr-1 h-4 w-4" />
               Log Meeting
@@ -34,7 +34,7 @@ function LayoutContent() {
               variant="ghost"
               size="icon"
               className="h-11 w-11 sm:hidden"
-              onClick={quickLog.open}
+              onClick={() => quickLog.open()}
               aria-label="Quick log meeting"
             >
               <MessageSquarePlus className="h-5 w-5" />

@@ -2,91 +2,77 @@
 
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
 
-### What Was Just Completed (2026-06-13, build session) — Phase B SHIPPED
+### What Was Just Completed (2026-06-14, build session) — B4 + Phase C SHIPPED
 
-Implemented **Phase B** of the plan of record `.planning/UX-SEARCH-MEETINGS-PLAN.md`
-(search correctness + perf), one atomic commit per chunk, verified at desktop + 390px,
-pushed to `main` (auto-deploys to Vercel). **No schema changes** (as predicted).
+Plan of record: `.planning/UX-SEARCH-MEETINGS-PLAN.md`. One atomic commit per chunk, verified at
+desktop + 390px with chrome-devtools, pushed to `main` (auto-deploys to Vercel). **No schema changes.**
 
-- **B1 — Participant takeaways surface the *person* card** (`128b36d`). A per-participant
-  `ConversationParticipant.note` ("Meeting takeaway") now matches the **contact**, not only
-  the meeting. Edits in `server/src/routes/search.ts`: clause in `contactClausesFor`
-  (peopleNotes scope), `participantInConversations: { select: { note }, take: 50 }` in the
-  contact select, and a `'meeting takeaway'` field (weight 1) in `collectContactFields`.
-  Verified via the live server with a temp participant note (local DB had 0): the token
-  returned the person's card **and** the meeting; test row removed.
-- **B2 — Weighted free-text ranking in Meetings search** (`87a1fc6`). `server/src/routes/meetings.ts`:
-  the `q` box now covers **every** meeting field (mirrors search's `conversationClausesFor`,
-  incl. discussed people/orgs via a new `meetingRankInclude`) and ranks by max-weight
-  **title=4 > anchor/participant names=3 > anchor/addl org names + attendees desc=2 > rest=1**,
-  then date desc (fetch 300 → score → slice). Verified: title > attendees > notes/participant
-  ordering via a controlled token; in-browser, q="health" surfaced a meeting matched *only* via
-  a discussed org (new coverage).
-- **B3 — Search perf, lazy related + parallelize** (`3c7ce1c`). `server/src/routes/search.ts`:
-  `includeRelated` defaults **false**; new `GET /api/search/related/:type/:id`; per-term company
-  lookups + the 5 entity finds run in `Promise.all`; the `additionalCompanyIds` findUnique loop
-  collapsed to one findMany. `client/src/pages/search.tsx`: stop sending `includeRelated`; the
-  count badge → a lazy **"Related"** expander (fetches on first open, caches by `${type}-${id}`,
-  spinner / "No related items"). Local `[TIMING]` q="health" warm **91ms → 31ms** from dropping
-  the fan-out (local SQLite has no network latency; the real ~20s→~1–2s win is the **~200→~12
-  round-trip** reduction, to confirm in prod). Verified desktop + 390px; lazy panel populates;
-  no console errors.
+- **B4 — Highlight Meetings free-text matches** (`17fb400`). Extracted `HighlightedText` (the
+  merge-overlapping-ranges renderer) out of `search.tsx` into a shared
+  [client/src/components/highlighted-text.tsx](client/src/components/highlighted-text.tsx); both pages
+  import it. In `meetings.tsx`, a local `hl()` helper wraps matches (`terms=[qFilter.trim()]`,
+  `caseSensitive=false`) in the plain-text fields (display name, summary, attendeesDescription,
+  nextSteps, participant/org/tag badges). `notes`/prep markdown bodies left **un-highlighted** (no
+  `<mark>` into raw markdown — matches main Search). Verified via DOM `<mark>` inspection: q="amy" →
+  marks in the name link + summary, 0 in `.prep-note-markdown`; q="CALEB" case-insensitive hits the
+  name + nextSteps; clearing q → 0 marks.
+- **C1a — Quick Log autosave + drop 1:1 anchor + participant-first display** (`e49f857`). Dropped the
+  "Contact (1:1 anchor)" Combobox + all `contactId` state. **Autosave**: a focused debounced (1.5s)
+  effect persists a *numeric-only* body (scalars + already-resolved participants/orgs/tags) via
+  **POST-once-then-PUT**, serialized through a `saveChainRef` (one POST, no PUT-before-POST); it
+  **never** sends `contactId` (preserves legacy anchors) or `createActions` (a PUT re-creates those),
+  and gates on a server-acceptable "who". `lastSnapshotRef` skips no-ops (seeded from the loaded record
+  on edit). Free-text names + follow-up actions persist only on the explicit **"Done"** finalize;
+  prep/attachments persist live once `savedIdRef` is set. Header `SaveStatusIndicator`; footer
+  `[Cancel][Log Meeting]` → `[Delete this meeting][Close][Done]` after the first save; X/Cancel keeps
+  the autosaved record. **Participant-first display** added to the meetings card + search `displayName`.
+- **C1b — Contact page logs via Quick Log (seeded participant)** (`f325aca`). `useQuickLog().open` now
+  takes `{ participant?, title? }`; the dialog seeds the participant, merges them into `contactOptions`,
+  and expands "Who was there." `ConversationsTab` is now a lean **read-only list** (header "Log Meeting"
+  → seeded `open`; card → `openEdit`; delete kept; refreshes on `searchbook:meeting-logged`). Deleted
+  ~1.3k lines of dead inline form (Dialog, `useAutoSave`/draft-localStorage, edit-draft tracking,
+  resolve/submit/action/link handlers, form types) and pruned now-unused props/imports (caught by
+  `tsc -b`/`noUnusedLocals`, **stricter** than the `typecheck` script). Fixed `quickLog.open` call sites
+  in `layout.tsx` + `meetings.tsx`. Added a **"meaningful content" gate** so a pre-seeded participant
+  alone never auto-creates an empty meeting.
 
-`npm run prepush` green for every commit; strict client build (`tsc -b && vite build`) green for B3.
+`npm run prepush` **and** the strict client build (`tsc -b && vite build`) green for every commit;
+verified end-to-end (seeded open → idle = no POST; type → POST; Done → contact list refreshes 1→2;
+card → Edit Meeting; legacy anchored meetings still display). Console clean.
 
-### Pause point — owner eyeballs search before Phase C
+### Owner sign-off captured
 
-The owner asked to **pause after Phase B** to eyeball search behavior before the big Quick Log
-unification. **Action for the owner:** try the live Search + Meetings search; confirm the prod
-`[TIMING] search …` line for a broad query (e.g. "analytics"/"health") dropped from ~20s toward
-~1–2s (this is also carry-over #2). Resume Phase C only after that thumbs-up.
+Owner approved live Phase B search behavior (the pre-Phase-C gate) before C began — carry-over #2
+(prod `[TIMING]` for a broad query) considered acceptable. If anything about prod search still feels
+off, raise it; otherwise it's closed.
 
-### What's Next — start with B4 (owner ask), then Phase C
+### What's Next — Phase D, then Phase E
 
-**B4 — Highlight matches in the Meetings "Search text" results** (owner ask, 2026-06-14;
-plan §Phase B → B4). Commit: `feat(meetings): highlight free-text matches in results`.
-Mirror the main Search highlighting in the Meetings list cards:
-- **Extract `HighlightedText`** from `client/src/pages/search.tsx` into a shared component
-  (`client/src/components/highlighted-text.tsx`) and import it in both pages (don't duplicate
-  the merge-ranges logic; Search keeps using it unchanged — pure move + re-import).
-- In `client/src/pages/meetings.tsx`, when `qFilter` is set, highlight the **plain-text** fields
-  (display name, `summary`, `attendeesDescription`, `nextSteps`, participant/org/tag names) with
-  `terms={[qFilter]}` `caseSensitive={false}` (Meetings `q` = single trimmed, case-insensitive
-  term — no quotes/multi-term; don't reuse `parseTerms`).
-- **Markdown caveat:** `notes`/prep notes render via `ReactMarkdown` — do NOT inject `<mark>` into
-  the raw markdown. Default = leave the markdown body un-highlighted (matches main Search). Only
-  highlight notes if the owner asks, via a `rehype` plugin (separate, heavier follow-up).
-- Verify desktop + 390px; clearing `q` removes highlights.
+**Phase D — Dedicated Meetings calendar (#8)** (`.planning/UX-SEARCH-MEETINGS-PLAN.md` §Phase D).
+Commit: `feat(meetings): meetings calendar view`. Add a **List | Calendar** toggle to the Meetings
+page header ([client/src/pages/meetings.tsx](client/src/pages/meetings.tsx)); meetings-only (separate
+from the actions calendar at [client/src/pages/calendar.tsx](client/src/pages/calendar.tsx) — copy its
+FullCalendar pattern + `isMobile` list default). Fetch the visible range via
+`/api/meetings?from=&to=&limit=` (high limit for a month). Each meeting → all-day event titled by
+display name (reuse the participant-first fallback), colored by `type` (`conversationTypeColors`).
+Click → `quickLog.openEdit(id)`. Future-dated meetings appear naturally → advance prep.
 
-Then **Phase C of `.planning/UX-SEARCH-MEETINGS-PLAN.md` (biggest, highest-risk)** —
-unify on the **Quick Log** dialog as the single meeting editor:
-1. **C1a — Quick Log: autosave + drop the 1:1 anchor + participant-first display**
-   (`feat(meetings): Quick Log autosave + drop 1:1 anchor + participant-first display`). Drop the
-   "Contact (1:1 anchor)" Combobox (stop sending `contactId` for new + edit → legacy anchors
-   untouched); debounced autosave (POST-once-then-PUT, `lastSavedSnapshot` to skip no-ops,
-   save-status indicator, Cancel→Close, small "Delete this meeting"); participant-first display
-   fallback in the meetings card **and** search `displayName`.
-2. **C1b — Retire the contact-page inline editor; seed the participant**
-   (`feat(meetings): contact page logs via Quick Log (seeded participant)`). Extend
-   `useQuickLog().open` to accept a prefill (`{ participant, title }`); `ConversationsTab` →
-   "Log Meeting" button opening Quick Log seeded with that contact; edit → `openEdit(id)`; keep
-   the read-only list; remove the dead inline form + its `useAutoSave` + draft localStorage.
-   **Read the full `ConversationsTab` (~L1179–end of `contact-detail.tsx`) before cutting.**
-
-Then **Phase D** (meetings calendar: List|Calendar toggle, FullCalendar, click→`openEdit`),
-**Phase E** (relabel "Conversations"→"Meetings", UI strings only — keep model/API/types/events).
+**Phase E — Terminology "Meetings" everywhere (#4)** (§Phase E). Commit:
+`refactor(ui): call conversations "meetings" throughout`. **UI labels only** — keep the `Conversation`
+model, `/conversations` API, TS types, event names, and `draft_*conversation*` localStorage keys.
+Grep user-facing `Conversation`/`conversations` strings in `client/src` → Meeting(s): the contact-page
+**tab label + count** ([contact-detail.tsx:663](client/src/pages/contacts/contact-detail.tsx#L663) —
+still says "Conversations"; the tab's internal heading is already "Meetings" from C1b), the
+delete-impact "conversation log(s)" text, command-palette entries, headings.
 
 Process reminders: one atomic commit per chunk; `npm run prepush` **and** a client build
-(`tsc -b` is stricter than the typecheck script) + a desktop/390px smoke test before each push;
-update each task's STATUS line in the plan doc; owner has standing permission to push to `main`.
-**No schema changes are expected anywhere in this plan — flag immediately if you think one is needed.**
-Phase C deletes code → watch for unused-var **build** failures (`noUnusedLocals`, stricter than `typecheck`).
+(`tsc -b` is stricter than `typecheck` — it caught several unused locals/imports during C1b) + a
+desktop/390px smoke test before each push; update each task's STATUS line in the plan doc; owner has
+standing permission to push to `main`. **No schema changes expected — flag immediately if one seems needed.**
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
-2. **Prod search perf check** — now that B3 is live, confirm the prod `[TIMING] search …` line is
-   healthy for a broad query (local SQLite can't reproduce the ~20s; the fix is a round-trip-count
-   reduction that only shows against Turso).
+2. **Prod search perf** — owner signed off on live Phase B (B3); treat as closed unless it regresses.
 3. NCQA adaptation plan (`.planning/NCQA-ADAPTATION-PLAN.md`): Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until the owner raises them.
 4. Desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
 5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
@@ -95,30 +81,29 @@ Phase C deletes code → watch for unused-var **build** failures (`noUnusedLocal
 8. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
 
 ### Open Bugs / Known Caveats
-- No confirmed bugs. Reminder: the `Favorite` tag is a normal tag and appears in tag dropdowns (by design).
-- **B2 cap:** the `q`-ranking path fetches at most 300 matching meetings before ranking/paginating,
-  so `total` is bounded at 300 (implausible to hit for a single user; mirrors the series-title path).
-- **B3 tradeoff (accepted):** the per-card related **count badge** is gone (it required the eager
-  fetch) → plain "Related" expander; the count appears only after expanding, which triggers one
-  brief single-entity fetch.
-- After Phase C deletions, watch for unused-var build failures — the client **build** (`tsc -b`,
-  `noUnusedLocals`) is stricter than the `typecheck` script.
+- No confirmed bugs. The `Favorite` tag is a normal tag and appears in tag dropdowns (by design).
+- **Quick Log autosave design:** free-text new people/orgs/tags and follow-up actions persist **only on
+  "Done"** (not by the keystroke autosave, which is numeric-only to avoid duplicate-create on PUT). The
+  core writeup (title/notes/summary/numeric participants) is always protected. The in-dialog
+  "Delete this meeting" uses a native `window.confirm`.
+- **Orphaned localStorage (harmless):** the retired inline editor's `draft_conversation_*` /
+  `draft_edit_conversation_*` keys are no longer read or written; any pre-existing ones just sit unused.
+- **B2 cap:** the `q`-ranking path fetches ≤300 meetings before ranking (total bounded at 300).
+- After Phase C, the contact-detail file is ~1.3k lines lighter; the `tsc -b` build (`noUnusedLocals`)
+  remains the gate that catches unused imports the `typecheck` script misses.
 
 ### Working branch
-`main`, clean and fully pushed. Phase B (B1 `128b36d`, B2 `87a1fc6`, B3 `3c7ce1c`) + this handoff are live.
+`main`, clean and fully pushed. B4 (`17fb400`), C1a (`e49f857`), C1b (`f325aca`) + this handoff are live.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
 > Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md` and the plan of record
-> `.planning/UX-SEARCH-MEETINGS-PLAN.md`. Phases A and B are shipped and live. **Start with B4**
-> (plan §Phase B → B4): highlight matches in the Meetings "Search text" results — extract
-> `HighlightedText` from `search.tsx` into a shared component, reuse it in `meetings.tsx` for the
-> plain-text fields (single-term, case-insensitive), leaving the `ReactMarkdown` notes body
-> un-highlighted (see the markdown caveat). Then implement **Phase C** top-to-bottom: C1a (Quick Log
-> autosave + drop 1:1 anchor + participant-first display) → C1b (retire the contact-page inline editor,
-> seed the participant). One atomic commit per chunk; before each push run `npm run prepush` **and** a
-> client build, and smoke-test at desktop + 390px. Update each task's STATUS line in the plan doc. No
-> schema changes are expected — flag immediately if you think one is needed. Watch for unused-var build
-> failures from the Phase C deletions.
+> `.planning/UX-SEARCH-MEETINGS-PLAN.md`. Phases A, B, and C are shipped and live. Implement **Phase D**
+> (dedicated Meetings calendar: List|Calendar toggle on `/meetings`, FullCalendar per `calendar.tsx`,
+> meetings fetched by visible range, event click → `quickLog.openEdit(id)`), then **Phase E** (relabel
+> user-facing "Conversations" → "Meetings" — UI strings only, keep model/API/types/events/localStorage
+> keys; the contact-page tab label is the main remaining one). One atomic commit per chunk; before each
+> push run `npm run prepush` **and** a client build (`tsc -b`), and smoke-test desktop + 390px. Update
+> each task's STATUS line. No schema changes expected — flag immediately if one seems needed.

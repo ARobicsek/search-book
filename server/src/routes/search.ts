@@ -125,7 +125,9 @@ function sortRecords<T extends { _s: Scored }>(records: T[], sort: SortMode): T[
 // GET /api/search?q=term&limit=20&includeRelated=true&scopes=...&sort=...&caseSensitive=true
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { q, limit = '10', includeRelated = 'true' } = req.query;
+    // Related entities are now lazy (fetched per-card via /search/related/:type/:id),
+    // so the hot path defaults to NOT fanning out — that fan-out was the ~20s cost.
+    const { q, limit = '10', includeRelated = 'false' } = req.query;
 
     if (!q || typeof q !== 'string' || q.trim().length < 2) {
       return res.status(400).json({ error: 'Query must be at least 2 characters' });
@@ -164,14 +166,16 @@ router.get('/', async (req: Request, res: Response) => {
     // company's NAME matches a term (longstanding behavior, now per-term).
     const termCompanies = new Map<string, { id: number; name: string }[]>();
     if (peopleProfile) {
-      for (const term of terms) {
-        const matched = await prisma.company.findMany({
-          where: { name: { contains: term } },
-          select: { id: true, name: true },
-          take: 25,
-        });
-        termCompanies.set(term, matched);
-      }
+      const matchedPerTerm = await Promise.all(
+        terms.map((term) =>
+          prisma.company.findMany({
+            where: { name: { contains: term } },
+            select: { id: true, name: true },
+            take: 25,
+          })
+        )
+      );
+      terms.forEach((term, i) => termCompanies.set(term, matchedPerTerm[i]));
     }
 
     // ── Contacts ─────────────────────────────────────────────
@@ -216,9 +220,8 @@ router.get('/', async (req: Request, res: Response) => {
       return clauses;
     };
 
-    let contacts: any[] = [];
-    if (peopleProfile || peopleNotes) {
-      contacts = await prisma.contact.findMany({
+    const contactsPromise: Promise<any[]> = (peopleProfile || peopleNotes)
+      ? prisma.contact.findMany({
         where: { AND: terms.map((t) => ({ OR: contactClausesFor(t) })) },
         select: {
           id: true, name: true, title: true, ecosystem: true, status: true, updatedAt: true,
@@ -234,8 +237,8 @@ router.get('/', async (req: Request, res: Response) => {
         },
         take,
         orderBy: { updatedAt: 'desc' },
-      });
-    }
+      })
+      : Promise.resolve([]);
 
     const collectContactFields = (c: any): FieldVal[] => {
       const fields: FieldVal[] = [];
@@ -300,9 +303,8 @@ router.get('/', async (req: Request, res: Response) => {
       { companyPrepNotes: { some: { content: { contains: term } } } },
     ];
 
-    let companies: any[] = [];
-    if (scopes.has('orgs')) {
-      companies = await prisma.company.findMany({
+    const companiesPromise: Promise<any[]> = scopes.has('orgs')
+      ? prisma.company.findMany({
         where: { AND: terms.map((t) => ({ OR: companyClausesFor(t) })) },
         select: {
           id: true, name: true, industry: true, status: true, updatedAt: true,
@@ -313,8 +315,8 @@ router.get('/', async (req: Request, res: Response) => {
         },
         take,
         orderBy: { updatedAt: 'desc' },
-      });
-    }
+      })
+      : Promise.resolve([]);
 
     const collectCompanyFields = (c: any): FieldVal[] => {
       const fields: FieldVal[] = [];
@@ -352,9 +354,8 @@ router.get('/', async (req: Request, res: Response) => {
       { companiesDiscussed: { some: { company: { name: { contains: term } } } } },
     ];
 
-    let conversations: any[] = [];
-    if (scopes.has('meetings')) {
-      conversations = await prisma.conversation.findMany({
+    const conversationsPromise: Promise<any[]> = scopes.has('meetings')
+      ? prisma.conversation.findMany({
         where: { AND: terms.map((t) => ({ OR: conversationClausesFor(t) })) },
         select: {
           id: true, title: true, summary: true, notes: true, nextSteps: true,
@@ -371,8 +372,8 @@ router.get('/', async (req: Request, res: Response) => {
         },
         take,
         orderBy: { date: 'desc' },
-      });
-    }
+      })
+      : Promise.resolve([]);
 
     const collectConversationFields = (c: any): FieldVal[] => {
       const fields: FieldVal[] = [];
@@ -408,9 +409,8 @@ router.get('/', async (req: Request, res: Response) => {
       { contact: { companyName: { contains: term } } },
     ];
 
-    let actions: any[] = [];
-    if (scopes.has('actions')) {
-      actions = await prisma.action.findMany({
+    const actionsPromise: Promise<any[]> = scopes.has('actions')
+      ? prisma.action.findMany({
         where: { AND: terms.map((t) => ({ OR: actionClausesFor(t) })) },
         select: {
           id: true, title: true, description: true, type: true, completed: true,
@@ -422,8 +422,8 @@ router.get('/', async (req: Request, res: Response) => {
         },
         take,
         orderBy: { updatedAt: 'desc' },
-      });
-    }
+      })
+      : Promise.resolve([]);
 
     const collectActionFields = (a: any): FieldVal[] => {
       const fields: FieldVal[] = [];
@@ -444,9 +444,8 @@ router.get('/', async (req: Request, res: Response) => {
       { tags: { contains: term } },
     ];
 
-    let ideas: any[] = [];
-    if (scopes.has('ideas')) {
-      ideas = await prisma.idea.findMany({
+    const ideasPromise: Promise<any[]> = scopes.has('ideas')
+      ? prisma.idea.findMany({
         where: { AND: terms.map((t) => ({ OR: ideaClausesFor(t) })) },
         include: {
           contacts: { include: { contact: { select: { id: true, name: true } } } },
@@ -454,8 +453,14 @@ router.get('/', async (req: Request, res: Response) => {
         },
         take,
         orderBy: { createdAt: 'desc' },
-      });
-    }
+      })
+      : Promise.resolve([]);
+
+    // Independent top-level queries run concurrently (one round-trip wave instead
+    // of five sequential ones — the other half of the ~20s fix).
+    const [contacts, companies, conversations, actions, ideas] = await Promise.all([
+      contactsPromise, companiesPromise, conversationsPromise, actionsPromise, ideasPromise,
+    ]);
 
     const collectIdeaFields = (i: any): FieldVal[] => {
       const fields: FieldVal[] = [];
@@ -711,23 +716,32 @@ async function getContactRelated(contact: any) {
     });
   }
 
-  // Additional companies from JSON
+  // Additional companies from JSON — one findMany instead of N findUniques.
   if (contact.additionalCompanyIds) {
     try {
       const additional = JSON.parse(contact.additionalCompanyIds);
       if (Array.isArray(additional)) {
-        for (const item of additional) {
-          const id = typeof item === 'object' ? item.id : item;
-          const isCurrent = typeof item === 'object' ? item.isCurrent !== false : true;
-          const company = await prisma.company.findUnique({
-            where: { id },
+        const items = additional
+          .map((item) => ({
+            id: typeof item === 'object' ? item.id : item,
+            isCurrent: typeof item === 'object' ? item.isCurrent !== false : true,
+          }))
+          .filter((it) => typeof it.id === 'number');
+        const ids = items.map((it) => it.id);
+        if (ids.length > 0) {
+          const found = await prisma.company.findMany({
+            where: { id: { in: ids } },
             select: { id: true, name: true },
           });
-          if (company && !related.companies.find((c: any) => c.id === company.id)) {
-            related.companies.push({
-              ...company,
-              relationship: isCurrent ? 'Current company' : 'Former company',
-            });
+          const byId = new Map(found.map((c) => [c.id, c]));
+          for (const it of items) {
+            const company = byId.get(it.id);
+            if (company && !related.companies.find((c: any) => c.id === company.id)) {
+              related.companies.push({
+                ...company,
+                relationship: it.isCurrent ? 'Current company' : 'Former company',
+              });
+            }
           }
         }
       }
@@ -858,5 +872,42 @@ async function getCompanyRelated(companyId: number) {
 
   return related;
 }
+
+// GET /api/search/related/:type/:id — lazy-load one entity's related items for
+// the search "Related" expander. Split out of GET /api/search so the result
+// list isn't blocked by the per-entity fan-out (the old ~20s hot path).
+router.get('/related/:type/:id', async (req: Request, res: Response) => {
+  try {
+    const { type } = req.params;
+    const id = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    if (type === 'contact') {
+      const contact = await prisma.contact.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          referredById: true,
+          additionalCompanyIds: true,
+          company: { select: { id: true, name: true } },
+        },
+      });
+      if (!contact) return res.status(404).json({ error: 'Contact not found' });
+      const related = await getContactRelated(contact);
+      return res.json({ related });
+    }
+    if (type === 'company') {
+      const company = await prisma.company.findUnique({ where: { id }, select: { id: true } });
+      if (!company) return res.status(404).json({ error: 'Company not found' });
+      const related = await getCompanyRelated(id);
+      return res.json({ related });
+    }
+    return res.status(400).json({ error: 'Invalid type' });
+  } catch (error) {
+    console.error('Related lookup error:', error);
+    res.status(500).json({ error: 'Failed to load related items' });
+  }
+});
 
 export default router;

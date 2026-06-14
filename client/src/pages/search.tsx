@@ -209,6 +209,10 @@ function ShowAllLink({ to, total, label }: { to: string; total: number; label: s
   )
 }
 
+type ContactRelated = NonNullable<ContactSearchResult['related']>
+type CompanyRelated = NonNullable<CompanySearchResult['related']>
+type RelatedData = ContactRelated | CompanyRelated
+
 function countRelated(related?: ContactSearchResult['related'] | CompanySearchResult['related']): number {
   if (!related) return 0
   let count = 0
@@ -327,14 +331,16 @@ function ContactSearchCard({
   ev,
   expanded,
   onToggle,
+  related,
+  relatedLoading,
 }: {
   contact: ContactSearchResult
   ev: EvidenceProps
   expanded: boolean
   onToggle: () => void
+  related?: ContactRelated
+  relatedLoading?: boolean
 }) {
-  const relatedCount = countRelated(contact.related)
-
   return (
     <Card className="mb-3">
       <CardContent className="p-4">
@@ -365,102 +371,110 @@ function ContactSearchCard({
             </div>
             <MatchEvidence matches={contact.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
           </div>
-          {relatedCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={onToggle} className="shrink-0">
-              {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              <span className="ml-1 text-xs">{relatedCount}</span>
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" onClick={onToggle} className="shrink-0">
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            <span className="ml-1 text-xs">Related</span>
+          </Button>
         </div>
 
-        {expanded && contact.related && (
-          <div className="mt-4 grid gap-4 md:grid-cols-2 border-t pt-4">
-            {contact.related.companies && contact.related.companies.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <Building2 className="h-3 w-3" /> Companies
-                </h4>
-                <ul className="space-y-1">
-                  {contact.related.companies.map((c) => (
-                    <li key={c.id} className="text-sm flex items-center gap-2">
-                      <Link to={`/companies/${c.id}`} className="hover:underline">
-                        {c.name}
-                      </Link>
-                      <span className="text-xs text-muted-foreground">
-                        ({c.relationship})
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+        {expanded && (
+          <div className="mt-4 border-t pt-4">
+            {relatedLoading && !related ? (
+              <div className="flex justify-center py-2">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            )}
+            ) : related && countRelated(related) > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {related.companies && related.companies.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <Building2 className="h-3 w-3" /> Companies
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.companies.map((c) => (
+                        <li key={c.id} className="text-sm flex items-center gap-2">
+                          <Link to={`/companies/${c.id}`} className="hover:underline">
+                            {c.name}
+                          </Link>
+                          <span className="text-xs text-muted-foreground">
+                            ({c.relationship})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {contact.related.contacts && contact.related.contacts.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <Users className="h-3 w-3" /> Connected People
-                </h4>
-                <ul className="space-y-1">
-                  {contact.related.contacts.map((c) => (
-                    <li key={c.id} className="text-sm flex items-center gap-2">
-                      <Link to={`/contacts/${c.id}`} className="hover:underline">
-                        {c.name}
-                      </Link>
-                      <span className="text-xs text-muted-foreground">
-                        ({c.relationship})
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                {related.contacts && related.contacts.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <Users className="h-3 w-3" /> Connected People
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.contacts.map((c) => (
+                        <li key={c.id} className="text-sm flex items-center gap-2">
+                          <Link to={`/contacts/${c.id}`} className="hover:underline">
+                            {c.name}
+                          </Link>
+                          <span className="text-xs text-muted-foreground">
+                            ({c.relationship})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {contact.related.actions && contact.related.actions.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <ListTodo className="h-3 w-3" /> Pending Actions
-                </h4>
-                <ul className="space-y-1">
-                  {contact.related.actions.filter((a) => !a.completed).map((a) => (
-                    <li key={a.id} className="text-sm">
-                      <Link to={`/actions/${a.id}`} className="hover:underline">
-                        {a.title}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                {related.actions && related.actions.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <ListTodo className="h-3 w-3" /> Pending Actions
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.actions.filter((a) => !a.completed).map((a) => (
+                        <li key={a.id} className="text-sm">
+                          <Link to={`/actions/${a.id}`} className="hover:underline">
+                            {a.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {contact.related.ideas && contact.related.ideas.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <Lightbulb className="h-3 w-3" /> Ideas
-                </h4>
-                <ul className="space-y-1">
-                  {contact.related.ideas.map((idea) => (
-                    <li key={idea.id} className="text-sm">
-                      {idea.title}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                {related.ideas && related.ideas.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <Lightbulb className="h-3 w-3" /> Ideas
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.ideas.map((idea) => (
+                        <li key={idea.id} className="text-sm">
+                          {idea.title}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {contact.related.conversations && contact.related.conversations.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <MessageSquare className="h-3 w-3" /> Recent Conversations
-                </h4>
-                <ul className="space-y-1">
-                  {contact.related.conversations.map((c) => (
-                    <li key={c.id} className="text-sm">
-                      <span className="text-muted-foreground">{c.date}</span>
-                      {c.summary && ` - ${c.summary}`}
-                    </li>
-                  ))}
-                </ul>
+                {related.conversations && related.conversations.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" /> Recent Conversations
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.conversations.map((c) => (
+                        <li key={c.id} className="text-sm">
+                          <span className="text-muted-foreground">{c.date}</span>
+                          {c.summary && ` - ${c.summary}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No related items</p>
             )}
           </div>
         )}
@@ -474,14 +488,16 @@ function CompanySearchCard({
   ev,
   expanded,
   onToggle,
+  related,
+  relatedLoading,
 }: {
   company: CompanySearchResult
   ev: EvidenceProps
   expanded: boolean
   onToggle: () => void
+  related?: CompanyRelated
+  relatedLoading?: boolean
 }) {
-  const relatedCount = countRelated(company.related)
-
   return (
     <Card className="mb-3">
       <CardContent className="p-4">
@@ -508,85 +524,93 @@ function CompanySearchCard({
             </div>
             <MatchEvidence matches={company.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
           </div>
-          {relatedCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={onToggle} className="shrink-0">
-              {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              <span className="ml-1 text-xs">{relatedCount}</span>
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" onClick={onToggle} className="shrink-0">
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            <span className="ml-1 text-xs">Related</span>
+          </Button>
         </div>
 
-        {expanded && company.related && (
-          <div className="mt-4 grid gap-4 md:grid-cols-2 border-t pt-4">
-            {company.related.contacts && company.related.contacts.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <User className="h-3 w-3" /> Contacts
-                </h4>
-                <ul className="space-y-1">
-                  {company.related.contacts.map((c) => (
-                    <li key={c.id} className="text-sm">
-                      <Link to={`/contacts/${c.id}`} className="hover:underline">
-                        {c.name}
-                      </Link>
-                      {c.title && (
-                        <span className="text-xs text-muted-foreground ml-1">
-                          - {c.title}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+        {expanded && (
+          <div className="mt-4 border-t pt-4">
+            {relatedLoading && !related ? (
+              <div className="flex justify-center py-2">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            )}
+            ) : related && countRelated(related) > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {related.contacts && related.contacts.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <User className="h-3 w-3" /> Contacts
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.contacts.map((c) => (
+                        <li key={c.id} className="text-sm">
+                          <Link to={`/contacts/${c.id}`} className="hover:underline">
+                            {c.name}
+                          </Link>
+                          {c.title && (
+                            <span className="text-xs text-muted-foreground ml-1">
+                              - {c.title}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {company.related.actions && company.related.actions.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <ListTodo className="h-3 w-3" /> Pending Actions
-                </h4>
-                <ul className="space-y-1">
-                  {company.related.actions.filter((a) => !a.completed).map((a) => (
-                    <li key={a.id} className="text-sm">
-                      <Link to={`/actions/${a.id}`} className="hover:underline">
-                        {a.title}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                {related.actions && related.actions.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <ListTodo className="h-3 w-3" /> Pending Actions
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.actions.filter((a) => !a.completed).map((a) => (
+                        <li key={a.id} className="text-sm">
+                          <Link to={`/actions/${a.id}`} className="hover:underline">
+                            {a.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {company.related.ideas && company.related.ideas.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <Lightbulb className="h-3 w-3" /> Ideas
-                </h4>
-                <ul className="space-y-1">
-                  {company.related.ideas.map((idea) => (
-                    <li key={idea.id} className="text-sm">
-                      {idea.title}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                {related.ideas && related.ideas.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <Lightbulb className="h-3 w-3" /> Ideas
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.ideas.map((idea) => (
+                        <li key={idea.id} className="text-sm">
+                          {idea.title}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {company.related.conversations && company.related.conversations.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                  <MessageSquare className="h-3 w-3" /> Discussions
-                </h4>
-                <ul className="space-y-1">
-                  {company.related.conversations.map((c) => (
-                    <li key={c.id} className="text-sm">
-                      <span className="text-muted-foreground">{c.date}</span>
-                      {' with '}{c.contactName}
-                      {c.summary && ` - ${c.summary}`}
-                    </li>
-                  ))}
-                </ul>
+                {related.conversations && related.conversations.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" /> Discussions
+                    </h4>
+                    <ul className="space-y-1">
+                      {related.conversations.map((c) => (
+                        <li key={c.id} className="text-sm">
+                          <span className="text-muted-foreground">{c.date}</span>
+                          {' with '}{c.contactName}
+                          {c.summary && ` - ${c.summary}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No related items</p>
             )}
           </div>
         )}
@@ -619,6 +643,38 @@ export function SearchPage() {
   const [expandedEntity, setExpandedEntity] = useState<string | null>(null)
   const [tab, setTab] = useState('all')
 
+  // Lazy "Related" panel: fetched per card on first expand, cached by `${type}-${id}`.
+  const [relatedCache, setRelatedCache] = useState<Record<string, RelatedData>>({})
+  const [relatedLoading, setRelatedLoading] = useState<Record<string, boolean>>({})
+  const relatedCacheRef = React.useRef<Record<string, RelatedData>>({})
+  const relatedInFlight = React.useRef<Set<string>>(new Set())
+
+  const loadRelated = useCallback(async (type: 'contact' | 'company', id: number) => {
+    const key = `${type}-${id}`
+    if (relatedCacheRef.current[key] || relatedInFlight.current.has(key)) return
+    relatedInFlight.current.add(key)
+    setRelatedLoading((prev) => ({ ...prev, [key]: true }))
+    try {
+      const data = await api.get<{ related: RelatedData }>(`/search/related/${type}/${id}`)
+      relatedCacheRef.current[key] = data.related
+      setRelatedCache((prev) => ({ ...prev, [key]: data.related }))
+    } catch {
+      // leave uncached so a later collapse/expand retries
+    } finally {
+      relatedInFlight.current.delete(key)
+      setRelatedLoading((prev) => ({ ...prev, [key]: false }))
+    }
+  }, [])
+
+  const toggleEntity = useCallback((type: 'contact' | 'company', id: number) => {
+    const key = `${type}-${id}`
+    setExpandedEntity((cur) => {
+      const next = cur === key ? null : key
+      if (next) loadRelated(type, id)
+      return next
+    })
+  }, [loadRelated])
+
   const debouncedQuery = useDebounce(query, 300)
   const allScopesOn = scopes.length === ALL_SCOPES.length
 
@@ -635,9 +691,10 @@ export function SearchPage() {
     const params = new URLSearchParams({
       q: searchTerm,
       limit: '20',
-      includeRelated: 'true',
       sort: sortMode,
     })
+    // Related entities are now lazy-loaded per card via /search/related/:type/:id
+    // (see loadRelated) — keeping them off the hot path is the ~20s search fix.
     if (scopeList.length < ALL_SCOPES.length) params.set('scopes', scopeList.join(','))
     if (cs) params.set('caseSensitive', 'true')
     const requestKey = params.toString()
@@ -852,13 +909,9 @@ export function SearchPage() {
                     contact={contact}
                     ev={ev}
                     expanded={expandedEntity === `contact-${contact.id}`}
-                    onToggle={() =>
-                      setExpandedEntity(
-                        expandedEntity === `contact-${contact.id}`
-                          ? null
-                          : `contact-${contact.id}`
-                      )
-                    }
+                    related={relatedCache[`contact-${contact.id}`] as ContactRelated}
+                    relatedLoading={!!relatedLoading[`contact-${contact.id}`]}
+                    onToggle={() => toggleEntity('contact', contact.id)}
                   />
                 ))}
                 {results.contacts.length > 5 && (
@@ -880,13 +933,9 @@ export function SearchPage() {
                     company={company}
                     ev={ev}
                     expanded={expandedEntity === `company-${company.id}`}
-                    onToggle={() =>
-                      setExpandedEntity(
-                        expandedEntity === `company-${company.id}`
-                          ? null
-                          : `company-${company.id}`
-                      )
-                    }
+                    related={relatedCache[`company-${company.id}`] as CompanyRelated}
+                    relatedLoading={!!relatedLoading[`company-${company.id}`]}
+                    onToggle={() => toggleEntity('company', company.id)}
                   />
                 ))}
                 {results.companies.length > 5 && (
@@ -953,13 +1002,9 @@ export function SearchPage() {
                 contact={contact}
                 ev={ev}
                 expanded={expandedEntity === `contact-${contact.id}`}
-                onToggle={() =>
-                  setExpandedEntity(
-                    expandedEntity === `contact-${contact.id}`
-                      ? null
-                      : `contact-${contact.id}`
-                  )
-                }
+                related={relatedCache[`contact-${contact.id}`] as ContactRelated}
+                relatedLoading={!!relatedLoading[`contact-${contact.id}`]}
+                onToggle={() => toggleEntity('contact', contact.id)}
               />
             ))}
             {totals && totals.contacts > results.contacts.length && (
@@ -978,13 +1023,9 @@ export function SearchPage() {
                 company={company}
                 ev={ev}
                 expanded={expandedEntity === `company-${company.id}`}
-                onToggle={() =>
-                  setExpandedEntity(
-                    expandedEntity === `company-${company.id}`
-                      ? null
-                      : `company-${company.id}`
-                  )
-                }
+                related={relatedCache[`company-${company.id}`] as CompanyRelated}
+                relatedLoading={!!relatedLoading[`company-${company.id}`]}
+                onToggle={() => toggleEntity('company', company.id)}
               />
             ))}
             {totals && totals.companies > results.companies.length && (

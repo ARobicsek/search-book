@@ -40,6 +40,14 @@ per chunk, each `npm run prepush` + `tsc -b` green and smoke-tested desktop + 39
   spot-checks resolve, **15/15 sampled Blob URLs reachable** (of 69), exit 0; prod untouched
   (`--forbid-url` = real prod URL). Owner deleted the scratch DB afterward. Runbook (now marked
   EXECUTED): **`.planning/RESTORE-TEST-RUNBOOK.md`**.
+- **Backup completeness + usability proof** (`3df6184`, this session). Closed the two questions the
+  restore test left implicit. **(a)** Read-only `count(*)` diff of the backup vs **live prod**
+  (`server/scripts/prod-count-diff.mjs`): **all 27 tables identical, delta 0, 2,604 rows** — the
+  backup is an exact copy of prod. **(b)** Restored the backup into local SQLite and **booted the
+  app on it** (`server/scripts/app-smoke.mjs` + rendered Dashboard/Contacts/Analytics/contact-detail):
+  every heavy endpoint 200, all charts populated. Both scripts are read-only/local-only and kept as
+  reusable tools. (The expired prod token in `server/.env` was *not* updated; the owner declined to
+  rotate the read-only token used for the diff — acceptable, read-only + password-gated app.)
 
 ### What's Next
 
@@ -77,8 +85,9 @@ PASSED this session). No outstanding owner-gated work remains from that plan.
 
 ### Working branch
 `main`, clean and fully pushed. Prior session: `80911ff` (fav orgs), `85ab6ec` (calendar),
-`c5c18b5` (backup audit), `7d67dc5` (restore harness). This session: executed the real restore
-test (PASSED) — docs-only commit recording the result. All live on Vercel.
+`c5c18b5` (backup audit), `7d67dc5` (restore harness). This session: `c47eff6` (record restore-test
+PASSED) + `3df6184` (prove backup == prod via count diff + app-boot verification, w/ reusable
+scripts). All live on Vercel.
 
 ---
 

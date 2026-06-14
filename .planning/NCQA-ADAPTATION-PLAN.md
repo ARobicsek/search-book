@@ -1,7 +1,7 @@
 # SearchBook — NCQA Adaptation Plan
 
 **Created:** 2026-06-12
-**Status:** **D1–D4 resolved (2026-06-12)** — Phase 1 is fully specified and ready to build (note: Tasks 1.1–1.4 need Turso access for data UPDATEs/DDL, so the user must be at their desktop or supply creds). Phase 2 redesigned per D4: **no Groups feature** — recurring meetings are identified by repeated, autocompleted **titles** ("meeting series"). Remaining open decisions: D5–D9.
+**Status:** **Phases 1 & 2 COMPLETE + deployed (2026-06-12).** Phase 1 (retheme/quick wins, Tasks 1.1–1.4) and Phase 2 (meetings overhaul, Tasks 2.1–2.5) are all ✅ shipped to `main` with Turso DDL applied. **Next unstarted work is Phase 3+** (stakeholder intelligence, AI ingest, Outlook briefing), all gated on the remaining open decisions **D5–D9** — don't push on those until the owner raises them. D1–D4 were resolved 2026-06-12; per D4 there is **no Groups feature** (recurring meetings = autocompleted **titles** / "meeting series").
 **Why this exists:** The owner is starting as Chief Medical Officer of NCQA. SearchBook moves from job-search networking CRM to an **executive stakeholder-management system**: mapping who's aligned with two agendas (modernizing healthcare quality measurement; bringing measurement into the AI age), tracking how each person can help (speaking, publishing, funding, amplification, collaboration, advising, intros), and surviving a heavy meeting load with reliable capture and compound follow-ups.
 
 This document is the **plan of record**. Any AI agent (Claude Code or Gemini/Antigravity) picking up work starts here after reading `CLAUDE.md` and `.planning/NEXT-SESSION-PROMPT.md`.

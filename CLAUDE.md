@@ -98,7 +98,7 @@ api/index.ts      # Vercel serverless entry point
 
 ## Current Status
 
-**The app is being adapted for the owner's new role as Chief Medical Officer of NCQA** — from job-search CRM to executive stakeholder-management system. The active **plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`** (taxonomy retheme, multi-person/multi-subject meetings with Groups, stakeholder stance/leverage tracking, AI ingest of MS Copilot meeting recaps, Outlook-calendar daily briefing). Phase 1 is next; decisions D1–D9 at the top of that plan gate several tasks.
+**The app is being adapted for the owner's new role as Chief Medical Officer of NCQA** — from job-search CRM to executive stakeholder-management system. The active **plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`** (taxonomy retheme, multi-person/multi-subject meetings via autocompleted title "series" — **no Groups**, per D4 — stakeholder stance/leverage tracking, AI ingest of MS Copilot meeting recaps, Outlook-calendar daily briefing). **Phases 1 & 2 are complete and deployed (2026-06-12); Phase 3+ is next**, gated on decisions D5–D9 (don't push on those until the owner raises them).
 
 Historical: ROADMAP Phases 1–7 + 7.5 (security/backup hardening) + Production Hardening Plan Phases 0–2 are complete. Old ROADMAP Phase 8 (Google Drive document search) is superseded by the adaptation plan's Task 6.2 (semantic search over meeting notes). Standing follow-up: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel to activate error tracking.
 

@@ -21,7 +21,7 @@ engineering items (company near-duplicate LinkedIn variants; long-lived PrismaCl
 | A1 | Formatting (Task 1) applies to the **description** fields of Actions & Ideas only (titles stay plain). | Yes — descriptions only |
 | B1 | Progressive disclosure (Task 2) applies to **both** create *and* edit Action screens, or create only? | Both, for consistency |
 | C1 | **"Who owes it" data model (Task 3)** — reuse the `direction` enum vs. add a real owers list (see Task 3). | Additive columns: `owedByMe` bool + `owerContactIds` JSON, keep `direction` *derived* for the dashboard |
-| D1 | Company dedup (Task 4): owner provides **2–3 real example company pairs** that *should* be flagged as dupes but currently aren't. | Needed to pin the variant patterns |
+| D1 | Company dedup (Task 4): real example pairs to tune against. | ✅ **RESOLVED** — owner supplied 6 pairs (see Task 4). |
 
 ## Suggested ordering
 1 (formatting — tiny, isolated) → 2 (disclosure — UI only) → 3 (who-owes-it — schema-touching, highest
@@ -90,12 +90,36 @@ normalizes via [normalizeCompanyNameForDedupe](../server/src/routes/duplicates.t
 suffixes (`Inc/LLC/Corp/Ltd/Co/L.P.`) then Levenshtein > 0.85. Misses extra-token variants ("CVS" vs
 "CVS Health", "Providence" vs "Providence Health & Services") and LinkedIn cruft (" | LinkedIn", region/size
 descriptors) that push names below 0.85.
-**Approach (after D1 examples):** extend normalization (strip LinkedIn descriptors/trailing cruft) and/or add a
-**token-subset** rule like the contact dedup already uses
-([duplicates.ts:66-74](../server/src/routes/duplicates.ts#L66)), so "X" ⊆ "X Health" matches. Tune against the
-owner's real example pairs; keep the merge flow unchanged.
+**Owner's real example pairs (the test set, 2026-06-14)** — each should surface on the Duplicates page:
+| # | Pair | Pattern it exercises |
+|---|------|----------------------|
+| 1 | Arcadia / Arcadia **Institute** | appended descriptor token → token-subset |
+| 2 | Centers for Medicare **&** Medicaid **Services** / Centers for Medicare **and** Medicaid | `&`↔`and` + dropped trailing "Services" |
+| 3 | Boston Children's Hospital / Boston Children's Hospital **CHIP** | appended acronym + apostrophe → token-subset |
+| 4 | Dana **Farber** Cancer Institute / Dana**-**Farber Cancer Institute | hyphen↔space (punctuation only) |
+| 5 | Intermountain **Health** / Intermountain **Healthcare** | descriptor word variant ("Healthcare"→"Health"); ~0.83 sim today, just under 0.85 |
+| 6 | Baylor Scott & White **Health** / Baylor Scott & White **Research Institute** | shared 4-token core, **divergent** tails ⚠ |
+
+**Rules these imply (recommended, in order of safety):**
+1. **Punctuation/symbol normalization** in `normalizeCompanyNameForDedupe`: lowercase, `&`→`and`, hyphen→space,
+   strip apostrophes/diacritics, collapse whitespace. Catches #2 (`&`/`and`) and #4 (hyphen).
+2. **Descriptor normalization / stripping**: fold a curated descriptor set (`Healthcare`→`Health`; strip trailing
+   `Institute / Research / Services / System(s) / Center(s) / Hospital / Group / Foundation` + the existing legal
+   suffixes) so the *core* name compares. Catches #5, and helps #1/#2/#3.
+3. **Token-subset match** ported from the contact path ([duplicates.ts:66-74](../server/src/routes/duplicates.ts#L66)):
+   if one name's tokens ⊆ the other's, flag it. Catches #1 and #3 (and, in your data, "University of Washington" ⊆
+   "University of Washington, Seattle"). **Safe** — it does *not* match two names with divergent tails.
+**⚠ The trap (#6):** Baylor "Health" vs "Research Institute" share a core but have *different* tails, so token-subset
+won't catch it. The only thing that would is a looser **shared-prefix** rule — but that *also* fires on legitimately
+**distinct** same-parent entities ("University of California, San Francisco" vs "…, Berkeley"; "Mass General Hospital"
+vs "Mass General Brigham"), flooding the page with false positives. **Recommendation:** ship rules 1–3 (catch #1–#5)
+and treat #6 as a *separate, lower-confidence* bucket (or out of scope for v1) rather than lowering the global
+threshold. Confirm with owner whether the extra recall on #6 is worth the false-positive risk.
+**First step next session:** run the *current* `/api/duplicates/companies` against prod data to see which of #1–#6
+already match vs. miss — then add only the rules needed. The page is review-then-merge, so favor **recall**, but keep
+#6-style shared-prefix matches clearly ranked as low-confidence.
 **Files:** [server/src/routes/duplicates.ts](../server/src/routes/duplicates.ts) (isolated; no schema change).
-**STATUS:** Not started. **Blocked on D1** (example pairs).
+**STATUS:** Not started. D1 resolved (examples above).
 
 ## Task 5 — Long-lived PrismaClient (retire per-request `resetPrisma()`)
 **Ask:** stop rebuilding a `PrismaClient` + libsql adapter on every request in production.

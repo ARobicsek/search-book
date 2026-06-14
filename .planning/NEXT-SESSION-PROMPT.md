@@ -59,8 +59,9 @@ proven == prod). The owner has queued a new batch for next session.
    the Action form (Type/Priority/Related-To behind carets), (3) **rework "Who owes it"** into a
    people-list (default *me*, removable, +0…N contacts, favorites quick-add, collapsed) — **schema-
    touching, needs Turso DDL**, (4) company near-dup LinkedIn variants, (5) long-lived PrismaClient.
-   **Confirm decisions A1/B1/C1/D1 at the top of that plan first** (D1 = owner supplies example
-   company pairs). Suggested order + file pointers are in the plan.
+   **Confirm decisions A1/B1/C1 at the top of that plan first** (D1 is already resolved — 6 real
+   example company pairs + the normalization rules they imply are in Task 4). Suggested order + file
+   pointers are in the plan.
 2. **After that batch ships, the standing plan of record returns to the NCQA adaptation plan**
    (`.planning/NCQA-ADAPTATION-PLAN.md`, Phase 3+) — gated on decisions D5–D9. **Don't push on
    D5–D9 until the owner raises them.**
@@ -111,10 +112,11 @@ scripts). All live on Vercel.
 > LinkedIn-style name variants, (5) retire per-request `resetPrisma()` for a long-lived PrismaClient
 > (prod-verify before declaring done; consider its own session).
 >
-> **Before building, confirm decisions A1/B1/C1/D1** at the top of the batch plan — most importantly
-> ask the owner for **2–3 real company pairs** that should be flagged as duplicates but aren't (D1),
-> and confirm the "Who owes it" model (C1: recommended = additive `owedByMe` bool + `owerContactIds`
-> JSON, with `direction` kept as a derived mirror so the dashboard/analytics are unaffected).
+> **Before building, confirm decisions A1/B1/C1** at the top of the batch plan — most importantly the
+> "Who owes it" model (C1: recommended = additive `owedByMe` bool + `owerContactIds` JSON, with
+> `direction` kept as a derived mirror so the dashboard/analytics are unaffected). D1 is already
+> resolved: Task 4 lists 6 real example company pairs + the normalization rules they imply (and the
+> #6 "Baylor" shared-prefix false-positive trap to avoid).
 >
 > One atomic commit per task; `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before each
 > push. After the batch ships, the standing plan of record returns to the **NCQA adaptation plan**

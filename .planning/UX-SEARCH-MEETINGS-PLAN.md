@@ -36,6 +36,7 @@ is the active build target first.)
 | 10 | Add `Consultant` as an Ecosystem | A1 |
 | 11 | Mobile: one tap to clear Search | A3 |
 | 12 | LinkedIn import on mobile / easier pull | **dropped (D-B)** |
+| 13 | Meetings "Search text" should highlight matches (like main Search) — added 2026-06-14 | B4 |
 
 ## Key code facts (from the planning read)
 - **Two meeting editors today:** app-wide Quick Log ([client/src/components/quick-log-dialog.tsx](client/src/components/quick-log-dialog.tsx), saves only on button — *no autosave*) vs. the contact-page inline `ConversationsTab` ([client/src/pages/contacts/contact-detail.tsx](client/src/pages/contacts/contact-detail.tsx), which autosaves drafts via [client/src/hooks/use-auto-save.ts](client/src/hooks/use-auto-save.ts)). This split is the root of #3/#4/#7.
@@ -94,6 +95,14 @@ is the active build target first.)
 - **Tradeoff (accepted):** the per-card related **count badge** goes away (it required fetching related up front) → plain "Related ▸" expander, count after open; expanding incurs one brief single-entity fetch. *Not* doing FTS (text scan isn't the bottleneck at this scale) or result caching (stale-data risk, single user). Revisit FTS only when `LIKE` scans themselves dominate the `[TIMING]` line.
 - Expected: hot-path ~150 queries → ~15, parallel → ~1–2s. Verify via the existing `[TIMING] search …` log line.
 - **STATUS:** Done (2026-06-13, commit `3c7ce1c`). Server: `includeRelated` now defaults to **false**; added `GET /search/related/:type/:id` (reuses `getContactRelated`/`getCompanyRelated`); the per-term company lookups and the 5 entity `findMany`s now run via `Promise.all` (the 5 counts already did); the `additionalCompanyIds` per-company `findUnique` loop collapsed into one `findMany`. Client: stops sending `includeRelated`; the count badge → a plain **"Related"** expander that lazy-fetches on first open and caches by `${type}-${id}` (spinner while loading, "No related items" when empty); refs (`relatedCacheRef`/`relatedInFlight`) guard against duplicate fetches. **Local [TIMING]** `q="health"` (19 contacts + 20 companies): warm **91ms → 31ms** purely from dropping the fan-out, *identical* result counts — local SQLite has no network latency so it can't reproduce the ~20s; the real win is **~200 round-trips → ~12** which on Turso is the ~20s→~1–2s drop (**confirm in prod** — see carry-over #2). Verified desktop + 390px: results render, lazy Related panel populates on expand (Ed Stout → Diversified Search Group / Jacob Kupietzky / 1 conversation), no console errors. `npm run prepush` **and** strict client build (`tsc -b && vite build`) green.
+
+**B4 — Highlight matching text in Meetings "Search text" results (owner ask, 2026-06-14).** Commit: `feat(meetings): highlight free-text matches in results`
+- Goal: when the Meetings `q` filter is active, wrap matches in `<mark>` in the result cards, mirroring the main Search page's highlighting.
+- **Extract `HighlightedText`** out of [client/src/pages/search.tsx](client/src/pages/search.tsx) into a shared component (e.g. `client/src/components/highlighted-text.tsx`) and import it in **both** search.tsx and [client/src/pages/meetings.tsx](client/src/pages/meetings.tsx) — don't duplicate the merge-overlapping-ranges logic. (Search keeps using it unchanged; this is a pure move + re-import.)
+- In meetings.tsx, highlight the **plain-text** fields when `qFilter` is non-empty: the display name (title / contact / company / attendees fallback), `summary`, `attendeesDescription`, `nextSteps`, and the participant / org / tag badge names. Pass `terms={[qFilter]}` and `caseSensitive={false}` — the Meetings `q` is a single trimmed term, case-insensitive, no quotes/multi-term parsing (so don't reuse search's `parseTerms`).
+- **Markdown caveat (decide deliberately):** `notes` and prep notes render via `ReactMarkdown` (`prep-note-markdown`). Do **not** inject `<mark>` into the raw markdown string (ReactMarkdown will escape/format it). Recommended default = **leave the markdown body un-highlighted** (matches the main Search, which highlights snippets/plain fields, not full markdown). Only if the owner wants notes highlighted too, do it via a `rehype` plugin over the rendered tree — heavier, separate follow-up.
+- Verify desktop + 390px: a `q` search highlights titles/summaries/names; markdown notes still render normally; clearing `q` removes all highlights.
+- **STATUS:** Not started.
 
 ---
 

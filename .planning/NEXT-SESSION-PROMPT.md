@@ -41,9 +41,25 @@ unification. **Action for the owner:** try the live Search + Meetings search; co
 `[TIMING] search …` line for a broad query (e.g. "analytics"/"health") dropped from ~20s toward
 ~1–2s (this is also carry-over #2). Resume Phase C only after that thumbs-up.
 
-### What's Next — Phase C of `.planning/UX-SEARCH-MEETINGS-PLAN.md` (biggest, highest-risk)
+### What's Next — start with B4 (owner ask), then Phase C
 
-Unify on the **Quick Log** dialog as the single meeting editor:
+**B4 — Highlight matches in the Meetings "Search text" results** (owner ask, 2026-06-14;
+plan §Phase B → B4). Commit: `feat(meetings): highlight free-text matches in results`.
+Mirror the main Search highlighting in the Meetings list cards:
+- **Extract `HighlightedText`** from `client/src/pages/search.tsx` into a shared component
+  (`client/src/components/highlighted-text.tsx`) and import it in both pages (don't duplicate
+  the merge-ranges logic; Search keeps using it unchanged — pure move + re-import).
+- In `client/src/pages/meetings.tsx`, when `qFilter` is set, highlight the **plain-text** fields
+  (display name, `summary`, `attendeesDescription`, `nextSteps`, participant/org/tag names) with
+  `terms={[qFilter]}` `caseSensitive={false}` (Meetings `q` = single trimmed, case-insensitive
+  term — no quotes/multi-term; don't reuse `parseTerms`).
+- **Markdown caveat:** `notes`/prep notes render via `ReactMarkdown` — do NOT inject `<mark>` into
+  the raw markdown. Default = leave the markdown body un-highlighted (matches main Search). Only
+  highlight notes if the owner asks, via a `rehype` plugin (separate, heavier follow-up).
+- Verify desktop + 390px; clearing `q` removes highlights.
+
+Then **Phase C of `.planning/UX-SEARCH-MEETINGS-PLAN.md` (biggest, highest-risk)** —
+unify on the **Quick Log** dialog as the single meeting editor:
 1. **C1a — Quick Log: autosave + drop the 1:1 anchor + participant-first display**
    (`feat(meetings): Quick Log autosave + drop 1:1 anchor + participant-first display`). Drop the
    "Contact (1:1 anchor)" Combobox (stop sending `contactId` for new + edit → legacy anchors
@@ -96,10 +112,13 @@ Phase C deletes code → watch for unused-var **build** failures (`noUnusedLocal
 ### Suggested kickoff prompt for the next session
 
 > Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md` and the plan of record
-> `.planning/UX-SEARCH-MEETINGS-PLAN.md`. Phases A and B are shipped and live. Confirm the owner is
-> happy with search behavior (incl. the prod `[TIMING]` perf check), then implement **Phase C**
-> top-to-bottom: C1a (Quick Log autosave + drop 1:1 anchor + participant-first display) → C1b (retire
-> the contact-page inline editor, seed the participant). One atomic commit per chunk; before each push
-> run `npm run prepush` **and** a client build, and smoke-test at desktop + 390px. Update each task's
-> STATUS line in the plan doc. No schema changes are expected — flag immediately if you think one is
-> needed. Watch for unused-var build failures from the Phase C deletions.
+> `.planning/UX-SEARCH-MEETINGS-PLAN.md`. Phases A and B are shipped and live. **Start with B4**
+> (plan §Phase B → B4): highlight matches in the Meetings "Search text" results — extract
+> `HighlightedText` from `search.tsx` into a shared component, reuse it in `meetings.tsx` for the
+> plain-text fields (single-term, case-insensitive), leaving the `ReactMarkdown` notes body
+> un-highlighted (see the markdown caveat). Then implement **Phase C** top-to-bottom: C1a (Quick Log
+> autosave + drop 1:1 anchor + participant-first display) → C1b (retire the contact-page inline editor,
+> seed the participant). One atomic commit per chunk; before each push run `npm run prepush` **and** a
+> client build, and smoke-test at desktop + 390px. Update each task's STATUS line in the plan doc. No
+> schema changes are expected — flag immediately if you think one is needed. Watch for unused-var build
+> failures from the Phase C deletions.

@@ -1,5 +1,11 @@
 # Prod → Scratch Restore Test — Runbook (Item 5)
 
+> ✅ **EXECUTED 2026-06-14 — PASSED.** Real prod backup (`searchbook-backup-2026-06-14T18-36-42.json`)
+> restored into a scratch Turso DB (`searchbook-scratch`) via Option A: **27/27 tables match exactly
+> (2,604 rows)**, relationship spot-checks resolve, **15/15 sampled Blob URLs reachable** (of 69),
+> exit 0. Prod untouched (`--forbid-url` = real prod URL). Scratch DB deleted afterward. This runbook
+> is retained for re-running the test against future backups.
+
 **Goal:** prove a production backup can be **fully** restored — every table, relationship, and
 binary — into a *throwaway* database, **without ever touching live data.**
 **Decision (owner):** restore into a **scratch Turso DB** (closest to prod) — not local SQLite.

@@ -140,12 +140,13 @@ data (11 binaries fetched, Blob CORS OK).
   but Turso-specific quirks won't surface). Recommend a scratch Turso DB for fidelity.
 
 **Files:** Settings backup/restore UI, [client/src/lib/backup.ts](client/src/lib/backup.ts). Mostly procedure + verification; minimal/no code.
-**STATUS:** 🟡 HARNESS DONE, EXECUTION OWNER-GATED (`7d67dc5`). Decision (owner): **scratch Turso DB**. Built
+**STATUS:** ✅ DONE — real prod→scratch run PASSED (2026-06-14). Decision (owner): **scratch Turso DB**. Built
 `server/scripts/restore-test.mjs` (schema bootstrap + FK-ordered restore mirroring `importViaTurso` + verify
 counts/relationships/binaries; prod-safe: `--confirm`, `--forbid-url`, target-only writes) + runbook
-[RESTORE-TEST-RUNBOOK.md](RESTORE-TEST-RUNBOOK.md). **Dry-run validated locally** (file→file: 27/27 tables,
-544 rows, 11/11 binaries). **Owner action to finish:** create a scratch Turso DB (dashboard), download the prod
-backup (Settings → Create Backup), then run the Option-A command.
+[RESTORE-TEST-RUNBOOK.md](RESTORE-TEST-RUNBOOK.md). **Real run** against a scratch Turso DB
+(`searchbook-scratch`) with the `2026-06-14T18-36-42` prod backup: **27/27 tables match exactly (2,604 rows)**,
+relationship spot-checks resolve, **15/15 sampled Blob URLs reachable** (of 69), exit 0. Prod never touched
+(`--forbid-url` = real prod URL; target was the `-scratch-` DB). Scratch DB deleted by owner afterward.
 
 ---
 

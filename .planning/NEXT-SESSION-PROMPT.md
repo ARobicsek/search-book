@@ -31,31 +31,30 @@ per chunk, each `npm run prepush` + `tsc -b` green and smoke-tested desktop + 39
   Deliverable: **`.planning/BACKUP-COVERAGE-AUDIT.md`** (model × path matrix + binary classes).
   Verified: collector unit test (3 classes + URL dedup) + real data (11 binaries fetched, **Blob
   CORS from browser now confirmed working**).
-- **Item 5 — Restore test** (`7d67dc5`). **Harness built + dry-run validated; the real prod run is
-  the only owner-gated piece.** `server/scripts/restore-test.mjs` bootstraps a scratch schema (DDL
-  replay), restores a backup JSON FK-ordered (mirrors the production `importViaTurso` path), and
-  verifies per-table counts + relationships + binary reachability. Prod-safe: requires `--confirm`,
-  refuses if `--target == --forbid-url`, only writes the target. **Local dry-run (file→file):
-  27/27 tables matched, 544 rows, 11/11 binaries reachable.** Runbook:
-  **`.planning/RESTORE-TEST-RUNBOOK.md`**.
+- **Item 5 — Restore test** (`7d67dc5` harness; executed this session). **✅ DONE — real prod→scratch
+  run PASSED.** `server/scripts/restore-test.mjs` bootstraps a scratch schema (DDL replay), restores
+  a backup JSON FK-ordered (mirrors the production `importViaTurso` path), and verifies per-table
+  counts + relationships + binary reachability. Prod-safe: requires `--confirm`, refuses if
+  `--target == --forbid-url`, only writes the target. **Real run** (owner supplied scratch Turso creds
+  + the `2026-06-14T18-36-42` prod backup): **27/27 tables match exactly (2,604 rows)**, relationship
+  spot-checks resolve, **15/15 sampled Blob URLs reachable** (of 69), exit 0; prod untouched
+  (`--forbid-url` = real prod URL). Owner deleted the scratch DB afterward. Runbook (now marked
+  EXECUTED): **`.planning/RESTORE-TEST-RUNBOOK.md`**.
 
 ### What's Next
 
-1. **[OWNER ACTION] Finish Item 5 (the real restore test).** Everything is built; it just needs a
-   throwaway target + prod data, which only the owner can provide:
-   - Create a **scratch Turso DB** via the web dashboard (CLI needs WSL). Grab its URL + auth token.
-   - Download the prod backup: live app → Settings → **Create Backup** (the `*.json` + `searchbook-files.zip`).
-   - Run the Option-A command in `.planning/RESTORE-TEST-RUNBOOK.md` (pass `--forbid-url <prod url>`),
-     then delete the scratch DB. An agent can drive this once the owner supplies the scratch creds.
-2. **Standing plan of record returns to the NCQA adaptation plan**
+The owner's 5-item follow-up list is now **fully closed** (Item 5's real restore test executed +
+PASSED this session). No outstanding owner-gated work remains from that plan.
+
+1. **Standing plan of record returns to the NCQA adaptation plan**
    (`.planning/NCQA-ADAPTATION-PLAN.md`) — its tasks are gated on decisions D1–D9 and several are
-   schema-touching. **Don't push on D5–D9 until the owner raises them.**
+   schema-touching. **Don't push on D5–D9 until the owner raises them.** Confirm scope before building.
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. **Prod search perf** — owner signed off on live Phase B (B3); treat as closed unless it regresses.
 3. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until raised.
-4. ~~Restore into scratch Turso DB~~ → harness + runbook now ready (Item 5 above); just needs the owner run.
+4. ~~Restore into scratch Turso DB~~ → **DONE** (Item 5 executed + PASSED 2026-06-14; runbook marked EXECUTED).
 5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
 6. Company near-duplicate scan (LinkedIn-variant suffixes).
 7. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
@@ -77,17 +76,17 @@ per chunk, each `npm run prepush` + `tsc -b` green and smoke-tested desktop + 39
   `typecheck` script misses — run it (not just `npm run prepush`) before every push.
 
 ### Working branch
-`main`, clean and fully pushed. This session: `80911ff` (fav orgs), `85ab6ec` (calendar),
-`c5c18b5` (backup audit), `7d67dc5` (restore harness), + this handoff. All live on Vercel.
+`main`, clean and fully pushed. Prior session: `80911ff` (fav orgs), `85ab6ec` (calendar),
+`c5c18b5` (backup audit), `7d67dc5` (restore harness). This session: executed the real restore
+test (PASSED) — docs-only commit recording the result. All live on Vercel.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
 > Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md`. The owner's 5-item
-> follow-up list (calendar, favorite orgs, backup audit, restore test) is shipped. If the owner
-> wants to finish the **restore test**, get scratch Turso creds + a prod backup and follow
-> `.planning/RESTORE-TEST-RUNBOOK.md`. Otherwise the standing plan of record is the **NCQA
-> adaptation plan** (`.planning/NCQA-ADAPTATION-PLAN.md`) — confirm scope/decisions D1–D9 with the
-> owner before building; don't push on D5–D9 until they raise them. One atomic commit per chunk;
-> `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before each push.
+> follow-up list (calendar, favorite orgs, backup audit, restore test) is **fully closed** — the
+> real restore test executed + PASSED (27/27 tables, prod untouched). The standing plan of record
+> is now the **NCQA adaptation plan** (`.planning/NCQA-ADAPTATION-PLAN.md`) — confirm scope/decisions
+> D1–D9 with the owner before building; don't push on D5–D9 until they raise them. One atomic commit
+> per chunk; `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before each push.

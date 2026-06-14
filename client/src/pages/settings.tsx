@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { exportViaTurso, importViaTurso, type BackupProgress } from '@/lib/backup'
-import { buildPhotosZip } from '@/lib/photo-backup'
+import { buildBinariesZip } from '@/lib/photo-backup'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -122,25 +122,26 @@ export function SettingsPage() {
       toast.success('Backup downloaded')
       setShowSaveReminder(true)
 
-      // Bundle the actual photo files into a single ZIP you keep locally and
-      // overwrite each time (kept out of the daily cloud backup on purpose).
+      // Bundle the actual binary files (photos, meeting attachments, pasted
+      // screenshots) into a single ZIP you keep locally and overwrite each time
+      // (kept out of the daily cloud backup on purpose).
       setBackupProgress(null)
       setPhotoProgress({ done: 0, total: 0 })
-      const photos = await buildPhotosZip(data, (done, total) =>
+      const binaries = await buildBinariesZip(data, (done, total) =>
         setPhotoProgress({ done, total }),
       )
-      if (photos.zip) {
+      if (binaries.zip) {
         // cast: fflate returns Uint8Array<ArrayBufferLike>, which the DOM lib's
         // BlobPart type (ArrayBufferView<ArrayBuffer>) rejects; safe at runtime.
         downloadBlob(
-          new Blob([photos.zip as unknown as BlobPart], { type: 'application/zip' }),
-          'searchbook-photos.zip',
+          new Blob([binaries.zip as unknown as BlobPart], { type: 'application/zip' }),
+          'searchbook-files.zip',
         )
-        const mb = (photos.bytes / 1_048_576).toFixed(1)
-        const skipped = photos.skipped ? `, ${photos.skipped} skipped` : ''
-        toast.success(`Photos backed up: ${photos.saved} files (${mb} MB)${skipped}`)
+        const mb = (binaries.bytes / 1_048_576).toFixed(1)
+        const skipped = binaries.skipped ? `, ${binaries.skipped} skipped` : ''
+        toast.success(`Files backed up: ${binaries.saved} files (${mb} MB)${skipped}`)
       } else {
-        toast.message('No photos to back up')
+        toast.message('No files to back up')
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Backup failed')
@@ -209,8 +210,9 @@ export function SettingsPage() {
           <CardTitle>Create Backup</CardTitle>
           <CardDescription>
             Downloads a full backup of your database as JSON, plus a{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">searchbook-photos.zip</code>{' '}
-            of the actual photo files. Keep both locally and overwrite the ZIP each time.
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">searchbook-files.zip</code>{' '}
+            of the actual binary files (photos, meeting attachments, and pasted
+            screenshots). Keep both locally and overwrite the ZIP each time.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -219,7 +221,7 @@ export function SettingsPage() {
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 {photoProgress
-                  ? `Backing up photos (${photoProgress.done}/${photoProgress.total})...`
+                  ? `Backing up files (${photoProgress.done}/${photoProgress.total})...`
                   : formatProgress(backupProgress, 'Starting backup...')}
               </>
             ) : (

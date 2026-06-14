@@ -130,8 +130,9 @@ router.get('/export', async (_req: Request, res: Response) => {
 // GET /api/backup/cron — automated daily backup to Vercel Blob.
 // EXEMPT from the global password gate (server/src/app.ts), so it self-authenticates:
 // accepts either Vercel cron's `Authorization: Bearer ${CRON_SECRET}` OR the app password
-// header (for the "Back up now" button). Writes the full 24-table export to Blob and prunes
-// to the newest BACKUP_RETENTION files.
+// header (for the "Back up now" button). Writes the full DB export (all tables) to Blob and
+// prunes to the newest BACKUP_RETENTION files. (Binaries are excluded by design — see the
+// manual ZIP in Settings for photos/attachments.)
 router.get('/cron', async (req: Request, res: Response) => {
   const cronSecret = process.env.CRON_SECRET;
   const appPassword = process.env.APP_PASSWORD;
@@ -153,6 +154,8 @@ router.get('/cron', async (req: Request, res: Response) => {
     const { put, list, del } = await import('@vercel/blob');
     const data = await buildExport();
     const json = JSON.stringify(data, bigintReplacer);
+    // Derive the table count from the export so it can never go stale.
+    const tableCount = Object.keys(data).filter((k) => k !== '_meta').length;
 
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const name = `backups/searchbook-backup-${stamp}.json`;
@@ -166,7 +169,7 @@ router.get('/cron', async (req: Request, res: Response) => {
     const toDelete = sorted.slice(BACKUP_RETENTION);
     if (toDelete.length) await del(toDelete.map((b) => b.url));
 
-    res.json({ ok: true, name, tables: 24, pruned: toDelete.length });
+    res.json({ ok: true, name, tables: tableCount, pruned: toDelete.length });
   } catch (error: any) {
     console.error('Cron backup error:', error?.message || error);
     res.status(500).json({ error: 'Failed to write backup to Blob' });
@@ -248,10 +251,13 @@ router.post('/', async (_req: Request, res: Response) => {
       fs.copyFileSync(shmPath, path.join(backupDir, 'dev.db-shm'));
     }
 
-    // Copy photos directory
-    const photosDir = path.join(process.cwd(), 'data', 'photos');
-    if (fs.existsSync(photosDir)) {
-      fs.cpSync(photosDir, path.join(backupDir, 'photos'), { recursive: true });
+    // Copy binary directories: photos (contact/company images) and files
+    // (meeting attachments). Both hold bytes the DB JSON only references by path.
+    for (const sub of ['photos', 'files']) {
+      const srcDir = path.join(process.cwd(), 'data', sub);
+      if (fs.existsSync(srcDir)) {
+        fs.cpSync(srcDir, path.join(backupDir, sub), { recursive: true });
+      }
     }
 
     res.json({
@@ -308,14 +314,16 @@ router.post('/restore', async (req: Request, res: Response) => {
       fs.unlinkSync(shmPath);
     }
 
-    // Restore photos
-    const photosBackupDir = path.join(backupDir, 'photos');
-    const photosDir = path.join(process.cwd(), 'data', 'photos');
-    if (fs.existsSync(photosBackupDir)) {
-      if (fs.existsSync(photosDir)) {
-        fs.rmSync(photosDir, { recursive: true });
+    // Restore binary directories: photos + files (meeting attachments)
+    for (const sub of ['photos', 'files']) {
+      const srcDir = path.join(backupDir, sub);
+      const destDir = path.join(process.cwd(), 'data', sub);
+      if (fs.existsSync(srcDir)) {
+        if (fs.existsSync(destDir)) {
+          fs.rmSync(destDir, { recursive: true });
+        }
+        fs.cpSync(srcDir, destDir, { recursive: true });
       }
-      fs.cpSync(photosBackupDir, photosDir, { recursive: true });
     }
 
     res.json({ message: 'Restore completed successfully. Please restart the server.' });

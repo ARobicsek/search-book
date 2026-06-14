@@ -358,12 +358,62 @@ router.post('/merge', async (req: Request, res: Response) => {
   }
 });
 
+// Punctuation/symbol normalization shared by the "core" form and the token-subset
+// form: lowercase, &->and, hyphen/slash->space, drop apostrophes/diacritics/periods/
+// zero-width chars, collapse whitespace. Catches "&" vs "and" (#2) and hyphen vs
+// space (#4 Dana-Farber) and apostrophes (#3 Children's).
+function normalizeCompanyPunctuation(name: string): string {
+  let n = name.replace(/[\u200B-\u200D\uFEFF]/g, '').toLowerCase();
+  n = n.normalize('NFD').replace(/[\u0300-\u036F]/g, ''); // strip diacritics
+  n = n.replace(/&/g, ' and ');
+  n = n.replace(/['\u2018\u2019]/g, '');                  // drop apostrophes
+  n = n.replace(/\./g, '');                               // "Inc." -> "inc", "L.P." -> "lp"
+  n = n.replace(/[-/,]/g, ' ');                           // hyphen / slash / comma -> space
+  return n.replace(/\s+/g, ' ').trim();
+}
+
+// Trailing descriptor/legal tokens that rarely change which entity is meant.
+// Deliberately EXCLUDES "health" so "Baylor ... Health" vs "Baylor ... Research
+// Institute" stays a *low-confidence* shared-prefix match (#6) rather than collapsing
+// to a false high-confidence exact match.
+const COMPANY_DESCRIPTOR_SUFFIXES = new Set([
+  'inc', 'llc', 'lp', 'llp', 'pllc', 'corp', 'corporation', 'ltd', 'limited',
+  'co', 'company', 'institute', 'research', 'services', 'service', 'system',
+  'systems', 'center', 'centers', 'centre', 'centres', 'hospital', 'hospitals',
+  'group', 'foundation',
+]);
+
+// Common connector words ignored when judging whether a shared *prefix* is meaningful.
+const COMPANY_STOPWORDS = new Set(['and', 'for', 'of', 'the', 'a', 'an', 'at', 'in', 'on', 'to']);
+
+// "Core" form for comparing the essential name: punctuation-normalized, "healthcare"
+// folded to "health" (#5 Intermountain), then trailing descriptor/legal tokens
+// stripped so the core compares (#1 Arcadia, #2 CMS "Services", #4 institute).
 export function normalizeCompanyNameForDedupe(name: string): string {
-  let n = name.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
-  n = n.replace(/,(?=\s*(Inc\.?|LLC|Corp\.?|Corporation|Ltd\.?|Limited|Co\.?|Company|L\.L\.C\.|L\.P\.)$)/gi, '');
-  const suffixPattern = /\s+(Inc\.?|LLC|Corp\.?|Corporation|Ltd\.?|Limited|Co\.?|Company|L\.L\.C\.|L\.P\.)\s*$/gi;
-  n = n.replace(suffixPattern, '');
-  return n.toLowerCase().replace(/\s+/g, ' ').trim();
+  const n = normalizeCompanyPunctuation(name).replace(/\bhealthcare\b/g, 'health');
+  const tokens = n.split(' ').filter(Boolean);
+  // Strip trailing descriptors but never down to nothing (keep >= 1 token).
+  while (tokens.length > 1 && COMPANY_DESCRIPTOR_SUFFIXES.has(tokens[tokens.length - 1])) {
+    tokens.pop();
+  }
+  return tokens.join(' ');
+}
+
+// Token list with punctuation normalization but NO descriptor stripping \u2014 used for the
+// subset test so "Boston Children's Hospital" tokens are a subset of "...Hospital CHIP"
+// (#3) while "Mass General Hospital" vs "Mass General Brigham" (divergent tails) is NOT.
+function companyTokensForSubset(name: string): string[] {
+  return normalizeCompanyPunctuation(name)
+    .replace(/\bhealthcare\b/g, 'health')
+    .split(' ')
+    .filter(Boolean);
+}
+
+// Length of the shared leading-token run (a true prefix from index 0).
+function sharedPrefixLen(a: string[], b: string[]): number {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
 }
 
 // GET /api/duplicates/companies — find potential duplicate companies
@@ -384,21 +434,49 @@ router.get('/companies', async (_req: Request, res: Response) => {
     }> = [];
 
     const normalized = companies.map(c => normalizeCompanyNameForDedupe(c.name));
-    
+    const subsetTokens = companies.map(c => companyTokensForSubset(c.name));
+
     for (let i = 0; i < companies.length; i++) {
       for (let j = i + 1; j < companies.length; j++) {
         const c1 = companies[i];
         const c2 = companies[j];
         const reasons: string[] = [];
+        let score = 0;
+        const a = normalized[i];
+        const b = normalized[j];
 
-        const sim = similarity(normalized[i], normalized[j], 0.85);
-        if (sim > 0.85 || normalized[i] === normalized[j]) {
-          if (normalized[i] === normalized[j]) {
-            reasons.push('Same name (normalized)');
-          } else {
+        if (a && b && a === b) {
+          // Cores match after punctuation + descriptor normalization (#1,#2,#4,#5).
+          reasons.push('Same core name (normalized)');
+          score = 1.0;
+        } else {
+          const sim = similarity(a, b, 0.85);
+          if (sim > 0.85) {
             reasons.push(`Similar names (${Math.round(sim * 100)}%)`);
+            score = sim;
+          } else if (tokensMatch(subsetTokens[i], subsetTokens[j])) {
+            // One full name's tokens are contained in the other (#3 "...Hospital CHIP").
+            // Safe: divergent tails (Mass General Hospital vs Brigham) are NOT subsets.
+            reasons.push('One name contains the other');
+            score = 0.9;
+          } else {
+            // Low-confidence bucket (D1): a long shared *prefix* with divergent tails —
+            // e.g. "Baylor Scott & White Health" vs "...Research Institute" (#6).
+            // Require >= 3 non-stopword shared-prefix tokens so distinct same-parent
+            // entities (UCSF vs UC Berkeley = 2, Mass General H. vs Brigham = 2) stay out.
+            const ti = subsetTokens[i];
+            const tj = subsetTokens[j];
+            const shared = sharedPrefixLen(ti, tj);
+            const meaningful = ti.slice(0, shared).filter(t => !COMPANY_STOPWORDS.has(t)).length;
+            if (meaningful >= 3 && shared < ti.length && shared < tj.length) {
+              reasons.push(`Shared name prefix (${shared} words) — low confidence, review`);
+              score = 0.5;
+            }
           }
-          duplicates.push({ company1: c1, company2: c2, score: sim > 0.9 ? sim : 0.9, reasons });
+        }
+
+        if (reasons.length > 0) {
+          duplicates.push({ company1: c1, company2: c2, score, reasons });
         }
       }
     }

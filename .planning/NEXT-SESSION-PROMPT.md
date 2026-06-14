@@ -38,23 +38,38 @@ With these two, **Phases A–E of the UX-Search-Meetings plan are all complete**
 
 `npm run prepush` **and** the strict client build (`tsc -b`) green for both commits; console clean.
 
-### What's Next — back to the NCQA adaptation plan (owner to confirm scope)
+### What's Next — owner's 5-item follow-up list (new plan of record)
 
-The UX-Search-Meetings worklist is **done**. The standing **plan of record reverts to
-`.planning/NCQA-ADAPTATION-PLAN.md`** (taxonomy retheme, AI ingest of Copilot recaps, Outlook ICS
-daily briefing, semantic search over meeting notes). **Before starting NCQA work:**
-- Re-read the NCQA plan's "How to use this document" + the phase you'll work. **Several tasks are gated
-  on decisions D1–D9** at the top of that plan, and the owner asked **not to push on D5–D9 until they
-  raise them** (carry-over #3). So **confirm with the owner which NCQA phase/tasks to start** rather than
-  assuming Phase 1.
-- **Schema-touching tasks need Turso DDL applied first** (procedure at the top of the adaptation plan) —
-  the UX plan was deliberately schema-free, NCQA tasks are not. Never push schema-touching code to `main`
-  before the Turso DDL is live.
+The UX-Search-Meetings worklist is **done**. The owner gave 5 follow-ups to tackle next, captured (with
+recon already done) in a new plan doc: **`.planning/CALENDAR-FAVORITES-BACKUP-PLAN.md`**. Read its
+"How to use" + the items, then confirm/refine scope with the owner before building (a few open
+decisions are flagged inline). The 5 items:
+
+1. **Calendar day-overflow** — handle ~10 meetings/day (FullCalendar already shows "+N more"; verify the
+   built-in popover's event clicks open the editor; maybe raise `dayMaxEvents` / wire day-number → day list). Client-only.
+2. **Calendar hover tooltip** — hovering a meeting shows the first participant + summary (native
+   `el.title` via `eventDidMount`; `/api/meetings` already returns both — no API change). Client-only.
+3. **Favorite organizations** — mirror contact favorites for orgs in the org-entry comboboxes (meeting
+   log, ideas). **Schema-free**: reserved `Favorite` tag via the existing `CompanyTag` junction; add
+   `GET /companies/favorites` + `PATCH /companies/:id/favorite` (copy the contacts impl).
+4. **Backup-coverage audit** — recon found **all 27 Prisma models are already in both backup paths**
+   (browser-direct `TABLES_PARENT_FIRST` + server `buildExport`), `SELECT *`/`findMany` so column-complete.
+   Remaining: fix stale "24-table" labels in the server route; **verify binary files** — the manual ZIP/local-disk
+   backup bundles `photos/` but maybe **not** `files/` (`ConversationAttachment` binaries) — close that gap.
+5. **Prod→dev restore test** — download all prod backup material (DB JSON + binaries) and fully restore into a
+   **scratch** Turso DB (never overwrite live); verify per-table row counts, relationships, and that photo +
+   **attachment** binaries resolve. Run **after** item 4. (Relates to carry-over #4.)
+
+Suggested order: 3 → 1 & 2 (same file) → 4 then 5. The longer-term **NCQA adaptation plan**
+(`.planning/NCQA-ADAPTATION-PLAN.md`) stays the standing plan of record after these (its tasks are
+gated on decisions D1–D9 and some are schema-touching — confirm scope with the owner; don't push on D5–D9
+until they raise them).
 
 Process reminders: one atomic commit per chunk; `npm run prepush` **and** a client build
 (`tsc -b` is stricter than the `typecheck` script — it catches unused locals/imports) + a
 desktop/390px smoke test before each push; update each task's STATUS line in the plan doc; owner has
-standing permission to push to `main`.
+standing permission to push to `main`. Items 1–3 are schema-free; flag immediately if anything seems to
+need a schema change (Turso DDL must land before pushing schema code).
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
@@ -85,10 +100,12 @@ standing permission to push to `main`.
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md`. The UX-Search-Meetings plan
-> (`.planning/UX-SEARCH-MEETINGS-PLAN.md`) is **fully shipped (Phases A–E)**. The plan of record now
-> reverts to `.planning/NCQA-ADAPTATION-PLAN.md` — read its "How to use this document" section. Several
-> NCQA tasks are gated on decisions D1–D9 and some are schema-touching (Turso DDL must be applied before
-> pushing schema code), and the owner asked not to push on D5–D9 until they raise them — so **confirm
-> with the owner which NCQA phase/tasks to start**. One atomic commit per chunk; before each push run
-> `npm run prepush` **and** a client build (`tsc -b`), and smoke-test desktop + 390px.
+> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md` and the new plan of record
+> `.planning/CALENDAR-FAVORITES-BACKUP-PLAN.md` (the UX-Search-Meetings plan is fully shipped). Work the
+> owner's 5 follow-ups — calendar day-overflow, calendar hover tooltip (first participant + summary),
+> favorite **organizations** (schema-free, mirror contact favorites via `CompanyTag`), a backup-coverage
+> audit (all 27 tables already covered — verify binary/attachment bundling + fix the stale "24-table"
+> labels), and a prod→dev full-restore test into a scratch DB. Suggested order 3 → 1 & 2 → 4 then 5;
+> confirm/refine scope and the open decisions with me first. One atomic commit per chunk; before each push
+> run `npm run prepush` **and** a client build (`tsc -b`), and smoke-test desktop + 390px. Items 1–3 are
+> schema-free — flag immediately if anything needs a schema change.

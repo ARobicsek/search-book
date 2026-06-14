@@ -1,7 +1,7 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
-import { CommandPaletteProvider } from '@/components/command-palette'
+import { CommandPaletteProvider, useCommandPalette } from '@/components/command-palette'
 import { QuickLogProvider, useQuickLog } from '@/components/quick-log-dialog'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { Search, MessageSquarePlus } from 'lucide-react'
 function LayoutContent() {
   const navigate = useNavigate()
   const quickLog = useQuickLog()
+  const commandPalette = useCommandPalette()
 
   return (
     <>
@@ -49,12 +50,22 @@ function LayoutContent() {
             >
               <Search className="h-5 w-5" />
             </Button>
-            {/* Desktop keyboard shortcut hint */}
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px]">Ctrl</kbd>
-              {' + '}
-              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px]">K</kbd>
-            </span>
+            {/* Desktop search — clickable, opens the command palette (kbd hint as adornment) */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden sm:inline-flex"
+              onClick={commandPalette.open}
+              aria-label="Open search"
+            >
+              <Search className="mr-1 h-4 w-4" />
+              Search
+              <span className="ml-2 text-muted-foreground">
+                <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px]">Ctrl</kbd>
+                {' + '}
+                <kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px]">K</kbd>
+              </span>
+            </Button>
           </div>
         </header>
         <main className="flex-1 overflow-auto p-3 sm:p-6">

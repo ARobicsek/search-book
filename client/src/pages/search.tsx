@@ -40,6 +40,7 @@ import {
   Users,
   CaseSensitive,
   ArrowRight,
+  X,
 } from 'lucide-react'
 
 const ecosystemColors: Record<Ecosystem, string> = {
@@ -716,9 +717,19 @@ export function SearchPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder='Search everything... (use "quotes" for phrases)'
-          className="pl-10 h-12 text-lg"
+          className="pl-10 pr-12 h-12 text-lg"
           autoFocus
         />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Scope chips + sort + case sensitivity */}

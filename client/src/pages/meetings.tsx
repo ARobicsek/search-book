@@ -285,11 +285,24 @@ export function MeetingsPage() {
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Search text</Label>
-          <Input
-            value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
-            placeholder="Search notes, names..."
-          />
+          <div className="relative">
+            <Input
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              placeholder="Search notes, names..."
+              className={qInput ? 'pr-10' : undefined}
+            />
+            {qInput && (
+              <button
+                type="button"
+                onClick={() => setQInput('')}
+                aria-label="Clear search text"
+                className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
         {hasFilters && (
           <div className="flex items-end">

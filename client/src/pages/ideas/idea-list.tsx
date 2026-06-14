@@ -22,9 +22,10 @@ import {
 } from '@/components/ui/dialog'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw } from 'lucide-react'
+import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
+import { cn } from '@/lib/utils'
 
 type IdeaForm = {
   title: string
@@ -62,6 +63,8 @@ export function IdeaListPage() {
 
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
+  // Favorite orgs (reserved "Favorite" CompanyTag) for one-click add
+  const [companyFavorites, setCompanyFavorites] = useState<{ id: number; name: string }[]>([])
 
   const [form, setForm] = useState<IdeaForm>(emptyForm)
   const [originalForm, setOriginalForm] = useState<IdeaForm | null>(null)
@@ -81,6 +84,9 @@ export function IdeaListPage() {
     ).catch(() => {})
     api.get<Company[]>('/companies').then((data) =>
       setAllCompanies(data.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {})
+    api.get<{ id: number; name: string }[]>('/companies/favorites').then(
+      setCompanyFavorites
     ).catch(() => {})
   }, [])
 
@@ -113,6 +119,29 @@ export function IdeaListPage() {
     setForm(loadedForm)
     setOriginalForm(loadedForm)
     setDialogOpen(true)
+  }
+
+  const companyNameOf = (val: string) =>
+    allCompanies.find((c) => c.id.toString() === val)?.name || val
+
+  const quickAddCompanyFavorites = companyFavorites.filter(
+    (f) => !form.companyValues.includes(f.id.toString())
+  )
+
+  async function toggleCompanyFavorite(companyIdNum: number, name: string) {
+    const isFav = companyFavorites.some((f) => f.id === companyIdNum)
+    // Optimistic update; revert on failure
+    setCompanyFavorites((prev) =>
+      isFav
+        ? prev.filter((f) => f.id !== companyIdNum)
+        : [...prev, { id: companyIdNum, name }].sort((a, b) => a.name.localeCompare(b.name))
+    )
+    try {
+      await api.patch(`/companies/${companyIdNum}/favorite`, { favorite: !isFav })
+    } catch {
+      toast.error('Failed to update favorite')
+      api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => {})
+    }
   }
 
   // Auto-save handler - only saves existing contacts/companies (not new entries)
@@ -399,6 +428,25 @@ export function IdeaListPage() {
             </div>
             <div className="space-y-2">
               <Label>Related Companies</Label>
+              {quickAddCompanyFavorites.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {quickAddCompanyFavorites.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() =>
+                        setForm((p) => ({ ...p, companyValues: [...p.companyValues, f.id.toString()] }))
+                      }
+                      className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                      title="Add to related companies"
+                    >
+                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      {f.name}
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  ))}
+                </div>
+              )}
               <MultiCombobox
                 options={allCompanies.map((c) => ({ value: c.id.toString(), label: c.name }))}
                 values={form.companyValues}
@@ -407,6 +455,31 @@ export function IdeaListPage() {
                 searchPlaceholder="Search companies..."
                 allowFreeText={true}
               />
+              {form.companyValues.map((val) => {
+                const isExisting = /^\d+$/.test(val)
+                if (!isExisting) return null
+                const isFav = companyFavorites.some((f) => f.id === Number(val))
+                return (
+                  <div key={val} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleCompanyFavorite(Number(val), companyNameOf(val))}
+                      className="shrink-0"
+                      title={isFav ? 'Remove from favorites' : 'Mark as favorite (quick-add elsewhere)'}
+                    >
+                      <Star
+                        className={cn(
+                          'h-3.5 w-3.5',
+                          isFav ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground hover:text-amber-400'
+                        )}
+                      />
+                    </button>
+                    <span className="truncate text-xs text-muted-foreground" title={companyNameOf(val)}>
+                      {companyNameOf(val)}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
           <DialogFooter>

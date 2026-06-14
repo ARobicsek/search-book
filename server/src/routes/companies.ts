@@ -48,6 +48,56 @@ router.get('/names', async (_req: Request, res: Response) => {
   }
 });
 
+// Favorites are stored as a reserved "Favorite" tag via the existing CompanyTag
+// junction — no schema change, synced across devices, covered by backups.
+// Mirrors the contact-favorites pattern in routes/contacts.ts.
+const FAVORITE_TAG_NAME = 'Favorite';
+
+// GET /api/companies/favorites — id/name of favorite orgs (quick-add in org pickers)
+// NOTE: must be declared before GET /:id so "favorites" isn't matched as an id.
+router.get('/favorites', async (_req: Request, res: Response) => {
+  try {
+    const companies = await prisma.company.findMany({
+      where: { tags: { some: { tag: { name: FAVORITE_TAG_NAME } } } },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json(companies);
+  } catch (error) {
+    console.error('Error fetching favorite companies:', error);
+    res.status(500).json({ error: 'Failed to fetch favorite companies' });
+  }
+});
+
+// PATCH /api/companies/:id/favorite — body { favorite: boolean }
+router.patch('/:id/favorite', async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id as string);
+    const favorite = req.body.favorite === true;
+    let tag = await prisma.tag.findUnique({ where: { name: FAVORITE_TAG_NAME } });
+    if (!tag) {
+      if (!favorite) {
+        res.json({ id: companyId, favorite: false });
+        return;
+      }
+      tag = await prisma.tag.create({ data: { name: FAVORITE_TAG_NAME } });
+    }
+    if (favorite) {
+      await prisma.companyTag.upsert({
+        where: { companyId_tagId: { companyId, tagId: tag.id } },
+        create: { companyId, tagId: tag.id },
+        update: {},
+      });
+    } else {
+      await prisma.companyTag.deleteMany({ where: { companyId, tagId: tag.id } });
+    }
+    res.json({ id: companyId, favorite });
+  } catch (error) {
+    console.error('Error toggling company favorite:', error);
+    res.status(500).json({ error: 'Failed to toggle company favorite' });
+  }
+});
+
 // GET /api/companies — list for table view
 router.get('/', async (_req: Request, res: Response) => {
   try {

@@ -187,6 +187,8 @@ function QuickLogDialog({
 
   // Favorite contacts (reserved "Favorite" tag) for one-click participant add
   const [favorites, setFavorites] = useState<{ id: number; name: string }[]>([])
+  // Favorite orgs (reserved "Favorite" CompanyTag) for one-click org add
+  const [companyFavorites, setCompanyFavorites] = useState<{ id: number; name: string }[]>([])
 
   // Most recent earlier meeting in the same series (title match) — shown in the
   // left panel for context while writing up a recurring meeting.
@@ -252,6 +254,7 @@ function QuickLogDialog({
 
     api.get<string[]>('/conversations/titles').then(setTitles).catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
+    api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => { })
     if (!lookupsLoaded) {
       api.get<{ id: number; name: string }[]>('/contacts/names')
         .then((data) => setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name }))))
@@ -647,6 +650,22 @@ function QuickLogDialog({
     }
   }
 
+  async function toggleCompanyFavorite(companyIdNum: number, name: string) {
+    const isFav = companyFavorites.some((f) => f.id === companyIdNum)
+    // Optimistic update; revert on failure
+    setCompanyFavorites((prev) =>
+      isFav
+        ? prev.filter((f) => f.id !== companyIdNum)
+        : [...prev, { id: companyIdNum, name }].sort((a, b) => a.name.localeCompare(b.name))
+    )
+    try {
+      await api.patch(`/companies/${companyIdNum}/favorite`, { favorite: !isFav })
+    } catch {
+      toast.error('Failed to update favorite')
+      api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => { })
+    }
+  }
+
   // ── Attachments ───────────────────────────────────────────
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
@@ -699,8 +718,15 @@ function QuickLogDialog({
   const participantNameOf = (val: string) =>
     contactOptions.find((o) => o.value === val)?.label || val
 
+  const companyNameOf = (val: string) =>
+    companyOptions.find((o) => o.value === val)?.label || val
+
   const quickAddFavorites = favorites.filter(
     (f) => !participantIds.includes(f.id.toString())
+  )
+
+  const quickAddCompanyFavorites = companyFavorites.filter(
+    (f) => !orgValues.includes(f.id.toString())
   )
 
   // Prep info shown in the left panel: the meeting's own prep notes (live or
@@ -887,6 +913,23 @@ function QuickLogDialog({
           </div>
           <div className="space-y-2">
             <Label>Organizations</Label>
+            {quickAddCompanyFavorites.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {quickAddCompanyFavorites.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setOrgValues((prev) => [...prev, f.id.toString()])}
+                    className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                    title="Add to organizations"
+                  >
+                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                    {f.name}
+                    <Plus className="h-3 w-3" />
+                  </button>
+                ))}
+              </div>
+            )}
             <MultiCombobox
               options={companyOptions}
               values={orgValues}
@@ -895,6 +938,31 @@ function QuickLogDialog({
               searchPlaceholder="Search or type new name..."
               allowFreeText={true}
             />
+            {orgValues.map((val) => {
+              const isExisting = /^\d+$/.test(val)
+              if (!isExisting) return null
+              const isFav = companyFavorites.some((f) => f.id === Number(val))
+              return (
+                <div key={val} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleCompanyFavorite(Number(val), companyNameOf(val))}
+                    className="shrink-0"
+                    title={isFav ? 'Remove from favorites' : 'Mark as favorite (quick-add in future meetings)'}
+                  >
+                    <Star
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isFav ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground hover:text-amber-400'
+                      )}
+                    />
+                  </button>
+                  <span className="truncate text-xs text-muted-foreground" title={companyNameOf(val)}>
+                    {companyNameOf(val)}
+                  </span>
+                </div>
+              )
+            })}
           </div>
           <div className="space-y-2">
             <Label htmlFor="ql-attendees">Attendees description</Label>

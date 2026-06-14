@@ -56,7 +56,7 @@ is the active build target first.)
 
 **A2 — Clickable search in the top bar (#1).** Commit: `feat(ui): clickable top-bar search + mobile clear`
 - [client/src/components/layout.tsx:52-57](client/src/components/layout.tsx#L52): replace the non-clickable `Ctrl + K` hint with a clickable desktop search **Button** (Search icon + "Search", kbd hint as adornment) → `useCommandPalette().open()`. Keep the existing mobile search button.
-- **STATUS:** Done (2026-06-13). Desktop top-bar hint → outline `Button` ("Search" + Ctrl+K adornment) wired to `useCommandPalette().open`; mobile icon button unchanged. Verified desktop (opens palette) + 390px (button hidden, icon button remains).
+- **STATUS:** Done (2026-06-13). Desktop top-bar hint → outline `Button` ("Search" + Ctrl+K adornment); mobile icon button unchanged. **Follow-up fix (same day):** initially wired to `useCommandPalette().open` (small cmdk modal, felt broken/no results); rewired to `navigate('/search')` so it lands on the full Search page — matching **Ctrl+K** (which navigates to `/search`, not the palette) and the existing mobile search icon. Verified desktop (lands on /search) + 390px (button hidden, icon button remains).
 
 **A3 — One-tap clear on Search (#11).** (same commit as A2)
 - [client/src/pages/search.tsx](client/src/pages/search.tsx) input (~L712): absolute-right **X** clear button shown when `query` non-empty → `setQuery('')`; touch-sized hit area on mobile. Add the same to the Meetings "Search text" input ([client/src/pages/meetings.tsx:287](client/src/pages/meetings.tsx#L287)).

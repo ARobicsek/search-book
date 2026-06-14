@@ -1,7 +1,7 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
-import { CommandPaletteProvider, useCommandPalette } from '@/components/command-palette'
+import { CommandPaletteProvider } from '@/components/command-palette'
 import { QuickLogProvider, useQuickLog } from '@/components/quick-log-dialog'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,6 @@ import { Search, MessageSquarePlus } from 'lucide-react'
 function LayoutContent() {
   const navigate = useNavigate()
   const quickLog = useQuickLog()
-  const commandPalette = useCommandPalette()
 
   return (
     <>
@@ -50,12 +49,12 @@ function LayoutContent() {
             >
               <Search className="h-5 w-5" />
             </Button>
-            {/* Desktop search — clickable, opens the command palette (kbd hint as adornment) */}
+            {/* Desktop search — navigates to the full Search page, matching Ctrl+K (kbd hint as adornment) */}
             <Button
               variant="outline"
               size="sm"
               className="hidden sm:inline-flex"
-              onClick={commandPalette.open}
+              onClick={() => navigate('/search')}
               aria-label="Open search"
             >
               <Search className="mr-1 h-4 w-4" />

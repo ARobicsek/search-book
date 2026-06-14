@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import FullCalendar from '@fullcalendar/react'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import listPlugin from '@fullcalendar/list'
+import interactionPlugin from '@fullcalendar/interaction'
+import type { DatesSetArg, EventClickArg } from '@fullcalendar/core'
 import { api } from '@/lib/api'
 import type { Conversation, DatePrecision, Tag } from '@/lib/types'
-import { CONVERSATION_TYPE_OPTIONS } from '@/lib/types'
+import { CONVERSATION_TYPE_OPTIONS, conversationDisplayName } from '@/lib/types'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,8 +36,8 @@ import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import {
-  Building2, FileText, Loader2, MessageSquarePlus, Paperclip, Pencil,
-  Tag as TagIcon, Trash2, X,
+  Building2, CalendarDays, FileText, List, Loader2, MessageSquarePlus, Paperclip,
+  Pencil, Tag as TagIcon, Trash2, X,
 } from 'lucide-react'
 
 const conversationTypeColors: Record<string, string> = {
@@ -43,6 +49,20 @@ const conversationTypeColors: Record<string, string> = {
   COFFEE: 'bg-amber-100 text-amber-800',
   EVENT: 'bg-rose-100 text-rose-800',
   OTHER: 'bg-slate-100 text-slate-700',
+}
+
+// Concrete hex colors for calendar events, mirroring the Tailwind
+// `conversationTypeColors` badge palette (FullCalendar needs CSS colors, not
+// class names). bg = the *-100 fill, text = the *-700/800 foreground.
+const meetingTypeCalendarColors: Record<string, { bg: string; text: string }> = {
+  CALL: { bg: '#dcfce7', text: '#166534' },        // green
+  VIDEO_CALL: { bg: '#ccfbf1', text: '#115e59' },  // teal
+  EMAIL: { bg: '#dbeafe', text: '#1e40af' },        // blue
+  MEETING: { bg: '#f3e8ff', text: '#6b21a8' },      // purple
+  LINKEDIN: { bg: '#e0f2fe', text: '#075985' },     // sky
+  COFFEE: { bg: '#fef3c7', text: '#92400e' },       // amber
+  EVENT: { bg: '#ffe4e6', text: '#9f1239' },        // rose
+  OTHER: { bg: '#f1f5f9', text: '#334155' },        // slate
 }
 
 function formatConversationDate(dateStr: string, precision: DatePrecision) {
@@ -78,6 +98,100 @@ function useDebounce<T>(value: T, delay: number): T {
 
 const PAGE_SIZE = 20
 
+// Meetings-only calendar (distinct from the actions calendar). Fetches just the
+// visible range on each navigation/view change via FullCalendar's `datesSet`,
+// renders each meeting as an all-day event colored by type, and opens the Quick
+// Log editor on click (so future-dated meetings double as a prep queue).
+function MeetingsCalendar() {
+  const quickLog = useQuickLog()
+  const isMobile = useIsMobile()
+  const [meetings, setMeetings] = useState<Conversation[]>([])
+  const rangeRef = useRef<{ from: string; to: string } | null>(null)
+  // useIsMobile resolves false→true on its mount effect, but FullCalendar reads
+  // `initialView` once on mount — so defer the first FullCalendar mount by a
+  // frame (same render as the resolved isMobile) to honor the mobile list default.
+  const [ready, setReady] = useState(false)
+  useEffect(() => { setReady(true) }, [])
+
+  const fetchRange = useCallback(async (from: string, to: string) => {
+    try {
+      const res = await api.get<{ data: Conversation[] }>(
+        `/meetings?from=${from}&to=${to}&limit=100`
+      )
+      setMeetings(res.data)
+    } catch {
+      setMeetings([])
+    }
+  }, [])
+
+  // Fires on initial render and every navigation/view change. startStr/endStr
+  // bound the visible grid (endStr is exclusive — a harmless one-day over-fetch).
+  const handleDatesSet = useCallback((arg: DatesSetArg) => {
+    const from = arg.startStr.slice(0, 10)
+    const to = arg.endStr.slice(0, 10)
+    rangeRef.current = { from, to }
+    fetchRange(from, to)
+  }, [fetchRange])
+
+  // Refresh the current range when a meeting is logged/edited via Quick Log.
+  useEffect(() => {
+    const onLogged = () => {
+      if (rangeRef.current) fetchRange(rangeRef.current.from, rangeRef.current.to)
+    }
+    window.addEventListener('searchbook:meeting-logged', onLogged)
+    return () => window.removeEventListener('searchbook:meeting-logged', onLogged)
+  }, [fetchRange])
+
+  const events = meetings.map((m) => {
+    const c = meetingTypeCalendarColors[m.type] || meetingTypeCalendarColors.OTHER
+    return {
+      id: m.id.toString(),
+      title: conversationDisplayName(m),
+      date: m.date,
+      allDay: true,
+      backgroundColor: c.bg,
+      borderColor: c.bg,
+      textColor: c.text,
+    }
+  })
+
+  function handleEventClick(info: EventClickArg) {
+    quickLog.openEdit(parseInt(info.event.id))
+  }
+
+  if (!ready) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-md border bg-background p-2 sm:p-4">
+      <FullCalendar
+        plugins={[dayGridPlugin, listPlugin, interactionPlugin]}
+        initialView={isMobile ? 'listMonth' : 'dayGridMonth'}
+        headerToolbar={isMobile ? {
+          left: 'prev,next',
+          center: 'title',
+          right: 'listMonth,dayGridMonth',
+        } : {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth',
+        }}
+        events={events}
+        eventClick={handleEventClick}
+        datesSet={handleDatesSet}
+        height="auto"
+        dayMaxEvents={isMobile ? 2 : 4}
+        noEventsText="No meetings in this range"
+      />
+    </div>
+  )
+}
+
 export function MeetingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const quickLog = useQuickLog()
@@ -92,6 +206,9 @@ export function MeetingsPage() {
   const toFilter = searchParams.get('to') || ''
   const qFilter = searchParams.get('q') || ''
   const idFilter = searchParams.get('id') || ''
+  // Series view (titleFilter) is inherently a chronological list, so the
+  // calendar toggle is hidden there and the view is forced back to list.
+  const view = !titleFilter && searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
 
   const [meetings, setMeetings] = useState<Conversation[]>([])
   const [total, setTotal] = useState(0)
@@ -223,7 +340,7 @@ export function MeetingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {titleFilter ? titleFilter : 'Meetings'}
@@ -234,12 +351,40 @@ export function MeetingsPage() {
             </p>
           )}
         </div>
-        <Button onClick={() => quickLog.open()}>
-          <MessageSquarePlus className="mr-1 h-4 w-4" />
-          Log Meeting
-        </Button>
+        <div className="flex items-center gap-2">
+          {!titleFilter && (
+            <div className="inline-flex rounded-md border p-0.5">
+              <Button
+                variant={view === 'list' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 gap-1 px-2"
+                onClick={() => setParam('view', '')}
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">List</span>
+              </Button>
+              <Button
+                variant={view === 'calendar' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 gap-1 px-2"
+                onClick={() => setParam('view', 'calendar')}
+              >
+                <CalendarDays className="h-4 w-4" />
+                <span className="hidden sm:inline">Calendar</span>
+              </Button>
+            </div>
+          )}
+          <Button onClick={() => quickLog.open()}>
+            <MessageSquarePlus className="mr-1 h-4 w-4" />
+            Log Meeting
+          </Button>
+        </div>
       </div>
 
+      {view === 'calendar' ? (
+        <MeetingsCalendar />
+      ) : (
+      <>
       {/* Filters */}
       <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1">
@@ -499,6 +644,8 @@ export function MeetingsPage() {
             </div>
           )}
         </>
+      )}
+      </>
       )}
 
       {/* Delete confirmation */}

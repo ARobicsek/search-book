@@ -224,12 +224,13 @@ export interface ConversationAttachment {
   createdAt: string;
 }
 
-/** Display name precedence for a meeting: title → contact → company → attendees description. */
+/** Display name precedence for a meeting: title → contact → company → first participant → attendees description. */
 export function conversationDisplayName(conv: Conversation): string {
   return (
     conv.title ||
     conv.contact?.name ||
     conv.company?.name ||
+    conv.participants?.[0]?.contact.name ||
     conv.attendeesDescription ||
     'Meeting'
   );

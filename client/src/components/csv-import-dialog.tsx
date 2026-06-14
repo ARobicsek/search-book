@@ -121,6 +121,7 @@ const ECOSYSTEM_MAP: Record<string, string> = {
   ncqa: 'NCQA',
   network: 'NETWORK',
   recruiter: 'RECRUITER',
+  consultant: 'CONSULTANT',
   // legacy terms
   rolodex: 'NETWORK',
   target: 'NETWORK',

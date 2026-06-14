@@ -1,4 +1,4 @@
-export type Ecosystem = 'PAYER' | 'PROVIDER' | 'GOVERNMENT' | 'ACADEMIA' | 'HEALTH_TECH' | 'POLICY' | 'MEDIA' | 'FUNDER' | 'NCQA' | 'NETWORK' | 'RECRUITER';
+export type Ecosystem = 'PAYER' | 'PROVIDER' | 'GOVERNMENT' | 'ACADEMIA' | 'HEALTH_TECH' | 'POLICY' | 'MEDIA' | 'FUNDER' | 'NCQA' | 'NETWORK' | 'RECRUITER' | 'CONSULTANT';
 export type ContactStatus = 'NONE' | 'RESEARCHING' | 'CONNECTED' | 'AWAITING_RESPONSE' | 'FOLLOW_UP_NEEDED';
 export type CompanyStatus = 'NONE' | 'RESEARCHING' | 'ENGAGED' | 'PARTNER' | 'CONNECTED';
 
@@ -76,6 +76,7 @@ export const ECOSYSTEM_OPTIONS: { value: Ecosystem; label: string }[] = [
   { value: 'NCQA', label: 'NCQA Internal' },
   { value: 'NETWORK', label: 'General Network' },
   { value: 'RECRUITER', label: 'Recruiter' },
+  { value: 'CONSULTANT', label: 'Consultant' },
 ];
 
 export const CONTACT_STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [

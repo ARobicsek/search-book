@@ -73,6 +73,7 @@ const ecosystemColors: Record<Ecosystem, string> = {
   NCQA: 'bg-indigo-100 text-indigo-800',
   NETWORK: 'bg-purple-100 text-purple-800',
   RECRUITER: 'bg-amber-100 text-amber-800',
+  CONSULTANT: 'bg-teal-100 text-teal-800',
 }
 
 const statusColors: Record<ContactStatus, string> = {

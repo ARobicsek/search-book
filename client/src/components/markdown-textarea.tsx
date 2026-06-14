@@ -77,6 +77,15 @@ export function MarkdownTextarea({
       const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx
       const block = value.slice(lineStart, lineEnd)
       const lines = block.split('\n')
+      // Empty / whitespace-only selection: always ADD the prefix and park the
+      // caret right after it, so formatting can be applied *before* typing
+      // (otherwise an empty line reads as "already prefixed" and toggles to a no-op).
+      if (!lines.some((l) => l.trim())) {
+        const prefix = makePrefix(0)
+        const next = value.slice(0, lineStart) + prefix + value.slice(lineEnd)
+        apply(next, lineStart + prefix.length)
+        return
+      }
       const allPrefixed = lines.every((l) => stripPattern.test(l) || !l.trim())
       const nextLines = lines.map((l, i) => {
         if (allPrefixed) return l.replace(stripPattern, '')

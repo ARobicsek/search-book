@@ -51,20 +51,27 @@ per chunk, each `npm run prepush` + `tsc -b` green and smoke-tested desktop + 39
 
 ### What's Next
 
-The owner's 5-item follow-up list is now **fully closed** (Item 5's real restore test executed +
-PASSED this session). No outstanding owner-gated work remains from that plan.
+The owner's 5-item follow-up list is now **fully closed** (restore test executed + PASSED; backup
+proven == prod). The owner has queued a new batch for next session.
 
-1. **Standing plan of record returns to the NCQA adaptation plan**
-   (`.planning/NCQA-ADAPTATION-PLAN.md`) — its tasks are gated on decisions D1–D9 and several are
-   schema-touching. **Don't push on D5–D9 until the owner raises them.** Confirm scope before building.
+1. **NEXT SESSION plan of record = `.planning/ACTIONS-IDEAS-POLISH-PLAN.md`** (owner-requested
+   2026-06-14). Five tasks: (1) markdown formatting in Actions & Ideas, (2) progressive disclosure on
+   the Action form (Type/Priority/Related-To behind carets), (3) **rework "Who owes it"** into a
+   people-list (default *me*, removable, +0…N contacts, favorites quick-add, collapsed) — **schema-
+   touching, needs Turso DDL**, (4) company near-dup LinkedIn variants, (5) long-lived PrismaClient.
+   **Confirm decisions A1/B1/C1/D1 at the top of that plan first** (D1 = owner supplies example
+   company pairs). Suggested order + file pointers are in the plan.
+2. **After that batch ships, the standing plan of record returns to the NCQA adaptation plan**
+   (`.planning/NCQA-ADAPTATION-PLAN.md`, Phase 3+) — gated on decisions D5–D9. **Don't push on
+   D5–D9 until the owner raises them.**
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. **Prod search perf** — owner signed off on live Phase B (B3); treat as closed unless it regresses.
 3. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until raised.
 4. ~~Restore into scratch Turso DB~~ → **DONE** (Item 5 executed + PASSED 2026-06-14; runbook marked EXECUTED).
-5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
-6. Company near-duplicate scan (LinkedIn-variant suffixes).
+5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient. → **scheduled** as Task 5 in `ACTIONS-IDEAS-POLISH-PLAN.md`.
+6. Company near-duplicate scan (LinkedIn-variant suffixes). → **scheduled** as Task 4 in `ACTIONS-IDEAS-POLISH-PLAN.md`.
 7. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
 8. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
 
@@ -93,9 +100,23 @@ scripts). All live on Vercel.
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md`. The owner's 5-item
-> follow-up list (calendar, favorite orgs, backup audit, restore test) is **fully closed** — the
-> real restore test executed + PASSED (27/27 tables, prod untouched). The standing plan of record
-> is now the **NCQA adaptation plan** (`.planning/NCQA-ADAPTATION-PLAN.md`) — confirm scope/decisions
-> D1–D9 with the owner before building; don't push on D5–D9 until they raise them. One atomic commit
-> per chunk; `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before each push.
+> Read `CLAUDE.md` / `AGENTS.md`, then this file, then **`.planning/ACTIONS-IDEAS-POLISH-PLAN.md`** —
+> that batch plan is the **plan of record for this session** (the prior 5-item list and the restore
+> test are fully done). Five tasks, suggested order in the plan: (1) markdown formatting in Actions &
+> Ideas (swap in the existing `MarkdownTextarea`; Ideas also needs a `ReactMarkdown` display), (2)
+> progressive disclosure on the Action form (mirror Quick Log's "Who was there" chevron — hide
+> Type/Priority/Related-To), (3) **rework "Who owes it"** into a people list (default *me*, removable,
+> +0…N contacts, favorite-contact quick-add, collapsed) — **this one is schema-touching: run the Turso
+> DDL before pushing code** (procedure atop the NCQA plan), (4) extend company near-dup detection for
+> LinkedIn-style name variants, (5) retire per-request `resetPrisma()` for a long-lived PrismaClient
+> (prod-verify before declaring done; consider its own session).
+>
+> **Before building, confirm decisions A1/B1/C1/D1** at the top of the batch plan — most importantly
+> ask the owner for **2–3 real company pairs** that should be flagged as duplicates but aren't (D1),
+> and confirm the "Who owes it" model (C1: recommended = additive `owedByMe` bool + `owerContactIds`
+> JSON, with `direction` kept as a derived mirror so the dashboard/analytics are unaffected).
+>
+> One atomic commit per task; `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before each
+> push. After the batch ships, the standing plan of record returns to the **NCQA adaptation plan**
+> (Phase 3+, gated on D5–D9 — don't push on those until raised). Standing owner action still open:
+> set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel (carry-over #1).

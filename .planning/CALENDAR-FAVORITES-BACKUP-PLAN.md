@@ -30,7 +30,9 @@ opens a day popover listing *all* that day's events.
 - **Open decision:** built-in popover only (recommended) vs. also wiring day-number → filtered list/day view.
 
 **Files:** [client/src/pages/meetings.tsx](client/src/pages/meetings.tsx) (`MeetingsCalendar`). Client-only.
-**STATUS:** Not started.
+**STATUS:** ✅ DONE (`85ab6ec`). Owner chose **expand the cell inline** (not a popover): `dayMaxEvents={false}`
+so a busy day renders every meeting inline and the row grows (`height="auto"`). No filtering. Verified with a
+10-meeting day on desktop grid + mobile list; event click still opens the editor.
 
 ## Item 2 — Calendar: hover a meeting shows first participant + summary (#cal-tooltip)
 **Ask:** "When I hover over a meeting title, also show the first connected participant and the summary."
@@ -48,7 +50,9 @@ range fetch already returns `summary` and `participants` (via `meetingListInclud
   (Ask reads as calendar-specific — the screenshot was the calendar.)
 
 **Files:** [client/src/pages/meetings.tsx](client/src/pages/meetings.tsx) (`MeetingsCalendar` events + `eventDidMount`). Client-only.
-**STATUS:** Not started.
+**STATUS:** ✅ DONE (`85ab6ec`). Calendar-only. `eventDidMount` sets a native `el.title` = first participant +
+summary (data already in the range fetch — no API change). De-dupes the 1:1 case (title already IS the name) →
+summary-only. Verified in-browser: tooltips show "participant — summary" / summary-only / none (no summary).
 
 ## Item 3 — Favorite organizations, like favorite contacts (#fav-orgs)
 **Ask:** "In places where I enter organization names (meeting log, ideas), let me 'favorite' orgs like I can with contacts."
@@ -73,7 +77,10 @@ toggle + quick-add chips in the Quick Log participants block. **Companies alread
   It is already covered by backups (it's a `CompanyTag` row — see Item 4: `CompanyTag` is in the table list).
 
 **Files:** server companies route; quick-log-dialog; ideas page; shared favorite UI. **No schema change.**
-**STATUS:** Not started.
+**STATUS:** ✅ DONE (`80911ff`). Scope (owner): **Meeting Log + Ideas only**. Server: `GET /companies/favorites`
++ `PATCH /companies/:id/favorite` via reserved `Favorite` `CompanyTag` (copied the contacts impl; `/favorites`
+declared before `/:id`). Client: star toggle + amber quick-add chips in Quick Log "Organizations" and Ideas
+"Related Companies". Verified end-to-end (API round-trip) + in-browser desktop/390px; console clean.
 
 ## Item 4 — Audit: does automated + manual backup capture ALL data? (#backup-audit)
 **Ask:** "After several feature-adding sessions, confirm both the automated and manual save capture everything."
@@ -107,7 +114,12 @@ toggle + quick-add chips in the Quick Log participants block. **Companies alread
 **Files:** [server/src/routes/backup.ts](server/src/routes/backup.ts), [client/src/lib/backup.ts](client/src/lib/backup.ts),
 upload/attachment routes ([server/src/routes/upload.ts](server/src/routes/upload.ts),
 [server/src/routes/conversation-attachments.ts](server/src/routes/conversation-attachments.ts)), Settings backup UI. **No schema change expected.**
-**STATUS:** Not started.
+**STATUS:** ✅ DONE (`c5c18b5`). All 27 models confirmed in both paths. Fixed: (1) stale "24" labels — `/cron`
+returns a count derived from the export; (2) **binary gap** — `photo-backup.ts` now bundles photos **+
+`ConversationAttachment` files + markdown-embedded screenshots** (was photos only), `searchbook-photos.zip` →
+`searchbook-files.zip`; (3) local-disk dev backup/restore now also copies `data/files`. Deliverable:
+[BACKUP-COVERAGE-AUDIT.md](BACKUP-COVERAGE-AUDIT.md). Verified: collector unit test (3 classes + dedup) + real
+data (11 binaries fetched, Blob CORS OK).
 
 ## Item 5 — End-to-end test: download prod backup, fully restore in dev (#restore-test)
 **Ask:** "Plan a test: download all prod save material, then verify we can fully restore it in dev."
@@ -128,7 +140,12 @@ upload/attachment routes ([server/src/routes/upload.ts](server/src/routes/upload
   but Turso-specific quirks won't surface). Recommend a scratch Turso DB for fidelity.
 
 **Files:** Settings backup/restore UI, [client/src/lib/backup.ts](client/src/lib/backup.ts). Mostly procedure + verification; minimal/no code.
-**STATUS:** Not started.
+**STATUS:** 🟡 HARNESS DONE, EXECUTION OWNER-GATED (`7d67dc5`). Decision (owner): **scratch Turso DB**. Built
+`server/scripts/restore-test.mjs` (schema bootstrap + FK-ordered restore mirroring `importViaTurso` + verify
+counts/relationships/binaries; prod-safe: `--confirm`, `--forbid-url`, target-only writes) + runbook
+[RESTORE-TEST-RUNBOOK.md](RESTORE-TEST-RUNBOOK.md). **Dry-run validated locally** (file→file: 27/27 tables,
+544 rows, 11/11 binaries). **Owner action to finish:** create a scratch Turso DB (dashboard), download the prod
+backup (Settings → Create Backup), then run the Option-A command.
 
 ---
 

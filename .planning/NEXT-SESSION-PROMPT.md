@@ -2,110 +2,92 @@
 
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
 
-### What Was Just Completed (2026-06-14, build session) — Phase D + Phase E SHIPPED → UX plan DONE
+### What Was Just Completed (2026-06-14, build session) — owner's 5-item follow-up list SHIPPED
 
-Plan of record: `.planning/UX-SEARCH-MEETINGS-PLAN.md`. One atomic commit per phase, verified at
-desktop + 390px with chrome-devtools, pushed to `main` (auto-deploys to Vercel). **No schema changes.**
-With these two, **Phases A–E of the UX-Search-Meetings plan are all complete** — that plan is now fully shipped.
+Plan of record: `.planning/CALENDAR-FAVORITES-BACKUP-PLAN.md`. All 5 items done; one atomic commit
+per chunk, each `npm run prepush` + `tsc -b` green and smoke-tested desktop + 390px, pushed to
+`main`. **No schema changes anywhere.** Open decisions were confirmed with the owner up front.
 
-- **Phase D — Meetings calendar** (`a0db408`). Added a **List | Calendar** segmented toggle to the
-  Meetings header (`?view=calendar` in the URL; icon-only `<sm`; hidden + forced to list in the
-  series/`title` view). New `MeetingsCalendar` component in
-  [client/src/pages/meetings.tsx](client/src/pages/meetings.tsx) renders FullCalendar
-  (dayGrid+list+interaction), fetching **only the visible range** via `/api/meetings?from=&to=&limit=100`
-  on FullCalendar's `datesSet` (initial + every nav), keeping the range in a ref to refetch on the
-  `searchbook:meeting-logged` event. Each meeting → an all-day event titled via the shared
-  `conversationDisplayName` (extended to the participant-first fallback so 1:1s show the person) and
-  colored by `type` via a new **hex** map `meetingTypeCalendarColors` (FullCalendar needs CSS colors,
-  not the Tailwind `conversationTypeColors` class strings). Event click → `quickLog.openEdit(id)`, so
-  future-dated meetings double as a prep queue. **Mobile** defaults to `listMonth` (desktop
-  `dayGridMonth`) via a one-frame `ready` mount gate (since `useIsMobile` resolves false→true after
-  mount and FullCalendar reads `initialView` once — calendar.tsx dodges this via its fetch-loading
-  spinner). Filters hidden in calendar view. Verified: events land on the correct dates (cross-checked
-  vs. the API — no off-by-one), participant-first names + per-type colors, `+N more` overflow, event
-  click opens the right meeting, mobile mounts in list view grouped by date, toggle both ways, console clean.
-- **Phase E — Terminology "Meetings" everywhere** (`fe75cf8`). Relabeled **only rendered strings**
-  from "Conversation(s)" → "Meeting(s)": contact-detail (tab label `Conversations`→**Meetings**, kept
-  `value="conversations"` tab id; delete-impact `conversation log(s)`; Prep Sheet "before a **meeting**
-  with", **Last Meeting**, "No **meetings** logged yet.", "upcoming **meetings**", prep-notes
-  placeholder), action-detail (Field label + `Meeting #id` fallback), analytics (**Meetings by Type**
-  chart), search (**Recent Meetings**), duplicates (4 merge-dialog strings). Left untouched: the
-  `Conversation` model/TS types, `/conversations` API paths, `searchbook:*` event names,
-  `draft_*conversation*` localStorage keys, and all variable/prop names. Already correct (no change):
-  command-palette group `heading="Meetings"`, company-detail's `Meetings (N)` card, the Quick Log dialog
-  title, search tab. Verified in-browser: contact tabs read `Overview / Meetings (1) / Relationships /
-  Prep Sheet`; a DOM scan finds **zero** visible "conversation" text.
+- **Item 3 — Favorite organizations** (`80911ff`). Schema-free mirror of favorite contacts:
+  reserved `Favorite` `CompanyTag` + `GET /companies/favorites` / `PATCH /companies/:id/favorite`
+  (copied the contacts impl; `/favorites` declared before `/:id`). Star toggle + amber quick-add
+  chips in **Quick Log "Organizations"** ([quick-log-dialog.tsx](../client/src/components/quick-log-dialog.tsx))
+  and **Ideas "Related Companies"** ([idea-list.tsx](../client/src/pages/ideas/idea-list.tsx)).
+  Owner scope: **those two surfaces only.** Verified API round-trip + in-browser (desktop/390px).
+- **Items 1 & 2 — Calendar polish** (`85ab6ec`, both in `MeetingsCalendar`,
+  [meetings.tsx](../client/src/pages/meetings.tsx)). **(1)** Owner chose **expand the day cell
+  inline** over a popover: `dayMaxEvents={false}` so a busy day renders *every* meeting inline and
+  the row grows (`height="auto"`); no filtering — calendar still shows all meetings by date.
+  **(2)** Hover tooltip via `eventDidMount` `el.title` = first participant + summary (data already
+  in the `/meetings` range fetch — no API change); de-dupes the 1:1 case to summary-only.
+  Calendar-only. Verified with a 10-meeting test day (created + deleted): all inline on desktop
+  grid + mobile list, tooltips correct, event click still opens the editor.
+- **Item 4 — Backup-coverage audit** (`c5c18b5`). All **27** Prisma models confirmed in both
+  backup paths. Fixed two real gaps + the stale labels: **(a)** the manual ZIP bundled photos
+  only — `photo-backup.ts` now bundles photos **+ `ConversationAttachment` files + markdown-embedded
+  screenshots** (`collectBinaryRefs`/`buildBinariesZip`; download renamed `searchbook-photos.zip`
+  → **`searchbook-files.zip`**); **(b)** local-disk dev backup/restore now also copies `data/files`;
+  **(c)** `/cron` returns a `tables` count derived from the export (no more hardcoded `24`).
+  Deliverable: **`.planning/BACKUP-COVERAGE-AUDIT.md`** (model × path matrix + binary classes).
+  Verified: collector unit test (3 classes + URL dedup) + real data (11 binaries fetched, **Blob
+  CORS from browser now confirmed working**).
+- **Item 5 — Restore test** (`7d67dc5`). **Harness built + dry-run validated; the real prod run is
+  the only owner-gated piece.** `server/scripts/restore-test.mjs` bootstraps a scratch schema (DDL
+  replay), restores a backup JSON FK-ordered (mirrors the production `importViaTurso` path), and
+  verifies per-table counts + relationships + binary reachability. Prod-safe: requires `--confirm`,
+  refuses if `--target == --forbid-url`, only writes the target. **Local dry-run (file→file):
+  27/27 tables matched, 544 rows, 11/11 binaries reachable.** Runbook:
+  **`.planning/RESTORE-TEST-RUNBOOK.md`**.
 
-`npm run prepush` **and** the strict client build (`tsc -b`) green for both commits; console clean.
+### What's Next
 
-### What's Next — owner's 5-item follow-up list (new plan of record)
-
-The UX-Search-Meetings worklist is **done**. The owner gave 5 follow-ups to tackle next, captured (with
-recon already done) in a new plan doc: **`.planning/CALENDAR-FAVORITES-BACKUP-PLAN.md`**. Read its
-"How to use" + the items, then confirm/refine scope with the owner before building (a few open
-decisions are flagged inline). The 5 items:
-
-1. **Calendar day-overflow** — handle ~10 meetings/day (FullCalendar already shows "+N more"; verify the
-   built-in popover's event clicks open the editor; maybe raise `dayMaxEvents` / wire day-number → day list). Client-only.
-2. **Calendar hover tooltip** — hovering a meeting shows the first participant + summary (native
-   `el.title` via `eventDidMount`; `/api/meetings` already returns both — no API change). Client-only.
-3. **Favorite organizations** — mirror contact favorites for orgs in the org-entry comboboxes (meeting
-   log, ideas). **Schema-free**: reserved `Favorite` tag via the existing `CompanyTag` junction; add
-   `GET /companies/favorites` + `PATCH /companies/:id/favorite` (copy the contacts impl).
-4. **Backup-coverage audit** — recon found **all 27 Prisma models are already in both backup paths**
-   (browser-direct `TABLES_PARENT_FIRST` + server `buildExport`), `SELECT *`/`findMany` so column-complete.
-   Remaining: fix stale "24-table" labels in the server route; **verify binary files** — the manual ZIP/local-disk
-   backup bundles `photos/` but maybe **not** `files/` (`ConversationAttachment` binaries) — close that gap.
-5. **Prod→dev restore test** — download all prod backup material (DB JSON + binaries) and fully restore into a
-   **scratch** Turso DB (never overwrite live); verify per-table row counts, relationships, and that photo +
-   **attachment** binaries resolve. Run **after** item 4. (Relates to carry-over #4.)
-
-Suggested order: 3 → 1 & 2 (same file) → 4 then 5. The longer-term **NCQA adaptation plan**
-(`.planning/NCQA-ADAPTATION-PLAN.md`) stays the standing plan of record after these (its tasks are
-gated on decisions D1–D9 and some are schema-touching — confirm scope with the owner; don't push on D5–D9
-until they raise them).
-
-Process reminders: one atomic commit per chunk; `npm run prepush` **and** a client build
-(`tsc -b` is stricter than the `typecheck` script — it catches unused locals/imports) + a
-desktop/390px smoke test before each push; update each task's STATUS line in the plan doc; owner has
-standing permission to push to `main`. Items 1–3 are schema-free; flag immediately if anything seems to
-need a schema change (Turso DDL must land before pushing schema code).
+1. **[OWNER ACTION] Finish Item 5 (the real restore test).** Everything is built; it just needs a
+   throwaway target + prod data, which only the owner can provide:
+   - Create a **scratch Turso DB** via the web dashboard (CLI needs WSL). Grab its URL + auth token.
+   - Download the prod backup: live app → Settings → **Create Backup** (the `*.json` + `searchbook-files.zip`).
+   - Run the Option-A command in `.planning/RESTORE-TEST-RUNBOOK.md` (pass `--forbid-url <prod url>`),
+     then delete the scratch DB. An agent can drive this once the owner supplies the scratch creds.
+2. **Standing plan of record returns to the NCQA adaptation plan**
+   (`.planning/NCQA-ADAPTATION-PLAN.md`) — its tasks are gated on decisions D1–D9 and several are
+   schema-touching. **Don't push on D5–D9 until the owner raises them.**
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. **Prod search perf** — owner signed off on live Phase B (B3); treat as closed unless it regresses.
-3. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until the owner raises them.
-4. Desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
+3. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until raised.
+4. ~~Restore into scratch Turso DB~~ → harness + runbook now ready (Item 5 above); just needs the owner run.
 5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
 6. Company near-duplicate scan (LinkedIn-variant suffixes).
 7. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
 8. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
 
 ### Open Bugs / Known Caveats
-- No confirmed bugs. The `Favorite` tag is a normal tag and appears in tag dropdowns (by design).
-- **Meetings calendar:** fetches up to 100 meetings per visible range (plenty for a month for a single
-  user); applies no list filters (it navigates by date); `datesSet`'s exclusive `endStr` is a harmless
-  one-day over-fetch (FullCalendar clips rendering). Calendar view is suppressed in the series/`title` view.
-- **Quick Log autosave design:** free-text new people/orgs/tags and follow-up actions persist **only on
-  "Done"** (numeric-only keystroke autosave avoids duplicate-create on PUT). Core writeup always protected.
-- **Orphaned localStorage (harmless):** the retired inline editor's `draft_conversation_*` /
-  `draft_edit_conversation_*` keys are no longer read or written.
-- **B2 cap:** the meetings `q`-ranking path fetches ≤300 meetings before ranking.
-- The `tsc -b` build (`noUnusedLocals`) remains the gate that catches unused imports the `typecheck` script misses.
+- No confirmed bugs. The `Favorite` tag (contacts **and** now companies) is a normal tag and
+  appears in tag dropdowns by design; it is covered by backups (a `ContactTag` / `CompanyTag` row).
+- **Meetings calendar:** now shows **all** of a day's meetings inline (`dayMaxEvents={false}`),
+  so a very heavy day makes that week's row tall — acceptable per owner; revisit only if it bothers.
+  Still fetches ≤100 meetings per visible range and applies no list filters (navigates by date).
+- **Backup binaries:** the daily **cron deliberately excludes binaries** (keeps cloud backups
+  small). A full restore therefore needs the manual `searchbook-files.zip` for photos/attachments.
+  Binary *restore* is manual (DB rows keep the same Blob URLs, so they resolve without re-upload;
+  re-upload only needed if Blob itself is lost). See BACKUP-COVERAGE-AUDIT.md.
+- **Quick Log autosave:** selecting an *existing* org/participant (numeric id) triggers an autosave
+  POST that creates the meeting — expected (free-text new entries still persist only on Done).
+- The `tsc -b` build (`noUnusedLocals`) remains the gate that catches unused imports the
+  `typecheck` script misses — run it (not just `npm run prepush`) before every push.
 
 ### Working branch
-`main`, clean and fully pushed. Phase D (`a0db408`), Phase E (`fe75cf8`) + this handoff are live.
+`main`, clean and fully pushed. This session: `80911ff` (fav orgs), `85ab6ec` (calendar),
+`c5c18b5` (backup audit), `7d67dc5` (restore harness), + this handoff. All live on Vercel.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md` and the new plan of record
-> `.planning/CALENDAR-FAVORITES-BACKUP-PLAN.md` (the UX-Search-Meetings plan is fully shipped). Work the
-> owner's 5 follow-ups — calendar day-overflow, calendar hover tooltip (first participant + summary),
-> favorite **organizations** (schema-free, mirror contact favorites via `CompanyTag`), a backup-coverage
-> audit (all 27 tables already covered — verify binary/attachment bundling + fix the stale "24-table"
-> labels), and a prod→dev full-restore test into a scratch DB. Suggested order 3 → 1 & 2 → 4 then 5;
-> confirm/refine scope and the open decisions with me first. One atomic commit per chunk; before each push
-> run `npm run prepush` **and** a client build (`tsc -b`), and smoke-test desktop + 390px. Items 1–3 are
-> schema-free — flag immediately if anything needs a schema change.
+> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md`. The owner's 5-item
+> follow-up list (calendar, favorite orgs, backup audit, restore test) is shipped. If the owner
+> wants to finish the **restore test**, get scratch Turso creds + a prod backup and follow
+> `.planning/RESTORE-TEST-RUNBOOK.md`. Otherwise the standing plan of record is the **NCQA
+> adaptation plan** (`.planning/NCQA-ADAPTATION-PLAN.md`) — confirm scope/decisions D1–D9 with the
+> owner before building; don't push on D5–D9 until they raise them. One atomic commit per chunk;
+> `npm run prepush` **and** `tsc -b` + desktop/390px smoke test before each push.

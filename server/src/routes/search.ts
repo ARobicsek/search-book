@@ -208,6 +208,9 @@ router.get('/', async (req: Request, res: Response) => {
           { openQuestions: { contains: term } },
           { mutualConnections: { contains: term } },
           { prepNotes: { some: { content: { contains: term } } } },
+          // Per-participant meeting takeaways live on ConversationParticipant.note;
+          // surface the *person* (not just the meeting) when a takeaway matches.
+          { participantInConversations: { some: { note: { contains: term } } } },
         );
       }
       return clauses;
@@ -226,6 +229,7 @@ router.get('/', async (req: Request, res: Response) => {
           company: { select: { id: true, name: true } },
           tags: { select: { tag: { select: { name: true } } } },
           prepNotes: { select: { content: true }, take: 20 },
+          participantInConversations: { select: { note: true }, take: 50 },
           employmentHistory: { select: { companyName: true, title: true, company: { select: { name: true } } } },
         },
         take,
@@ -277,6 +281,7 @@ router.get('/', async (req: Request, res: Response) => {
         pushField(fields, 'open questions', c.openQuestions, 1);
         pushField(fields, 'mutual connections', c.mutualConnections, 1);
         for (const pn of c.prepNotes || []) pushField(fields, 'prep note', pn.content, 1);
+        for (const pic of c.participantInConversations || []) pushField(fields, 'meeting takeaway', pic.note, 1);
       }
       return fields;
     };

@@ -2,78 +2,64 @@
 
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and any open items.
 
-### What Was Just Completed (2026-06-14, build session) — B4 + Phase C SHIPPED
+### What Was Just Completed (2026-06-14, build session) — Phase D + Phase E SHIPPED → UX plan DONE
 
-Plan of record: `.planning/UX-SEARCH-MEETINGS-PLAN.md`. One atomic commit per chunk, verified at
+Plan of record: `.planning/UX-SEARCH-MEETINGS-PLAN.md`. One atomic commit per phase, verified at
 desktop + 390px with chrome-devtools, pushed to `main` (auto-deploys to Vercel). **No schema changes.**
+With these two, **Phases A–E of the UX-Search-Meetings plan are all complete** — that plan is now fully shipped.
 
-- **B4 — Highlight Meetings free-text matches** (`17fb400`). Extracted `HighlightedText` (the
-  merge-overlapping-ranges renderer) out of `search.tsx` into a shared
-  [client/src/components/highlighted-text.tsx](client/src/components/highlighted-text.tsx); both pages
-  import it. In `meetings.tsx`, a local `hl()` helper wraps matches (`terms=[qFilter.trim()]`,
-  `caseSensitive=false`) in the plain-text fields (display name, summary, attendeesDescription,
-  nextSteps, participant/org/tag badges). `notes`/prep markdown bodies left **un-highlighted** (no
-  `<mark>` into raw markdown — matches main Search). Verified via DOM `<mark>` inspection: q="amy" →
-  marks in the name link + summary, 0 in `.prep-note-markdown`; q="CALEB" case-insensitive hits the
-  name + nextSteps; clearing q → 0 marks.
-- **C1a — Quick Log autosave + drop 1:1 anchor + participant-first display** (`e49f857`). Dropped the
-  "Contact (1:1 anchor)" Combobox + all `contactId` state. **Autosave**: a focused debounced (1.5s)
-  effect persists a *numeric-only* body (scalars + already-resolved participants/orgs/tags) via
-  **POST-once-then-PUT**, serialized through a `saveChainRef` (one POST, no PUT-before-POST); it
-  **never** sends `contactId` (preserves legacy anchors) or `createActions` (a PUT re-creates those),
-  and gates on a server-acceptable "who". `lastSnapshotRef` skips no-ops (seeded from the loaded record
-  on edit). Free-text names + follow-up actions persist only on the explicit **"Done"** finalize;
-  prep/attachments persist live once `savedIdRef` is set. Header `SaveStatusIndicator`; footer
-  `[Cancel][Log Meeting]` → `[Delete this meeting][Close][Done]` after the first save; X/Cancel keeps
-  the autosaved record. **Participant-first display** added to the meetings card + search `displayName`.
-- **C1b — Contact page logs via Quick Log (seeded participant)** (`f325aca`). `useQuickLog().open` now
-  takes `{ participant?, title? }`; the dialog seeds the participant, merges them into `contactOptions`,
-  and expands "Who was there." `ConversationsTab` is now a lean **read-only list** (header "Log Meeting"
-  → seeded `open`; card → `openEdit`; delete kept; refreshes on `searchbook:meeting-logged`). Deleted
-  ~1.3k lines of dead inline form (Dialog, `useAutoSave`/draft-localStorage, edit-draft tracking,
-  resolve/submit/action/link handlers, form types) and pruned now-unused props/imports (caught by
-  `tsc -b`/`noUnusedLocals`, **stricter** than the `typecheck` script). Fixed `quickLog.open` call sites
-  in `layout.tsx` + `meetings.tsx`. Added a **"meaningful content" gate** so a pre-seeded participant
-  alone never auto-creates an empty meeting.
+- **Phase D — Meetings calendar** (`a0db408`). Added a **List | Calendar** segmented toggle to the
+  Meetings header (`?view=calendar` in the URL; icon-only `<sm`; hidden + forced to list in the
+  series/`title` view). New `MeetingsCalendar` component in
+  [client/src/pages/meetings.tsx](client/src/pages/meetings.tsx) renders FullCalendar
+  (dayGrid+list+interaction), fetching **only the visible range** via `/api/meetings?from=&to=&limit=100`
+  on FullCalendar's `datesSet` (initial + every nav), keeping the range in a ref to refetch on the
+  `searchbook:meeting-logged` event. Each meeting → an all-day event titled via the shared
+  `conversationDisplayName` (extended to the participant-first fallback so 1:1s show the person) and
+  colored by `type` via a new **hex** map `meetingTypeCalendarColors` (FullCalendar needs CSS colors,
+  not the Tailwind `conversationTypeColors` class strings). Event click → `quickLog.openEdit(id)`, so
+  future-dated meetings double as a prep queue. **Mobile** defaults to `listMonth` (desktop
+  `dayGridMonth`) via a one-frame `ready` mount gate (since `useIsMobile` resolves false→true after
+  mount and FullCalendar reads `initialView` once — calendar.tsx dodges this via its fetch-loading
+  spinner). Filters hidden in calendar view. Verified: events land on the correct dates (cross-checked
+  vs. the API — no off-by-one), participant-first names + per-type colors, `+N more` overflow, event
+  click opens the right meeting, mobile mounts in list view grouped by date, toggle both ways, console clean.
+- **Phase E — Terminology "Meetings" everywhere** (`fe75cf8`). Relabeled **only rendered strings**
+  from "Conversation(s)" → "Meeting(s)": contact-detail (tab label `Conversations`→**Meetings**, kept
+  `value="conversations"` tab id; delete-impact `conversation log(s)`; Prep Sheet "before a **meeting**
+  with", **Last Meeting**, "No **meetings** logged yet.", "upcoming **meetings**", prep-notes
+  placeholder), action-detail (Field label + `Meeting #id` fallback), analytics (**Meetings by Type**
+  chart), search (**Recent Meetings**), duplicates (4 merge-dialog strings). Left untouched: the
+  `Conversation` model/TS types, `/conversations` API paths, `searchbook:*` event names,
+  `draft_*conversation*` localStorage keys, and all variable/prop names. Already correct (no change):
+  command-palette group `heading="Meetings"`, company-detail's `Meetings (N)` card, the Quick Log dialog
+  title, search tab. Verified in-browser: contact tabs read `Overview / Meetings (1) / Relationships /
+  Prep Sheet`; a DOM scan finds **zero** visible "conversation" text.
 
-`npm run prepush` **and** the strict client build (`tsc -b && vite build`) green for every commit;
-verified end-to-end (seeded open → idle = no POST; type → POST; Done → contact list refreshes 1→2;
-card → Edit Meeting; legacy anchored meetings still display). Console clean.
+`npm run prepush` **and** the strict client build (`tsc -b`) green for both commits; console clean.
 
-### Owner sign-off captured
+### What's Next — back to the NCQA adaptation plan (owner to confirm scope)
 
-Owner approved live Phase B search behavior (the pre-Phase-C gate) before C began — carry-over #2
-(prod `[TIMING]` for a broad query) considered acceptable. If anything about prod search still feels
-off, raise it; otherwise it's closed.
-
-### What's Next — Phase D, then Phase E
-
-**Phase D — Dedicated Meetings calendar (#8)** (`.planning/UX-SEARCH-MEETINGS-PLAN.md` §Phase D).
-Commit: `feat(meetings): meetings calendar view`. Add a **List | Calendar** toggle to the Meetings
-page header ([client/src/pages/meetings.tsx](client/src/pages/meetings.tsx)); meetings-only (separate
-from the actions calendar at [client/src/pages/calendar.tsx](client/src/pages/calendar.tsx) — copy its
-FullCalendar pattern + `isMobile` list default). Fetch the visible range via
-`/api/meetings?from=&to=&limit=` (high limit for a month). Each meeting → all-day event titled by
-display name (reuse the participant-first fallback), colored by `type` (`conversationTypeColors`).
-Click → `quickLog.openEdit(id)`. Future-dated meetings appear naturally → advance prep.
-
-**Phase E — Terminology "Meetings" everywhere (#4)** (§Phase E). Commit:
-`refactor(ui): call conversations "meetings" throughout`. **UI labels only** — keep the `Conversation`
-model, `/conversations` API, TS types, event names, and `draft_*conversation*` localStorage keys.
-Grep user-facing `Conversation`/`conversations` strings in `client/src` → Meeting(s): the contact-page
-**tab label + count** ([contact-detail.tsx:663](client/src/pages/contacts/contact-detail.tsx#L663) —
-still says "Conversations"; the tab's internal heading is already "Meetings" from C1b), the
-delete-impact "conversation log(s)" text, command-palette entries, headings.
+The UX-Search-Meetings worklist is **done**. The standing **plan of record reverts to
+`.planning/NCQA-ADAPTATION-PLAN.md`** (taxonomy retheme, AI ingest of Copilot recaps, Outlook ICS
+daily briefing, semantic search over meeting notes). **Before starting NCQA work:**
+- Re-read the NCQA plan's "How to use this document" + the phase you'll work. **Several tasks are gated
+  on decisions D1–D9** at the top of that plan, and the owner asked **not to push on D5–D9 until they
+  raise them** (carry-over #3). So **confirm with the owner which NCQA phase/tasks to start** rather than
+  assuming Phase 1.
+- **Schema-touching tasks need Turso DDL applied first** (procedure at the top of the adaptation plan) —
+  the UX plan was deliberately schema-free, NCQA tasks are not. Never push schema-touching code to `main`
+  before the Turso DDL is live.
 
 Process reminders: one atomic commit per chunk; `npm run prepush` **and** a client build
-(`tsc -b` is stricter than `typecheck` — it caught several unused locals/imports during C1b) + a
+(`tsc -b` is stricter than the `typecheck` script — it catches unused locals/imports) + a
 desktop/390px smoke test before each push; update each task's STATUS line in the plan doc; owner has
-standing permission to push to `main`. **No schema changes expected — flag immediately if one seems needed.**
+standing permission to push to `main`.
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. **Prod search perf** — owner signed off on live Phase B (B3); treat as closed unless it regresses.
-3. NCQA adaptation plan (`.planning/NCQA-ADAPTATION-PLAN.md`): Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until the owner raises them.
+3. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until the owner raises them.
 4. Desktop-only verifications parked from Phase 7.5 (photo-ZIP CORS vs prod; restore into scratch Turso DB).
 5. Replace `resetPrisma()` per-request pattern with a long-lived PrismaClient.
 6. Company near-duplicate scan (LinkedIn-variant suffixes).
@@ -82,28 +68,27 @@ standing permission to push to `main`. **No schema changes expected — flag imm
 
 ### Open Bugs / Known Caveats
 - No confirmed bugs. The `Favorite` tag is a normal tag and appears in tag dropdowns (by design).
+- **Meetings calendar:** fetches up to 100 meetings per visible range (plenty for a month for a single
+  user); applies no list filters (it navigates by date); `datesSet`'s exclusive `endStr` is a harmless
+  one-day over-fetch (FullCalendar clips rendering). Calendar view is suppressed in the series/`title` view.
 - **Quick Log autosave design:** free-text new people/orgs/tags and follow-up actions persist **only on
-  "Done"** (not by the keystroke autosave, which is numeric-only to avoid duplicate-create on PUT). The
-  core writeup (title/notes/summary/numeric participants) is always protected. The in-dialog
-  "Delete this meeting" uses a native `window.confirm`.
+  "Done"** (numeric-only keystroke autosave avoids duplicate-create on PUT). Core writeup always protected.
 - **Orphaned localStorage (harmless):** the retired inline editor's `draft_conversation_*` /
-  `draft_edit_conversation_*` keys are no longer read or written; any pre-existing ones just sit unused.
-- **B2 cap:** the `q`-ranking path fetches ≤300 meetings before ranking (total bounded at 300).
-- After Phase C, the contact-detail file is ~1.3k lines lighter; the `tsc -b` build (`noUnusedLocals`)
-  remains the gate that catches unused imports the `typecheck` script misses.
+  `draft_edit_conversation_*` keys are no longer read or written.
+- **B2 cap:** the meetings `q`-ranking path fetches ≤300 meetings before ranking.
+- The `tsc -b` build (`noUnusedLocals`) remains the gate that catches unused imports the `typecheck` script misses.
 
 ### Working branch
-`main`, clean and fully pushed. B4 (`17fb400`), C1a (`e49f857`), C1b (`f325aca`) + this handoff are live.
+`main`, clean and fully pushed. Phase D (`a0db408`), Phase E (`fe75cf8`) + this handoff are live.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md` and the plan of record
-> `.planning/UX-SEARCH-MEETINGS-PLAN.md`. Phases A, B, and C are shipped and live. Implement **Phase D**
-> (dedicated Meetings calendar: List|Calendar toggle on `/meetings`, FullCalendar per `calendar.tsx`,
-> meetings fetched by visible range, event click → `quickLog.openEdit(id)`), then **Phase E** (relabel
-> user-facing "Conversations" → "Meetings" — UI strings only, keep model/API/types/events/localStorage
-> keys; the contact-page tab label is the main remaining one). One atomic commit per chunk; before each
-> push run `npm run prepush` **and** a client build (`tsc -b`), and smoke-test desktop + 390px. Update
-> each task's STATUS line. No schema changes expected — flag immediately if one seems needed.
+> Read `CLAUDE.md` / `AGENTS.md`, then `.planning/NEXT-SESSION-PROMPT.md`. The UX-Search-Meetings plan
+> (`.planning/UX-SEARCH-MEETINGS-PLAN.md`) is **fully shipped (Phases A–E)**. The plan of record now
+> reverts to `.planning/NCQA-ADAPTATION-PLAN.md` — read its "How to use this document" section. Several
+> NCQA tasks are gated on decisions D1–D9 and some are schema-touching (Turso DDL must be applied before
+> pushing schema code), and the owner asked not to push on D5–D9 until they raise them — so **confirm
+> with the owner which NCQA phase/tasks to start**. One atomic commit per chunk; before each push run
+> `npm run prepush` **and** a client build (`tsc -b`), and smoke-test desktop + 390px.

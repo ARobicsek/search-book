@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { TitleAutocomplete } from '@/components/title-autocomplete'
+import { HighlightedText } from '@/components/highlighted-text'
 import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
@@ -213,6 +214,13 @@ export function MeetingsPage() {
     setSearchParams({}, { replace: true })
   }
 
+  // When the free-text filter is active, wrap matches in <mark> in the
+  // plain-text fields (markdown notes are left un-highlighted). The server
+  // trims `q` to a single case-insensitive term, so we mirror that here.
+  const qTerm = qFilter.trim()
+  const hl = (text: string) =>
+    qTerm ? <HighlightedText text={text} terms={[qTerm]} caseSensitive={false} /> : text
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
@@ -368,22 +376,22 @@ export function MeetingsPage() {
                         className="text-left text-sm font-semibold text-primary hover:underline"
                         onClick={() => setParam('title', conv.title!)}
                       >
-                        {conv.title}
+                        {hl(conv.title)}
                       </button>
                     ) : conv.contact ? (
                       <Link to={`/contacts/${conv.contact.id}`} className="block text-sm font-semibold hover:underline">
-                        {conv.contact.name}
+                        {hl(conv.contact.name)}
                       </Link>
                     ) : conv.company ? (
                       <Link to={`/companies/${conv.company.id}`} className="block text-sm font-semibold hover:underline">
-                        {conv.company.name}
+                        {hl(conv.company.name)}
                       </Link>
                     ) : (
-                      <p className="text-sm font-semibold">{conv.attendeesDescription || 'Meeting'}</p>
+                      <p className="text-sm font-semibold">{conv.attendeesDescription ? hl(conv.attendeesDescription) : 'Meeting'}</p>
                     )}
-                    {conv.summary && <p className="text-sm font-medium">{conv.summary}</p>}
+                    {conv.summary && <p className="text-sm font-medium">{hl(conv.summary)}</p>}
                     {conv.attendeesDescription && conv.title && (
-                      <p className="text-xs italic text-muted-foreground">{conv.attendeesDescription}</p>
+                      <p className="text-xs italic text-muted-foreground">{hl(conv.attendeesDescription)}</p>
                     )}
                     {conv.prepNotes && conv.prepNotes.length > 0 && (
                       <div className="rounded-md bg-amber-50/60 p-2">
@@ -431,14 +439,14 @@ export function MeetingsPage() {
                     )}
                     {conv.nextSteps && (
                       <p className="text-xs text-muted-foreground">
-                        <span className="font-medium">Next:</span> {conv.nextSteps}
+                        <span className="font-medium">Next:</span> {hl(conv.nextSteps)}
                       </p>
                     )}
                     <div className="flex flex-wrap gap-1 pt-1">
                       {conv.contact && conv.title && (
                         <Link to={`/contacts/${conv.contact.id}`}>
                           <Badge variant="outline" className="text-xs hover:bg-muted">
-                            {conv.contact.name}
+                            {hl(conv.contact.name)}
                           </Badge>
                         </Link>
                       )}
@@ -446,7 +454,7 @@ export function MeetingsPage() {
                         <Link to={`/companies/${conv.company.id}`}>
                           <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100">
                             <Building2 className="mr-1 h-3 w-3" />
-                            {conv.company.name}
+                            {hl(conv.company.name)}
                           </Badge>
                         </Link>
                       )}
@@ -454,14 +462,14 @@ export function MeetingsPage() {
                         <Link key={o.company.id} to={`/companies/${o.company.id}`}>
                           <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100">
                             <Building2 className="mr-1 h-3 w-3" />
-                            {o.company.name}
+                            {hl(o.company.name)}
                           </Badge>
                         </Link>
                       ))}
                       {conv.participants?.map((p) => (
                         <Link key={p.contact.id} to={`/contacts/${p.contact.id}`}>
                           <Badge variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100" title={p.note || undefined}>
-                            {p.contact.name}
+                            {hl(p.contact.name)}
                           </Badge>
                         </Link>
                       ))}
@@ -469,7 +477,7 @@ export function MeetingsPage() {
                         <button key={t.tag.id} type="button" onClick={() => setParam('tagId', t.tag.id.toString())}>
                           <Badge variant="outline" className="text-xs bg-violet-50 text-violet-800 border-violet-200 hover:bg-violet-100">
                             <TagIcon className="mr-1 h-3 w-3" />
-                            {t.tag.name}
+                            {hl(t.tag.name)}
                           </Badge>
                         </button>
                       ))}

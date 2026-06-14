@@ -9,7 +9,7 @@ import { Bold, Heading3, Italic, List, ListOrdered } from 'lucide-react'
 // - shortcuts: Ctrl+B, Ctrl+I, Ctrl+Shift+8 (bullets), Ctrl+Shift+7 (numbered),
 //   Ctrl+Alt+1/2/3 (# / ## / ### on the current line) — Google-Docs-style
 // - Enter continues a bullet/numbered list; Enter on an empty item ends it
-// - pasting an image uploads it and inserts ![…](url) (rendered by ReactMarkdown)
+// - pasting OR dragging in an image uploads it and inserts ![…](url) (rendered by ReactMarkdown)
 
 interface MarkdownTextareaProps {
   id?: string
@@ -179,24 +179,26 @@ export function MarkdownTextarea({
     [handleEnter, insertHeading, insertBullets, insertNumbered, wrapSelection]
   )
 
-  // Paste a screenshot → upload → insert markdown image at the caret
-  const handlePaste = useCallback(
-    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-      const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'))
-      if (!item) return
-      const file = item.getAsFile()
-      if (!file) return
-      e.preventDefault()
+  // Upload one or more image files and insert their markdown at the caret.
+  // Shared by paste and drag-and-drop. Builds the combined markdown first, then
+  // inserts once, to avoid races when several files are dropped at the same time.
+  const insertImages = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return
       const el = ref.current
       const pos = el ? el.selectionStart : value.length
       setUploading(true)
       try {
-        const result = await api.uploadFile(file)
-        const md = `![screenshot](${result.path})`
+        const mds: string[] = []
+        for (const file of files) {
+          const result = await api.uploadFile(file)
+          mds.push(`![screenshot](${result.path})`)
+        }
+        const md = mds.join('\n')
         const current = ref.current?.value ?? value
         const next = current.slice(0, pos) + md + current.slice(pos)
         apply(next, pos + md.length)
-        toast.success('Screenshot added')
+        toast.success(files.length > 1 ? `${files.length} images added` : 'Screenshot added')
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Image upload failed')
       } finally {
@@ -204,6 +206,39 @@ export function MarkdownTextarea({
       }
     },
     [value, apply]
+  )
+
+  // Paste a screenshot → upload → insert markdown image at the caret
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'))
+      const file = item?.getAsFile()
+      if (!file) return
+      e.preventDefault()
+      void insertImages([file])
+    },
+    [insertImages]
+  )
+
+  // Drag an image file in from Explorer/Finder → upload → insert at the caret.
+  // dragOver must preventDefault for the drop to fire at all.
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+    if (Array.from(e.dataTransfer.items).some((i) => i.kind === 'file')) e.preventDefault()
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLTextAreaElement>) => {
+      const all = Array.from(e.dataTransfer.files)
+      if (all.length === 0) return // plain text drag — let the textarea handle it
+      const images = all.filter((f) => f.type.startsWith('image/'))
+      e.preventDefault()
+      if (images.length === 0) {
+        toast.message('Only images embed in notes — use “Actions, prep, tags & attachments” for other files')
+        return
+      }
+      void insertImages(images)
+    },
+    [insertImages]
   )
 
   const tools: { icon: React.ReactNode; title: string; onClick: () => void }[] = [
@@ -242,6 +277,8 @@ export function MarkdownTextarea({
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         placeholder={placeholder}
         rows={rows}
         className={className}

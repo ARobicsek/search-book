@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/select'
 import { HighlightedText } from '@/components/highlighted-text'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore } from 'lucide-react'
+import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { cn } from '@/lib/utils'
@@ -447,6 +447,9 @@ export function IdeaListPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredIdeas.map((idea) => {
             const expanded = expandedId === idea.id
+            // Count pasted screenshots / markdown images so a collapsed card can
+            // hint at them without letting them stretch its height.
+            const imageCount = (idea.description?.match(/!\[[^\]]*\]\(/g) || []).length
             return (
             <Card
               key={idea.id}
@@ -503,11 +506,19 @@ export function IdeaListPage() {
               </CardHeader>
               <CardContent className="flex-1">
                 {idea.description ? (
-                  <div className={cn('prep-note-markdown text-sm text-muted-foreground', !expanded && 'line-clamp-4')}>
+                  // Collapsed: clamp text to 4 lines AND hide images so screenshots
+                  // never stretch the card. Expanded shows the full markdown + images.
+                  <div className={cn('prep-note-markdown text-sm text-muted-foreground', !expanded && 'line-clamp-4 [&_img]:hidden')}>
                     <ReactMarkdown>{idea.description}</ReactMarkdown>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">No description</p>
+                )}
+                {!expanded && imageCount > 0 && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground/70">
+                    <ImageIcon className="h-3 w-3 shrink-0" />
+                    {imageCount} screenshot{imageCount !== 1 ? 's' : ''} — click to view
+                  </p>
                 )}
                 {((idea.contacts && idea.contacts.length > 0) || (idea.companies && idea.companies.length > 0)) && (
                   <div className="flex flex-wrap gap-1 mt-2">

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
+import { currentEmployerCompanyIds, promoteCompaniesToConnected } from '../company-status';
 
 const router = Router();
 
@@ -331,6 +332,10 @@ router.post('/', async (req: Request, res: Response) => {
           newStatus: created.status,
         },
       });
+      // A contact created already-connected promotes their current employer(s) to CONNECTED.
+      if (created.status === 'CONNECTED') {
+        await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(created));
+      }
       return created;
     });
 
@@ -382,10 +387,16 @@ router.put('/:id', async (req: Request, res: Response) => {
           },
         });
       }
-      return tx.contact.findUnique({
+      const updated = await tx.contact.findUnique({
         where: { id },
         include: { company: { select: { id: true, name: true } } },
       });
+      // Newly getting connected to this contact promotes their current employer(s)
+      // to CONNECTED (reads post-update company fields in case they changed too).
+      if (data.status === 'CONNECTED' && existing.status !== 'CONNECTED' && updated) {
+        await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(updated));
+      }
+      return updated;
     });
 
     res.json(contact);

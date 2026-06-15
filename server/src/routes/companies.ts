@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
+import { promoteCompaniesToConnected } from '../company-status';
 
 const router = Router();
 
@@ -352,6 +353,12 @@ router.post('/:id/contacts', async (req: Request, res: Response) => {
         where: { id: contact.id },
         data: updateData
       });
+    }
+
+    // Linking a connected contact as an employee means we now have a relationship
+    // at this org — promote it to CONNECTED (no-op if already further along).
+    if (type === 'EMPLOYED' && contact.status === 'CONNECTED') {
+      await promoteCompaniesToConnected(prisma, [companyId]);
     }
 
     res.status(200).json({ success: true, contactId: contact.id });

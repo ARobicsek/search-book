@@ -8,7 +8,8 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 The `CREATE TABLE "IdeaTag"` + comma-tag backfill were applied to Turso via the web SQL console, and
 `c3f18dd` (Idea tags → app-wide Tag) was pushed. **All 9 asks are now live on Vercel.** Follow-up fix
 `bd1fbb7` hides the reserved `Favorite` tag (the internal favorites mechanism) from `GET /tags` so it no
-longer leaks into the tag pickers (Ideas/Meetings/Quick Log/contact-detail). Remote `main` = `bd1fbb7`.
+longer leaks into the tag pickers (Ideas/Meetings/Quick Log/contact-detail); the owner also deleted the
+leftover `dog` tag via the Turso console. Nothing is pending from this session.
 
 ### What Was Just Completed (2026-06-15 session 2) — 9 owner asks across Ideas + Meetings
 
@@ -71,9 +72,9 @@ the shared `/tags` vocab. All test data removed.
   true 390px viewport.
 
 ### Working branch
-`main` — **everything pushed and live (remote `main` = `bd1fbb7`).** All 9 asks shipped; the Idea-tags
-schema (`c3f18dd`) went out after the owner applied the Turso `IdeaTag` DDL; `bd1fbb7` hid the reserved
-`Favorite` tag from the pickers. Working tree clean.
+`main` — **everything pushed and live.** All 9 asks shipped; the Idea-tags schema (`c3f18dd`) went out
+after the owner applied the Turso `IdeaTag` DDL; `bd1fbb7` hid the reserved `Favorite` tag from the
+pickers; `dog` tag removed. Working tree clean, nothing pending.
 
 ---
 

@@ -2,9 +2,11 @@
 
 **Created:** 2026-06-15
 **Origin:** owner request — 4 Ideas asks + 5 Meetings asks.
-**Status:** Tasks 1–7 **DONE + verified + PUSHED** (`main` = `f0c5f37`, live on Vercel).
-Task 8 (Idea tags → app-wide Tag, SCHEMA) is **DONE + verified locally, committed but
-NOT pushed** (`c3f18dd`) — gated on the owner applying the Turso `CREATE TABLE "IdeaTag"`.
+**Status:** ✅ **COMPLETE — all 9 asks DONE, verified, and LIVE on Vercel.** Tasks 1–7 pushed
+(`f0c5f37`); Task 8 (Idea tags → app-wide Tag, SCHEMA) shipped after the owner applied the Turso
+`CREATE TABLE "IdeaTag"` + comma-tag backfill via the web console and pushed (`c3f18dd`). Follow-ups:
+`bd1fbb7` hides the reserved `Favorite` tag from the pickers; owner deleted the leftover `dog` tag.
+Remote `main` = `8fa51cc`.
 
 ## Owner decisions (asked at session start)
 - **Idea tags (#3):** **Share app-wide tags** — Idea tags move to the real `Tag` table
@@ -105,22 +107,16 @@ migration script + Turso DDL.
 - **T8(plan)/#9 title→Edit** `f0c5f37` — meeting heading opens Edit; "series" chip keeps
   the grouped view; anchor-contact chip shown for all contact-anchored meetings.
 
-**Task 8 (Idea tags → app-wide Tag, SCHEMA) — DONE + verified locally, committed `c3f18dd`,
-NOT PUSHED.** Gated on the owner applying the Turso `CREATE TABLE "IdeaTag"`. Verified
-locally end-to-end: create tag via combobox → idea persists `tagLinks`; PUT clears; chip
-displays; tag enters the shared `/tags` vocab. **Handoff (do in order):**
-1. Apply the schema to Turso — either run the migration (creates table + backfills):
-   `cd server && TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… node scripts/migrate-ideas-tags-to-junction.js`
-   (needs a **fresh** rw token — the committed one is stale), **or** paste this in the Turso
-   web console then run the script (still safe — it's idempotent) for the backfill:
-   ```sql
-   CREATE TABLE "IdeaTag" (
-       "ideaId" INTEGER NOT NULL,
-       "tagId" INTEGER NOT NULL,
-       PRIMARY KEY ("ideaId", "tagId"),
-       CONSTRAINT "IdeaTag_ideaId_fkey" FOREIGN KEY ("ideaId") REFERENCES "Idea" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-       CONSTRAINT "IdeaTag_tagId_fkey" FOREIGN KEY ("tagId") REFERENCES "Tag" ("id") ON DELETE CASCADE ON UPDATE CASCADE
-   );
-   ```
-2. Then `git push` (sends `c3f18dd` + the doc commit). Vercel redeploys; confirm
-   `/api/health` is `200 db:ok` and the Ideas page loads.
+**Task 8 (Idea tags → app-wide Tag, SCHEMA) — DONE + LIVE** (`c3f18dd`). New `IdeaTag` junction;
+server includes `tagLinks` + accepts `tagIds`; Idea dialog tag input is a free-text `MultiCombobox`
+from `GET /tags` (`resolveTagIds` creates new tags on save, idempotent by name); card/list render
+chips from `tagLinks`; search scores tags from `tagLinks`. Verified locally end-to-end (create tag
+via combobox → idea persists `tagLinks`; PUT clears; chip displays; tag enters the shared `/tags`
+vocab). **Turso DDL applied 2026-06-15** by the owner via the web SQL console:
+`CREATE TABLE "IdeaTag"` (FKs to Idea/Tag, cascade) + a recursive-CTE backfill of the legacy
+comma-`Idea.tags` strings into Tag/IdeaTag (the same logic as `scripts/migrate-ideas-tags-to-junction.js`,
+which stays committed for reuse). Then `git push` — live on Vercel.
+
+**Follow-up `bd1fbb7`** — `GET /tags` now excludes the reserved `Favorite` tag (the internal
+favorites mechanism, not a user tag) so it no longer leaks into any tag picker. Owner separately
+deleted the leftover `dog` tag via the Turso console.

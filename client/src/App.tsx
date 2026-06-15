@@ -15,7 +15,6 @@ import { CompanyDetailPage } from '@/pages/companies/company-detail'
 import { ActionListPage } from '@/pages/actions/action-list'
 import { ActionFormPage } from '@/pages/actions/action-form'
 import { ActionDetailPage } from '@/pages/actions/action-detail'
-import { CalendarPage } from '@/pages/calendar'
 import { MeetingsPage } from '@/pages/meetings'
 import { IdeaListPage } from '@/pages/ideas/idea-list'
 import { AnalyticsPage } from '@/pages/analytics'
@@ -59,7 +58,8 @@ function App() {
           <Route path="/actions/:id" element={<ActionDetailPage />} />
           <Route path="/actions/:id/edit" element={<ActionFormPage />} />
           <Route path="/meetings" element={<MeetingsPage />} />
-          <Route path="/calendar" element={<CalendarPage />} />
+          {/* Calendar merged into the Actions page as a view; redirect old links/PWA shortcuts. */}
+          <Route path="/calendar" element={<Navigate to="/actions?view=calendar" replace />} />
           <Route path="/ideas" element={<IdeaListPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/settings" element={<SettingsPage />} />

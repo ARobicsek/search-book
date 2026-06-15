@@ -194,6 +194,10 @@ function MeetingsCalendar() {
         events={events}
         eventClick={handleEventClick}
         datesSet={handleDatesSet}
+        // Meetings are all-day events; blank FullCalendar's "all-day" time-column
+        // label in the mobile list view (owner saw it as "full day") so undated-time
+        // meetings simply show no time rather than a misleading label.
+        allDayText=""
         eventDidMount={(info) => {
           // Native hover tooltip: first participant + summary (a11y-safe, zero deps).
           const tip = info.event.extendedProps.tooltip as string | undefined

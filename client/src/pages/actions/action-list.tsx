@@ -11,8 +11,9 @@ import {
   type VisibilityState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus, Check, Search } from 'lucide-react'
+import { ArrowUpDown, Plus, Check, Search, List, CalendarDays } from 'lucide-react'
 import { ActionDateSelect } from '@/components/action-date-select'
+import { ActionsCalendar } from '@/pages/calendar'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api } from '@/lib/api'
 import type { Action, ActionType, ActionPriority } from '@/lib/types'
@@ -98,7 +99,18 @@ const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) =
 export function ActionListPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  // List vs Calendar view (mirrors Meetings) — calendar lives here now instead of
+  // a separate left-bar item.
+  const view = searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
+  const setView = (v: 'list' | 'calendar') => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v === 'calendar') next.set('view', 'calendar')
+      else next.delete('view')
+      return next
+    }, { replace: true })
+  }
   const [actions, setActions] = useState<Action[]>([])
   const [loading, setLoading] = useState(true)
   const [sorting, setSorting] = useState<SortingState>([])
@@ -411,14 +423,41 @@ export function ActionListPage() {
             {loading ? '' : `${actions.length} action${actions.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button asChild size="sm" className="w-full sm:w-auto">
-          <Link to="/actions/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Action
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-md border p-0.5">
+            <Button
+              variant={view === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 gap-1 px-2"
+              onClick={() => setView('list')}
+            >
+              <List className="h-4 w-4" />
+              <span className="hidden sm:inline">List</span>
+            </Button>
+            <Button
+              variant={view === 'calendar' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 gap-1 px-2"
+              onClick={() => setView('calendar')}
+            >
+              <CalendarDays className="h-4 w-4" />
+              <span className="hidden sm:inline">Calendar</span>
+            </Button>
+          </div>
+          <Button asChild size="sm">
+            <Link to="/actions/new">
+              <Plus className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">New Action</span>
+              <span className="sm:hidden">New</span>
+            </Link>
+          </Button>
+        </div>
       </div>
 
+      {view === 'calendar' ? (
+        <ActionsCalendar />
+      ) : (
+      <>
       <div className="flex flex-col gap-3 sm:flex-wrap sm:flex-row sm:items-center">
         <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -493,6 +532,8 @@ export function ActionListPage() {
           </TableBody>
         </Table>
       </div>
+      </>
+      )}
     </div>
   )
 }

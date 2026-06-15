@@ -139,7 +139,7 @@ function makePendingAction(): PendingAction {
 
 // The autosave body for one action (also the snapshot key). owerContactIds is the
 // numeric id array the /actions route expects (resolveOwers derives `direction`).
-function actionBody(a: PendingAction, participantIds: string[], orgValues: string[]) {
+function actionBody(a: PendingAction) {
   const oIds = a.owerIds.filter((v) => /^\d+$/.test(v)).map(Number)
   
   return {
@@ -358,7 +358,7 @@ function QuickLogDialog({
     return rows.some((a) => {
       if (!a.title.trim()) return false
       const saved = savedActionsRef.current.get(a.key)
-      return !saved || saved.snapshot !== JSON.stringify(actionBody(a, participantIds, orgValues))
+      return !saved || saved.snapshot !== JSON.stringify(actionBody(a))
     })
   }
 
@@ -925,7 +925,7 @@ function QuickLogDialog({
     try {
       for (const a of rows) {
         if (!a.title.trim()) continue
-        const body = actionBody(a, participantIds, orgValues)
+        const body = actionBody(a)
         const snap = JSON.stringify(body)
         const saved = savedActionsRef.current.get(a.key)
         if (!saved) {

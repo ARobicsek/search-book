@@ -7,7 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
-import prisma, { resetPrisma } from './db';
+import prisma from './db';
 import path from 'path';
 import contactsRouter from './routes/contacts';
 import companiesRouter from './routes/companies';
@@ -87,13 +87,6 @@ app.use((req, res, next) => {
       console.log(`[TIMING] ${req.method} ${req.path} — ${duration}ms (${res.statusCode})`);
     }
   });
-  next();
-});
-
-// Per-request fresh Prisma client in production (Turso).
-// Prevents stale HTTP connections in serverless environments.
-app.use('/api', (_req, _res, next) => {
-  resetPrisma();
   next();
 });
 

@@ -139,14 +139,20 @@ function makePendingAction(): PendingAction {
 
 // The autosave body for one action (also the snapshot key). owerContactIds is the
 // numeric id array the /actions route expects (resolveOwers derives `direction`).
-function actionBody(a: PendingAction) {
+function actionBody(a: PendingAction, participantIds: string[], orgValues: string[]) {
+  const pIds = participantIds.filter((v) => /^\d+$/.test(v)).map(Number)
+  const oIds = a.owerIds.filter((v) => /^\d+$/.test(v)).map(Number)
+  const cIds = orgValues.filter((v) => /^\d+$/.test(v)).map(Number)
+  
   return {
     title: a.title.trim(),
     type: a.type,
     dueDate: a.dueDate || null,
     priority: a.priority,
     owedByMe: a.owedByMe,
-    owerContactIds: a.owerIds.filter((v) => /^\d+$/.test(v)).map(Number),
+    owerContactIds: oIds,
+    contactIds: Array.from(new Set([...oIds, ...pIds])),
+    companyIds: cIds,
   }
 }
 
@@ -354,7 +360,7 @@ function QuickLogDialog({
     return rows.some((a) => {
       if (!a.title.trim()) return false
       const saved = savedActionsRef.current.get(a.key)
-      return !saved || saved.snapshot !== JSON.stringify(actionBody(a))
+      return !saved || saved.snapshot !== JSON.stringify(actionBody(a, participantIds, orgValues))
     })
   }
 
@@ -921,7 +927,7 @@ function QuickLogDialog({
     try {
       for (const a of rows) {
         if (!a.title.trim()) continue
-        const body = actionBody(a)
+        const body = actionBody(a, participantIds, orgValues)
         const snap = JSON.stringify(body)
         const saved = savedActionsRef.current.get(a.key)
         if (!saved) {

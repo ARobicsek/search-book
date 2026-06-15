@@ -333,9 +333,9 @@ export function ActionDetailPage() {
             </Field>
             <Field label="Meeting">
               {action.conversation && (
-                <span className="text-muted-foreground">
+                <Link to={`/meetings?id=${action.conversationId}`} className="text-primary hover:underline">
                   {action.conversation.summary ?? `Meeting #${action.conversationId}`}
-                </span>
+                </Link>
               )}
             </Field>
           </dl>

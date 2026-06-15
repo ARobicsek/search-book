@@ -140,9 +140,7 @@ function makePendingAction(): PendingAction {
 // The autosave body for one action (also the snapshot key). owerContactIds is the
 // numeric id array the /actions route expects (resolveOwers derives `direction`).
 function actionBody(a: PendingAction, participantIds: string[], orgValues: string[]) {
-  const pIds = participantIds.filter((v) => /^\d+$/.test(v)).map(Number)
   const oIds = a.owerIds.filter((v) => /^\d+$/.test(v)).map(Number)
-  const cIds = orgValues.filter((v) => /^\d+$/.test(v)).map(Number)
   
   return {
     title: a.title.trim(),
@@ -151,8 +149,8 @@ function actionBody(a: PendingAction, participantIds: string[], orgValues: strin
     priority: a.priority,
     owedByMe: a.owedByMe,
     owerContactIds: oIds,
-    contactIds: Array.from(new Set([...oIds, ...pIds])),
-    companyIds: cIds,
+    contactIds: oIds,
+    companyIds: [],
   }
 }
 

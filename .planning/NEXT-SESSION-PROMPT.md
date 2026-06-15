@@ -7,10 +7,10 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 
 1. **Contact UI Polish:**
    - **Form:** Removed the "Referred By" and "Research" sections from the UI to streamline data entry, while keeping the data fields intact for legacy preservation. Reordered the "How Connected" section to appear after "Personal Details".
-   - **Detail View:** Conditionally hid the "Connections" card when empty to save vertical space. Moved the "Personal Details" card up, immediately below "Notes".
+   - **Detail View:** Conditionally hid the "Connections" card when empty to save vertical space. Moved the "Personal Details" card up, immediately below "Notes". Moved the "Actions" section to appear ABOVE the "Links" section.
 
 2. **Action Creation Flow:**
-   - When creating a new action from a contact's detail page (`/actions/new?contactId=X`), the form now defaults to "Me" as the owner but automatically injects that contact as a quick-add chip so you can easily assign the action to them with one click. The "Who owns it" section also auto-expands so it's immediately visible.
+   - When creating a new action from a contact's detail page (`/actions/new?contactId=X`), the form now defaults to "Me" as the owner but automatically injects that contact as a quick-add chip so you can easily assign the action to them with one click. The "Who owns it" section also auto-expands so it's immediately visible. This contextual quick-add chip is styled distinctly (no star, neutral colors) from actual favorite contacts to avoid confusion.
 
 **Verification:** prepush (`tsc` client+server) + full `vite build` green throughout. All code pushed to `main`. 
 

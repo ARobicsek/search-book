@@ -169,12 +169,12 @@ export function ActionFormPage() {
   // Favorite contacts not already in the owers list — shown as quick-add chips
   // (mirrors the Quick Log "Who was there" favorites pattern).
   const quickAddOwerFavorites = useMemo(() => {
-    const list = [...favorites]
+    const list: { id: number; name: string; isContextual?: boolean }[] = [...favorites]
     const qContactId = searchParams.get('contactId')
-    if (qContactId && !list.some((f) => f.id.toString() === qContactId)) {
+    if (qContactId && !favorites.some((f) => f.id.toString() === qContactId)) {
       const contact = contacts.find((c) => c.id.toString() === qContactId)
       if (contact) {
-        list.unshift({ id: contact.id, name: contact.name })
+        list.unshift({ id: contact.id, name: contact.name, isContextual: true })
       }
     }
     return list.filter((f) => !form.owerIds.includes(f.id.toString()))
@@ -557,10 +557,15 @@ export function ActionFormPage() {
                         key={f.id}
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, owerIds: [...prev.owerIds, f.id.toString()] }))}
-                        className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                        className={cn(
+                          "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
+                          f.isContextual
+                            ? "bg-muted/50 text-muted-foreground hover:bg-muted"
+                            : "bg-amber-50 text-amber-900 hover:bg-amber-100"
+                        )}
                         title="Add to who owns it"
                       >
-                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                        {!f.isContextual && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
                         {f.name}
                         <Plus className="h-3 w-3" />
                       </button>

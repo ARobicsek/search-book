@@ -839,55 +839,6 @@ export function ContactDetailPage() {
             </Card>
           )}
 
-          {/* Links */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Links</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {links.length > 0 && (
-                <ul className="space-y-2">
-                  {links.map((link) => (
-                    <li key={link.id} className="flex items-center justify-between gap-2">
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                        {link.title}
-                      </a>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex gap-2 items-end">
-                <div className="flex-1 grid gap-2 sm:grid-cols-2">
-                  <Input
-                    value={newLinkUrl}
-                    onChange={(e) => setNewLinkUrl(e.target.value)}
-                    placeholder="URL (Google Drive, webpage, etc.)"
-                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
-                  />
-                  <Input
-                    value={newLinkTitle}
-                    onChange={(e) => setNewLinkTitle(e.target.value)}
-                    placeholder="Label (optional)"
-                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
-                  />
-                </div>
-                <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
-                  <Plus className="mr-1 h-3 w-3" />
-                  Add
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Actions */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -952,6 +903,57 @@ export function ContactDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Links */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Links</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {links.length > 0 && (
+                <ul className="space-y-2">
+                  {links.map((link) => (
+                    <li key={link.id} className="flex items-center justify-between gap-2">
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        {link.title}
+                      </a>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => deleteLink(link.id)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={newLinkUrl}
+                    onChange={(e) => setNewLinkUrl(e.target.value)}
+                    placeholder="URL (Google Drive, webpage, etc.)"
+                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                  />
+                  <Input
+                    value={newLinkTitle}
+                    onChange={(e) => setNewLinkTitle(e.target.value)}
+                    placeholder="Label (optional)"
+                    onKeyDown={(e) => e.key === 'Enter' && addLink()}
+                  />
+                </div>
+                <Button size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+
 
           {/* Tags */}
           <Card>

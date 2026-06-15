@@ -108,19 +108,46 @@ interface PendingAttachment {
   size: number
 }
 
-// A follow-up action staged locally; created via createActions on save
+// A follow-up action in the composer. Once the meeting record exists it
+// autosaves as a real Action (POST → captures id, then debounced PUT), just
+// like prep notes; before that it stays staged and is flushed on finalize.
+// `key` is a stable local id (array index is unsafe across async saves); the
+// persisted id + last-saved snapshot live in `savedActionsRef` (a synchronous
+// ref) so two chained reconciles can't double-create.
 interface PendingAction {
+  key: number
   title: string
   type: ActionType
   dueDate: string
   priority: ActionPriority
+  owedByMe: boolean        // the removable "Me" owner chip (mirrors the Actions form)
+  owerIds: string[]        // contact ids who own it (waiting-on)
 }
 
-const emptyPendingAction: PendingAction = {
-  title: '',
-  type: 'FOLLOW_UP',
-  dueDate: '',
-  priority: 'MEDIUM',
+let pendingActionKeySeq = 0
+function makePendingAction(): PendingAction {
+  return {
+    key: ++pendingActionKeySeq,
+    title: '',
+    type: 'FOLLOW_UP',
+    dueDate: '',
+    priority: 'MEDIUM',
+    owedByMe: true,
+    owerIds: [],
+  }
+}
+
+// The autosave body for one action (also the snapshot key). owerContactIds is the
+// numeric id array the /actions route expects (resolveOwers derives `direction`).
+function actionBody(a: PendingAction) {
+  return {
+    title: a.title.trim(),
+    type: a.type,
+    dueDate: a.dueDate || null,
+    priority: a.priority,
+    owedByMe: a.owedByMe,
+    owerContactIds: a.owerIds.filter((v) => /^\d+$/.test(v)).map(Number),
+  }
 }
 
 function formatPrepDate(dateStr: string) {
@@ -308,9 +335,28 @@ function QuickLogDialog({
   const [uploadingFile, setUploadingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Follow-up actions: existing (edit mode, read-only links) + staged new ones
+  // Follow-up actions: existing (edit mode, read-only links) + composer rows that
+  // autosave as real Actions once the meeting record exists.
   const [existingActions, setExistingActions] = useState<NonNullable<Conversation['actions']>>([])
   const [newActions, setNewActions] = useState<PendingAction[]>([])
+  const newActionsRef = useRef<PendingAction[]>([])     // current rows for the serialized save chain
+  // Synchronous source of truth for which rows are persisted (id) + their last
+  // saved body (snapshot), keyed by row `key`. Updated inside the save chain so a
+  // debounce + finalize reconcile can never POST the same row twice.
+  const savedActionsRef = useRef<Map<number, { id: number; snapshot: string }>>(new Map())
+  const actionSaveChainRef = useRef<Promise<void>>(Promise.resolve())
+  const [actionsSaveStatus, setActionsSaveStatus] = useState<SaveStatus>('idle')
+  const actionsFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { newActionsRef.current = newActions }, [newActions])
+
+  // Is any composer row new or edited since its last save? (consults the ref)
+  function actionsDirty(rows: PendingAction[]) {
+    return rows.some((a) => {
+      if (!a.title.trim()) return false
+      const saved = savedActionsRef.current.get(a.key)
+      return !saved || saved.snapshot !== JSON.stringify(actionBody(a))
+    })
+  }
 
   // Favorite contacts (reserved "Favorite" tag) for one-click participant add
   const [favorites, setFavorites] = useState<{ id: number; name: string }[]>([])
@@ -359,6 +405,10 @@ function QuickLogDialog({
     setPendingAttachments([])
     setExistingActions([])
     setNewActions([])
+    newActionsRef.current = []
+    savedActionsRef.current = new Map()
+    actionSaveChainRef.current = Promise.resolve()
+    setActionsSaveStatus('idle')
     setSeriesContext(null)
 
     // Autosave bookkeeping. In edit mode the record already exists (= editId);
@@ -583,6 +633,7 @@ function QuickLogDialog({
 
   useEffect(() => () => { if (savedFlashRef.current) clearTimeout(savedFlashRef.current) }, [])
   useEffect(() => () => { if (draftFlashRef.current) clearTimeout(draftFlashRef.current) }, [])
+  useEffect(() => () => { if (actionsFlashRef.current) clearTimeout(actionsFlashRef.current) }, [])
 
   // Debounced autosave for the in-progress prep note (~1.2s after the last edit).
   // Only fires once the meeting record exists; before that the draft is preserved
@@ -595,6 +646,17 @@ function QuickLogDialog({
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, loadingEdit, newPrepContent, savedId])
+
+  // Debounced autosave for follow-up actions (~1.2s). Like prep notes, only fires
+  // once the meeting record exists; before that the rows stage and finalize flushes
+  // them. Skips when nothing is new/changed.
+  useEffect(() => {
+    if (!open || loadingEdit || savedId === null) return
+    if (!actionsDirty(newActions)) return
+    const timer = setTimeout(() => { void enqueueActionSave(() => reconcileActions(savedId)) }, 1200)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, loadingEdit, newActions, savedId])
 
   // Resolve free-text combobox entries into real records (same pattern as the full editor)
   async function resolveWho() {
@@ -672,14 +734,9 @@ function QuickLogDialog({
           participants,
           attendeesDescription: attendeesDescription.trim() || null,
           tagIds: resolvedTagIds,
-          createActions: newActions
-            .filter((a) => a.title.trim())
-            .map((a) => ({
-              title: a.title.trim(),
-              type: a.type,
-              dueDate: a.dueDate || null,
-              priority: a.priority,
-            })),
+          // Follow-up actions are no longer created here — they autosave as real
+          // Actions as you type (see reconcileActions). Any rows still unsaved
+          // (e.g. added before the meeting existed) are flushed just below.
         }
 
         let conversationId = savedIdRef.current
@@ -693,7 +750,10 @@ function QuickLogDialog({
         }
         // Mark the finalized state as saved so a trailing autosave is a no-op.
         lastSnapshotRef.current = JSON.stringify(buildAutosaveBody())
-        setNewActions([])
+
+        // Flush follow-up actions: create any unsaved rows + push pending edits.
+        // Chained on the action save queue so it can't race an in-flight autosave.
+        await enqueueActionSave(() => reconcileActions(conversationId!))
 
         // Persist prep notes. Staged ones (added before the record existed) are
         // created now; the in-progress draft is flushed once — PUT if it already
@@ -836,6 +896,70 @@ function QuickLogDialog({
     }
   }
 
+  // ── Follow-up actions ─────────────────────────────────────
+  // Serialize action saves so a debounce + finalize can't double-create.
+  function enqueueActionSave(fn: () => Promise<void>): Promise<void> {
+    const next = actionSaveChainRef.current.then(fn, fn)
+    actionSaveChainRef.current = next
+    return next
+  }
+
+  function flashActionsSaved() {
+    setActionsSaveStatus('saved')
+    if (actionsFlashRef.current) clearTimeout(actionsFlashRef.current)
+    actionsFlashRef.current = setTimeout(() => setActionsSaveStatus('idle'), 2000)
+  }
+
+  // Persist every composer row that has a title: POST new ones, PUT changed ones.
+  // Reads current rows from newActionsRef; uses savedActionsRef (updated
+  // synchronously after each write) as the dedup authority so chained reconciles
+  // never double-create.
+  async function reconcileActions(convId: number) {
+    const rows = newActionsRef.current
+    if (!actionsDirty(rows)) return
+    setActionsSaveStatus('saving')
+    try {
+      for (const a of rows) {
+        if (!a.title.trim()) continue
+        const body = actionBody(a)
+        const snap = JSON.stringify(body)
+        const saved = savedActionsRef.current.get(a.key)
+        if (!saved) {
+          const created = await api.post<{ id: number }>('/actions', { ...body, conversationId: convId })
+          savedActionsRef.current.set(a.key, { id: created.id, snapshot: snap })
+        } else if (saved.snapshot !== snap) {
+          await api.put(`/actions/${saved.id}`, body)
+          savedActionsRef.current.set(a.key, { id: saved.id, snapshot: snap })
+        }
+      }
+      flashActionsSaved()
+    } catch {
+      setActionsSaveStatus('error')
+    }
+  }
+
+  function addAction() {
+    setNewActions((prev) => [...prev, makePendingAction()])
+  }
+
+  function updateAction(key: number, patch: Partial<PendingAction>) {
+    setNewActions((prev) => prev.map((a) => (a.key === key ? { ...a, ...patch } : a)))
+  }
+
+  // Remove a composer row; delete the underlying Action too if it was persisted.
+  async function removeAction(key: number) {
+    setNewActions((prev) => prev.filter((a) => a.key !== key))
+    const saved = savedActionsRef.current.get(key)
+    savedActionsRef.current.delete(key)
+    if (saved) {
+      try {
+        await api.delete(`/actions/${saved.id}`)
+      } catch {
+        toast.error('Failed to delete action')
+      }
+    }
+  }
+
   // ── Favorites ─────────────────────────────────────────────
   async function toggleFavorite(contactIdNum: number, name: string) {
     const isFav = favorites.some((f) => f.id === contactIdNum)
@@ -911,11 +1035,6 @@ function QuickLogDialog({
     } catch {
       toast.error('Failed to remove attachment')
     }
-  }
-
-  // ── Follow-up actions ─────────────────────────────────────
-  function updateNewAction(index: number, patch: Partial<PendingAction>) {
-    setNewActions((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)))
   }
 
   const participantNameOf = (val: string) =>
@@ -1217,22 +1336,21 @@ function QuickLogDialog({
             />
           </div>
 
-          {/* Follow-up actions — created against this meeting (and its anchor
-              contact, if any) when the meeting is saved */}
+          {/* Follow-up actions — each composer row autosaves as a real Action once
+              the meeting record exists (POST then debounced PUT), with a per-row
+              "who owns it" picker mirroring the Actions form. */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="flex items-center gap-1">
                 <ListTodo className="h-3.5 w-3.5" /> Follow-up actions
               </Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setNewActions((prev) => [...prev, { ...emptyPendingAction }])}
-              >
-                <Plus className="mr-1 h-3 w-3" />
-                Add action
-              </Button>
+              <div className="flex items-center gap-2">
+                <SaveStatusIndicator status={actionsSaveStatus} className="text-xs" />
+                <Button type="button" size="sm" onClick={addAction}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add action
+                </Button>
+              </div>
             </div>
             {existingActions.map((a) => (
               <div key={a.id} className="flex items-center gap-2 text-sm">
@@ -1252,12 +1370,14 @@ function QuickLogDialog({
                 {a.dueDate && <span className="text-xs text-muted-foreground">{a.dueDate}</span>}
               </div>
             ))}
-            {newActions.map((a, i) => (
-              <div key={i} className="space-y-2 rounded-md border p-2">
+            {newActions.map((a) => {
+              const quickAddOwers = favorites.filter((f) => !a.owerIds.includes(f.id.toString()))
+              return (
+              <div key={a.key} className="space-y-2 rounded-md border p-2">
                 <div className="flex items-center gap-2">
                   <Input
                     value={a.title}
-                    onChange={(e) => updateNewAction(i, { title: e.target.value })}
+                    onChange={(e) => updateAction(a.key, { title: e.target.value })}
                     placeholder="e.g. Send follow-up email"
                     className="h-8 text-sm"
                   />
@@ -1266,39 +1386,91 @@ function QuickLogDialog({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 shrink-0"
-                    onClick={() => setNewActions((prev) => prev.filter((_, j) => j !== i))}
+                    onClick={() => removeAction(a.key)}
                   >
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
                 {a.title.trim() && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <Select value={a.type} onValueChange={(v) => updateNewAction(i, { type: v as ActionType })}>
-                      <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {ACTION_TYPE_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Select value={a.type} onValueChange={(v) => updateAction(a.key, { type: v as ActionType })}>
+                        <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ACTION_TYPE_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={a.dueDate}
+                        onChange={(e) => updateAction(a.key, { dueDate: e.target.value })}
+                        className="h-8 text-xs"
+                      />
+                      <Select value={a.priority} onValueChange={(v) => updateAction(a.key, { priority: v as ActionPriority })}>
+                        <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ACTION_PRIORITY_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Who owns it — defaults to Me; remove Me and/or add people you're waiting on */}
+                    <div className="space-y-1.5 rounded-md bg-muted/30 p-2">
+                      <span className="text-xs font-medium text-muted-foreground">Who owns it</span>
+                      <div className="flex flex-wrap gap-1">
+                        {a.owedByMe ? (
+                          <span className="flex items-center gap-1 rounded-full border bg-primary/10 px-2 py-0.5 text-xs text-foreground">
+                            Me
+                            <button
+                              type="button"
+                              onClick={() => updateAction(a.key, { owedByMe: false })}
+                              className="text-muted-foreground hover:text-foreground"
+                              title="Remove me"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => updateAction(a.key, { owedByMe: true })}
+                            className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+                            title="Add me back"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Me
+                          </button>
+                        )}
+                        {quickAddOwers.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => updateAction(a.key, { owerIds: [...a.owerIds, f.id.toString()] })}
+                            className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                            title="Add to who owns it"
+                          >
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                            {f.name}
+                            <Plus className="h-3 w-3" />
+                          </button>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="date"
-                      value={a.dueDate}
-                      onChange={(e) => updateNewAction(i, { dueDate: e.target.value })}
-                      className="h-8 text-xs"
-                    />
-                    <Select value={a.priority} onValueChange={(v) => updateNewAction(i, { priority: v as ActionPriority })}>
-                      <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {ACTION_PRIORITY_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      </div>
+                      <MultiCombobox
+                        options={contactOptions}
+                        values={a.owerIds}
+                        onChange={(vals) => updateAction(a.key, { owerIds: vals })}
+                        placeholder="Add people who own it..."
+                        searchPlaceholder="Search contacts..."
+                      />
+                    </div>
+                  </>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="space-y-2">

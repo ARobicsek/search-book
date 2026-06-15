@@ -608,9 +608,12 @@ export function MeetingsPage() {
                       </div>
                     )}
                     {conv.nextSteps && (
-                      <p className="text-xs text-muted-foreground">
-                        <span className="font-medium">Next:</span> {hl(conv.nextSteps)}
-                      </p>
+                      <div className="text-sm text-muted-foreground">
+                        <span className="text-xs font-medium">Next steps:</span>
+                        <div className="prep-note-markdown">
+                          <ReactMarkdown>{conv.nextSteps}</ReactMarkdown>
+                        </div>
+                      </div>
                     )}
                     <div className="flex flex-wrap gap-1 pt-1">
                       {conv.contact && conv.title && (

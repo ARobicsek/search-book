@@ -1208,11 +1208,12 @@ function QuickLogDialog({
         <div className="grid gap-4 rounded-md border p-3">
           <div className="space-y-2">
             <Label htmlFor="ql-nextsteps">Next steps</Label>
-            <Input
+            <MarkdownTextarea
               id="ql-nextsteps"
               value={nextSteps}
-              onChange={(e) => setNextSteps(e.target.value)}
-              placeholder="What happens next (optional)"
+              onChange={setNextSteps}
+              placeholder="What happens next — use ### headings, bold, lists…"
+              rows={3}
             />
           </div>
 
@@ -1441,7 +1442,12 @@ function QuickLogDialog({
                         </div>
                       )}
                       {seriesContext.nextSteps && (
-                        <p className="text-xs text-muted-foreground">Next: {seriesContext.nextSteps}</p>
+                        <div className="text-xs text-muted-foreground">
+                          <span className="font-medium">Next: </span>
+                          <div className="prep-note-markdown inline">
+                            <ReactMarkdown>{seriesContext.nextSteps}</ReactMarkdown>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

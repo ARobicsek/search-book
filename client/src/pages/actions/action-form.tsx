@@ -133,7 +133,11 @@ export function ActionFormPage() {
     const initial = { ...emptyForm, contactIds: [...emptyForm.contactIds], companyIds: [...emptyForm.companyIds] }
     const qContactId = searchParams.get('contactId')
     const qCompanyId = searchParams.get('companyId')
-    if (qContactId) initial.contactIds = [qContactId]
+    if (qContactId) {
+      initial.contactIds = [qContactId]
+      initial.owerIds = [qContactId]
+      initial.owedByMe = false
+    }
     if (qCompanyId) initial.companyIds = [qCompanyId]
     return initial
   })
@@ -152,7 +156,7 @@ export function ActionFormPage() {
   const [showRelated, setShowRelated] = useState(false)
   // "Who owns it" — collapsed by default (defaults to just "me"); auto-expand in edit
   // mode when the saved value is non-default so it's visible without a click.
-  const [showOwers, setShowOwers] = useState(false)
+  const [showOwers, setShowOwers] = useState(() => !!searchParams.get('contactId'))
 
   // Options for comboboxes
   const contactOptions: ComboboxOption[] = contacts.map((c) => ({

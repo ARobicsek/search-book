@@ -725,6 +725,7 @@ export function ContactDetailPage() {
             </CardContent>
           </Card>
 
+          {(contact.howConnected || contact.referredBy || (contact.referrals && contact.referrals.length > 0) || contact.mutualConnections) && (
           <Card>
             <CardHeader>
               <CardTitle>Connections</CardTitle>
@@ -761,6 +762,7 @@ export function ContactDetailPage() {
               </dl>
             </CardContent>
           </Card>
+          )}
 
           {/* Notes — always visible */}
           <Card>
@@ -775,6 +777,17 @@ export function ContactDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {contact.personalDetails && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Personal Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm whitespace-pre-wrap">{contact.personalDetails}</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Meeting takeaways — per-participant notes from every meeting they attended (NCQA 2.4) */}
           <MeetingTakeawaysCard contactId={contact.id} conversations={conversations} />
@@ -792,16 +805,7 @@ export function ContactDetailPage() {
           </Card>
           )}
 
-          {contact.personalDetails && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Personal Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm whitespace-pre-wrap">{contact.personalDetails}</p>
-              </CardContent>
-            </Card>
-          )}
+
 
           {/* Past Companies */}
           {employmentHistory.length > 0 && (

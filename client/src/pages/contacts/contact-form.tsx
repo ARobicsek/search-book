@@ -263,12 +263,10 @@ export function ContactFormPage() {
   // Progressive disclosure: auto-open if fields have data
   const hasContactDetails = !!(form.phone || form.linkedinUrl)
   const hasConnectionDetails = !!(form.howConnected || form.mutualConnections.length > 0)
-  const hasResearch = !!(form.whereFound || form.openQuestions)
   const hasPersonalDetails = !!form.personalDetails
 
   const [contactDetailsOpen, setContactDetailsOpen] = useState(hasContactDetails)
   const [connectionDetailsOpen, setConnectionDetailsOpen] = useState(hasConnectionDetails)
-  const [researchOpen, setResearchOpen] = useState(hasResearch)
   const [personalDetailsOpen, setPersonalDetailsOpen] = useState(hasPersonalDetails)
 
   useEffect(() => {
@@ -290,7 +288,7 @@ export function ContactFormPage() {
           // Open sections that have data
           if (f.phone || f.linkedinUrl) setContactDetailsOpen(true)
           if (f.howConnected || f.mutualConnections.length > 0) setConnectionDetailsOpen(true)
-          if (f.whereFound || f.openQuestions) setResearchOpen(true)
+
           if (f.personalDetails) setPersonalDetailsOpen(true)
         })
         .catch((err) => {
@@ -309,7 +307,7 @@ export function ContactFormPage() {
           setForm(parsed)
           if (parsed.phone || parsed.linkedinUrl) setContactDetailsOpen(true)
           if (parsed.howConnected || (parsed.mutualConnections && parsed.mutualConnections.length > 0)) setConnectionDetailsOpen(true)
-          if (parsed.whereFound || parsed.openQuestions) setResearchOpen(true)
+
           if (parsed.personalDetails) setPersonalDetailsOpen(true)
         } catch {
           // ignore
@@ -579,11 +577,6 @@ export function ContactFormPage() {
     label: c.name,
   }))
 
-  // Filter out self from referredBy options
-  const currentId = id ? parseInt(id) : null
-  const referredByOptions: ComboboxOption[] = allContacts
-    .filter((c) => c.id !== currentId)
-    .map((c) => ({ value: c.id.toString(), label: c.name }))
 
   if (loading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
@@ -946,23 +939,7 @@ export function ContactFormPage() {
               </Select>
             </div>
 
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Referred By</Label>
-              <Combobox
-                options={referredByOptions}
-                value={form.referredById || form.referredByName}
-                onChange={(val, isNew) => {
-                  if (isNew) {
-                    setForm((prev) => ({ ...prev, referredById: '', referredByName: val }))
-                  } else {
-                    setForm((prev) => ({ ...prev, referredById: val, referredByName: '' }))
-                  }
-                }}
-                placeholder="Search or type new name..."
-                searchPlaceholder="Search contacts..."
-                allowFreeText={true}
-              />
-            </div>
+
           </CardContent>
         </Card>
 
@@ -1010,89 +987,7 @@ export function ContactFormPage() {
           </Card>
         </Collapsible>
 
-        {/* How Connected — Progressive Disclosure */}
-        <Collapsible open={connectionDetailsOpen} onOpenChange={setConnectionDetailsOpen}>
-          <Card>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>How Connected</CardTitle>
-                    <CardDescription>Connection details and mutual contacts</CardDescription>
-                  </div>
-                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${connectionDetailsOpen ? 'rotate-180' : ''}`} />
-                </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="howConnected">How Connected</Label>
-                  <Input
-                    id="howConnected"
-                    value={form.howConnected}
-                    onChange={(e) => set('howConnected', e.target.value)}
-                    placeholder="How did you get connected?"
-                  />
-                </div>
 
-                <div className="space-y-2">
-                  <Label>Mutual Connections</Label>
-                  <MultiCombobox
-                    options={allContacts.map((c) => ({ value: c.name, label: c.name }))}
-                    values={form.mutualConnections}
-                    onChange={(vals) => setForm((prev) => ({ ...prev, mutualConnections: vals }))}
-                    placeholder="Search or type name..."
-                    searchPlaceholder="Search contacts..."
-                    allowFreeText={true}
-                  />
-                </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-
-        {/* Research — Progressive Disclosure */}
-        <Collapsible open={researchOpen} onOpenChange={setResearchOpen}>
-          <Card>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Research</CardTitle>
-                    <CardDescription>What you know and want to learn</CardDescription>
-                  </div>
-                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${researchOpen ? 'rotate-180' : ''}`} />
-                </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="whereFound">Where Found</Label>
-                  <Textarea
-                    id="whereFound"
-                    value={form.whereFound}
-                    onChange={(e) => set('whereFound', e.target.value)}
-                    placeholder="Where you've seen their work"
-                    rows={2}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="openQuestions">Open Questions</Label>
-                  <Textarea
-                    id="openQuestions"
-                    value={form.openQuestions}
-                    onChange={(e) => set('openQuestions', e.target.value)}
-                    placeholder="Things you still need to learn about/from them"
-                    rows={3}
-                  />
-                </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
 
         {/* Notes — Always visible */}
         <Card>
@@ -1137,6 +1032,48 @@ export function ContactFormPage() {
                     onChange={(e) => set('personalDetails', e.target.value)}
                     placeholder="Kids ages, hobbies, interests, birthdays, etc."
                     rows={4}
+                  />
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
+        {/* How Connected — Progressive Disclosure */}
+        <Collapsible open={connectionDetailsOpen} onOpenChange={setConnectionDetailsOpen}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>How Connected</CardTitle>
+                    <CardDescription>Connection details and mutual contacts</CardDescription>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${connectionDetailsOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="howConnected">How Connected</Label>
+                  <Input
+                    id="howConnected"
+                    value={form.howConnected}
+                    onChange={(e) => set('howConnected', e.target.value)}
+                    placeholder="How did you get connected?"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Mutual Connections</Label>
+                  <MultiCombobox
+                    options={allContacts.map((c) => ({ value: c.name, label: c.name }))}
+                    values={form.mutualConnections}
+                    onChange={(vals) => setForm((prev) => ({ ...prev, mutualConnections: vals }))}
+                    placeholder="Search or type name..."
+                    searchPlaceholder="Search contacts..."
+                    allowFreeText={true}
                   />
                 </div>
               </CardContent>
@@ -1254,7 +1191,7 @@ export function ContactFormPage() {
             notes: data.about !== undefined ? data.about : prev.notes,
           }))
           if (data.linkedinUrl || form.linkedinUrl) setContactDetailsOpen(true)
-          if (data.about || form.notes) setResearchOpen(true)
+
 
           // 2) Resolve / create a Company row for every experience entry. We build
           //    a per-import id map keyed by normalized name so duplicate company

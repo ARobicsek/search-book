@@ -3,15 +3,14 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (2026-06-15 session 3)
+### What Was Just Completed (2026-06-15 session 4)
 
-1. **LinkedIn Import Explanation:**
-   - Investigated an issue where the LinkedIn import failed to find 'Experience' data.
-   - Identified that the failure is due to LinkedIn's **lazy loading**. The user needs to scroll down the profile page to force the sections to render before copying the text.
+1. **Contact UI Polish:**
+   - **Form:** Removed the "Referred By" and "Research" sections from the UI to streamline data entry, while keeping the data fields intact for legacy preservation. Reordered the "How Connected" section to appear after "Personal Details".
+   - **Detail View:** Conditionally hid the "Connections" card when empty to save vertical space. Moved the "Personal Details" card up, immediately below "Notes".
 
-2. **Actions & Meetings Polish:**
-   - **Meeting Link in Actions:** The "Meeting #ID" text in the Action Detail view is now a clickable hyperlink (`/meetings?id=ID`) to quickly navigate back to the associated meeting. It now correctly uses `conversationDisplayName` to render the meeting's custom title, contact name, or company name instead of just its ID.
-   - **Action Contact Leak Fix:** Actions created via the Quick Log dialog were previously incorrectly assigning all meeting participants as action owners. Fixed `actionBody` to ensure only the explicitly selected "Who owes it" contacts are added to the action's payload. (Pre-existing actions from before the fix will need manual cleanup).
+2. **Action Creation Flow:**
+   - When creating a new action from a contact's detail page (`/actions/new?contactId=X`), the form now automatically pre-fills the contact as the "Who owns it" action owner (defaulting to "they owe it") and auto-expands that section.
 
 **Verification:** prepush (`tsc` client+server) + full `vite build` green throughout. All code pushed to `main`. 
 
@@ -44,4 +43,4 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Actions & Meetings UI/data flow improvements (meeting hyperlinks and contact auto-linking from Quick Log) have been shipped. The plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9). Standing owner action: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Contacts UI and Action creation flows have been streamlined and polished. The plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9). Standing owner action: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.

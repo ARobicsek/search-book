@@ -10,6 +10,12 @@ const ideaIncludes = {
   companies: {
     include: { company: { select: { id: true, name: true } } },
   },
+  // App-wide tags via the IdeaTag junction (shape mirrors Conversation.tags:
+  // the client reads idea.tagLinks[].tag). The legacy Idea.tags string is still
+  // returned but unused once the backfill has run.
+  tagLinks: {
+    include: { tag: { select: { id: true, name: true } } },
+  },
 };
 
 // GET /api/ideas — list ideas. `archived` query param controls the soft-archive
@@ -53,7 +59,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/ideas — create a quick note/idea
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { title, contactIds, companyIds, ...rest } = req.body;
+    const { title, contactIds, companyIds, tagIds, ...rest } = req.body;
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       res.status(400).json({ error: 'Title is required' });
       return;
@@ -67,6 +73,9 @@ router.post('/', async (req: Request, res: Response) => {
           : undefined,
         companies: companyIds?.length
           ? { create: (companyIds as number[]).map((cId) => ({ companyId: cId })) }
+          : undefined,
+        tagLinks: tagIds?.length
+          ? { create: (tagIds as number[]).map((tId) => ({ tagId: tId })) }
           : undefined,
       },
       include: ideaIncludes,
@@ -88,7 +97,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const { contactIds, companyIds, ...data } = req.body;
+    const { contactIds, companyIds, tagIds, ...data } = req.body;
 
     if (data.title !== undefined) {
       if (typeof data.title !== 'string' || data.title.trim().length === 0) {
@@ -102,6 +111,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       // Replace junction records
       await tx.ideaContact.deleteMany({ where: { ideaId: id } });
       await tx.ideaCompany.deleteMany({ where: { ideaId: id } });
+      // Only rebuild tag links when the caller actually sent tagIds (a partial
+      // PUT that omits them leaves existing tags untouched).
+      if (tagIds !== undefined) await tx.ideaTag.deleteMany({ where: { ideaId: id } });
 
       await tx.idea.update({
         where: { id },
@@ -112,6 +124,9 @@ router.put('/:id', async (req: Request, res: Response) => {
             : undefined,
           companies: companyIds?.length
             ? { create: (companyIds as number[]).map((cId: number) => ({ companyId: cId })) }
+            : undefined,
+          tagLinks: tagIds?.length
+            ? { create: (tagIds as number[]).map((tId: number) => ({ tagId: tId })) }
             : undefined,
         },
       });

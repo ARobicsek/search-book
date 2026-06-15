@@ -141,6 +141,7 @@ model Tag {
   contacts      ContactTag[]
   companies     CompanyTag[]
   conversations ConversationTag[]
+  ideas         IdeaTag[]
 }
 
 model ContactTag {
@@ -335,12 +336,23 @@ model Idea {
   id          Int      @id @default(autoincrement())
   title       String
   description String?
-  tags        String?
+  tags        String?  // Legacy comma-separated tags — superseded by the IdeaTag junction (kept for back-compat; backfilled into IdeaTag)
   archived    Boolean  @default(false) // Soft-archive: hidden from the default Ideas list/search; revealed via the lozenge filter
   createdAt   DateTime @default(now())
 
   contacts    IdeaContact[]
   companies   IdeaCompany[]
+  tagLinks    IdeaTag[]
+}
+
+// Junction: tags on an idea (shares the app-wide Tag entity with contacts/companies/meetings)
+model IdeaTag {
+  ideaId Int
+  idea   Idea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  tagId  Int
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([ideaId, tagId])
 }
 
 // Junction: contacts associated with an idea

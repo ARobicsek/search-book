@@ -157,7 +157,10 @@ export interface Idea {
   id: number;
   title: string;
   description: string | null;
+  /** Legacy comma-separated tags — superseded by tagLinks (app-wide Tag table). */
   tags: string | null;
+  /** Tags via the IdeaTag junction (shares the app-wide Tag entity). */
+  tagLinks?: { tag: { id: number; name: string } }[];
   archived: boolean;
   createdAt: string;
   contacts?: { contact: { id: number; name: string } }[];

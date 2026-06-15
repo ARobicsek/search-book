@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import type { Idea, Contact, Company } from '@/lib/types'
+import type { Idea, Contact, Company, Tag } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -61,7 +61,7 @@ const IDEA_SORT_OPTIONS: { value: IdeaSort; label: string }[] = [
 function ideaMatchScore(idea: Idea, terms: string[], caseSensitive: boolean): number {
   const norm = (s: string) => (caseSensitive ? s : s.toLowerCase())
   const title = norm(idea.title)
-  const tags = norm(idea.tags || '')
+  const tags = norm((idea.tagLinks?.map((t) => t.tag.name) || []).join(' '))
   const names = norm([
     ...(idea.contacts?.map((ic) => ic.contact.name) || []),
     ...(idea.companies?.map((ic) => ic.company.name) || []),
@@ -83,7 +83,7 @@ function ideaMatchScore(idea: Idea, terms: string[], caseSensitive: boolean): nu
 type IdeaForm = {
   title: string
   description: string
-  tags: string
+  tagValues: string[]   // tag ids (strings) or free-text new tag names
   contactValues: string[]
   companyValues: string[]
 }
@@ -91,7 +91,7 @@ type IdeaForm = {
 const emptyForm: IdeaForm = {
   title: '',
   description: '',
-  tags: '',
+  tagValues: [],
   contactValues: [],
   companyValues: [],
 }
@@ -127,6 +127,8 @@ export function IdeaListPage() {
 
   const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
+  // App-wide tags (shared with contacts/companies/meetings) for autocomplete
+  const [allTags, setAllTags] = useState<{ id: number; name: string }[]>([])
   // Favorite orgs (reserved "Favorite" CompanyTag) for one-click add
   const [companyFavorites, setCompanyFavorites] = useState<{ id: number; name: string }[]>([])
 
@@ -156,6 +158,9 @@ export function IdeaListPage() {
     ).catch(() => {})
     api.get<{ id: number; name: string }[]>('/companies/favorites').then(
       setCompanyFavorites
+    ).catch(() => {})
+    api.get<Tag[]>('/tags').then(
+      (data) => setAllTags(data.map((t) => ({ id: t.id, name: t.name })))
     ).catch(() => {})
   }, [])
 
@@ -212,7 +217,7 @@ export function IdeaListPage() {
     const loadedForm: IdeaForm = {
       title: idea.title,
       description: idea.description || '',
-      tags: idea.tags || '',
+      tagValues: idea.tagLinks?.map((t) => t.tag.id.toString()) || [],
       contactValues: idea.contacts?.map((ic) => ic.contact.id.toString()) || [],
       companyValues: idea.companies?.map((ic) => ic.company.id.toString()) || [],
     }
@@ -244,7 +249,33 @@ export function IdeaListPage() {
     }
   }
 
-  // Auto-save handler - only saves existing contacts/companies (not new entries)
+  // Resolve tag combobox values (ids or free-text names) into Tag ids, creating
+  // any new ones. Unlike contacts/companies, tags ARE created during autosave —
+  // building a reusable, shared tag vocabulary is the whole point. Idempotent:
+  // checks the loaded tag list by name before POSTing, so a debounce won't dup.
+  const resolveTagIds = useCallback(async (values: string[]): Promise<number[]> => {
+    const ids: number[] = []
+    for (const val of values) {
+      if (/^\d+$/.test(val)) { ids.push(parseInt(val)); continue }
+      const name = val.trim()
+      if (!name) continue
+      const existing = allTags.find((t) => t.name.toLowerCase() === name.toLowerCase())
+      if (existing) { ids.push(existing.id); continue }
+      try {
+        const created = await api.post<Tag>('/tags', { name })
+        ids.push(created.id)
+        setAllTags((prev) => (prev.some((t) => t.id === created.id) ? prev : [...prev, { id: created.id, name: created.name }]))
+      } catch {
+        // 409 race or failure: re-fetch and match by name
+        const all = await api.get<Tag[]>('/tags').catch(() => [] as Tag[])
+        const found = all.find((t) => t.name.toLowerCase() === name.toLowerCase())
+        if (found) ids.push(found.id)
+      }
+    }
+    return ids
+  }, [allTags])
+
+  // Auto-save handler - saves existing contacts/companies (not new entries) + tags
   const handleAutoSave = useCallback(async (data: IdeaForm) => {
     if (!editId) return
 
@@ -255,16 +286,17 @@ export function IdeaListPage() {
     const existingCompanyIds = data.companyValues
       .filter((val) => allCompanies.some((c) => c.id.toString() === val))
       .map((val) => parseInt(val))
+    const tagIds = await resolveTagIds(data.tagValues)
 
     const payload = {
       title: data.title.trim(),
       description: data.description.trim() || null,
-      tags: data.tags.trim() || null,
       contactIds: existingContactIds,
       companyIds: existingCompanyIds,
+      tagIds,
     }
     await api.put(`/ideas/${editId}`, payload)
-  }, [editId, allContacts, allCompanies])
+  }, [editId, allContacts, allCompanies, resolveTagIds])
 
   const autoSave = useAutoSave({
     data: form,
@@ -325,12 +357,14 @@ export function IdeaListPage() {
         }
       }
 
+      const tagIds = await resolveTagIds(form.tagValues)
+
       const payload = {
         title: form.title.trim(),
         description: form.description.trim() || null,
-        tags: form.tags.trim() || null,
         contactIds,
         companyIds,
+        tagIds,
       }
       if (editId) {
         await api.put(`/ideas/${editId}`, payload)
@@ -387,10 +421,10 @@ export function IdeaListPage() {
   )
 
   const renderTagChips = (idea: Idea) =>
-    idea.tags
-      ? idea.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag, i) => (
-          <span key={i} className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs">
-            {hl(tag)}
+    idea.tagLinks?.length
+      ? idea.tagLinks.map((t) => (
+          <span key={t.tag.id} className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs">
+            {hl(t.tag.name)}
           </span>
         ))
       : null
@@ -597,7 +631,7 @@ export function IdeaListPage() {
                   <CardTitle className="text-base leading-tight">{hl(idea.title)}</CardTitle>
                   {renderIdeaActions(idea)}
                 </div>
-                {idea.tags && (
+                {idea.tagLinks && idea.tagLinks.length > 0 && (
                   <CardDescription className="flex flex-wrap gap-1 text-xs">
                     {renderTagChips(idea)}
                   </CardDescription>
@@ -672,12 +706,14 @@ export function IdeaListPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="tags">Tags</Label>
-              <Input
-                id="tags"
-                value={form.tags}
-                onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))}
-                placeholder="Comma-separated tags (e.g. networking, research)"
+              <Label>Tags</Label>
+              <MultiCombobox
+                options={allTags.map((t) => ({ value: t.id.toString(), label: t.name }))}
+                values={form.tagValues}
+                onChange={(vals) => setForm((p) => ({ ...p, tagValues: vals }))}
+                placeholder="Search or type a tag..."
+                searchPlaceholder="Search or type a new tag..."
+                allowFreeText={true}
               />
             </div>
             <div className="space-y-2">

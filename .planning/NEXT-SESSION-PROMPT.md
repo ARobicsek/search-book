@@ -19,7 +19,7 @@ device emulation). Four commits:
   unchanged. Added a **star-toggle next to each selected ower** to mark/unmark them a favorite in-context
   (`PATCH /contacts/:id/favorite`), mirroring the company star-toggle in Ideas.
 - **`88ef0a6` (Task 9, Quick Log) — schema-free, PUSHED.** Quick Log dialog is **drag-resizable on desktop**.
-- **`cce0f78` (Tasks 6, 7, 8, 9-Idea) — Ideas, SCHEMA-TOUCHING, ⚠ COMMITTED LOCALLY BUT NOT PUSHED.**
+- **`cce0f78` (Tasks 6, 7, 8, 9-Idea) — Ideas, SCHEMA-TOUCHING, PUSHED (after the owner applied the DDL).**
   Idea cards **click-to-expand** (full markdown + pasted screenshots, no editor); **Ideas-scoped search** gains
   sort (Relevance/Newest/Oldest/A→Z) + match-case + multi-term AND + `HighlightedText`; **soft-archive**
   (`Idea.archived`) with Active/Archived/All lozenges + per-card Archive/Unarchive (archived hidden by default,
@@ -31,23 +31,18 @@ calendar ⏳ tooltip "Waiting on: Sarah E. Saxton", mobile 390px on Ideas/Action
 + `tsc -b` + full `vite build` green. Test action + test favorite created during verification were **deleted/
 reverted** (data restored).
 
-### ⚠ ACTION REQUIRED before the Ideas commit can ship (owner)
+### Turso DDL — APPLIED ✅ (2026-06-14)
 
-`cce0f78` is **committed locally but intentionally NOT pushed** — it adds `Idea.archived`, and pushing it
-auto-deploys a server that queries `WHERE archived = …`, which 500s until the Turso column exists. **Apply this
-in the Turso web console (Databases → searchbook-arobicsek → SQL/Console), then push:**
-
-```sql
-ALTER TABLE "Idea" ADD COLUMN "archived" BOOLEAN NOT NULL DEFAULT 0;
-```
-
-(Backfill not needed — DEFAULT 0 makes every existing idea "active." Migration script for audit/reproducibility:
-`server/scripts/migrate-ideas-archived.js`, run with a **fresh** rw token.) **After the ALTER succeeds:**
-`git push` (sends `cce0f78` + the docs commit). The local `server/prisma/dev.db` column was already applied.
-The agent was correctly **blocked from running the prod DDL itself** (reserved for the owner).
+The owner ran `ALTER TABLE "Idea" ADD COLUMN "archived" BOOLEAN NOT NULL DEFAULT 0;` in the Turso console;
+`cce0f78` + the docs commits were then pushed (remote `main` = `16ceb9f`). Vercel redeployed; `/api/health`
+is `200 db:ok`. (Backfill wasn't needed — DEFAULT 0 makes every existing idea "active." Migration script kept
+for audit: `server/scripts/migrate-ideas-archived.js`.) **One light verification left for the owner:** load the
+prod Ideas page and confirm the Active/Archived/All lozenges work — the agent can't auth to prod to check the
+`Idea.archived` query directly, and the column-missing case would otherwise 500 the Ideas list.
 
 ### What's Next
-1. **[OWNER]** Apply the `ALTER TABLE` above in Turso, then `git push` to ship the Ideas/archive commit.
+1. **[OWNER, light]** On prod, open Ideas → confirm the lozenges + archive/unarchive work (the only check the
+   agent couldn't run, since prod needs the app password).
 2. Standing plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 —
    don't push on those until the owner raises them.
 
@@ -71,16 +66,17 @@ The agent was correctly **blocked from running the prod DDL itself** (reserved f
   390x844x3,mobile`) gives a true 390px viewport (the OS floors `resize_page` at ~500px).
 
 ### Working branch
-`main`. Pushed this session: `2b88669`, `18f7b69`, `88ef0a6` (schema-free, live on Vercel). **Held local:**
-`cce0f78` (Ideas/archive — push after the Turso DDL) + the pending docs commit.
+`main` — **all pushed, remote `main` = `16ceb9f`, live on Vercel.** This session shipped `2b88669`, `18f7b69`,
+`88ef0a6` (schema-free) and, after the owner applied the Turso DDL, `cce0f78` (Ideas/archive) + the docs commits.
+Working tree clean.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Minor UI Improvements batch is built (9 tasks); the 3
-> schema-free commits are live, and the Ideas/archive commit `cce0f78` is committed locally but **unpushed,
-> gated on a one-line Turso `ALTER TABLE "Idea" ADD COLUMN "archived"`**. If I've applied that DDL, push
-> `cce0f78` + the docs commit and confirm the archive feature works on prod. Otherwise the standing plan of
-> record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't push on those until I raise
-> them). Standing owner action still open: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Minor UI Improvements batch (9 tasks) is **complete and
+> fully shipped** — all 5 commits are on `main` (`16ceb9f`) and live on Vercel, including the Ideas/archive
+> commit (`Idea.archived` Turso DDL was applied 2026-06-14). The only loose end is a light owner check that the
+> Ideas archive lozenges work on prod. The standing plan of record is now back to
+> `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't push on those until I raise them).
+> Standing owner action still open: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.

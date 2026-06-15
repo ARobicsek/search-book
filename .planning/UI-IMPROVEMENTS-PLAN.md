@@ -1,10 +1,11 @@
 # SearchBook — Minor UI Improvements Batch
 
 **Created:** 2026-06-14 (this session)
-**Status:** ✅ COMPLETE — all 9 tasks built + verified (desktop + 390px). Commits: `2b88669` (1,3,5),
-`18f7b69` (2,4), `88ef0a6` (9 Quick Log), `cce0f78` (6,7,8,9 Ideas — **schema-touching**). The 3 schema-free
-commits are pushable immediately; the Ideas commit is gated on the Turso `ALTER TABLE` (below). The standing
-plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9) after this batch.
+**Status:** ✅ COMPLETE & SHIPPED — all 9 tasks built + verified (desktop + 390px) and **pushed/live on Vercel**
+(remote `main` = `16ceb9f`). Commits: `2b88669` (1,3,5), `18f7b69` (2,4), `88ef0a6` (9 Quick Log), `cce0f78`
+(6,7,8,9 Ideas — **schema-touching**). The Turso `ALTER TABLE "Idea" ADD COLUMN "archived"` was **applied by the
+owner 2026-06-14**, after which the Ideas commit + docs were pushed. The standing plan of record returns to
+`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9) after this batch.
 **Origin:** owner request (2026-06-14) — 10 small UX fixes across Ideas, Actions, Meetings, and a global
 free-text affordance.
 
@@ -135,7 +136,7 @@ scalar flows through create/update with no handler change ([ideas.ts:56,103](../
   **Archived** / **All** (mirror the Actions filter-button group). Archived cards visually muted.
 **Files:** [schema.prisma](../server/prisma/schema.prisma), [ideas.ts](../server/src/routes/ideas.ts),
 [idea-list.tsx](../client/src/pages/ideas/idea-list.tsx), `lib/types.ts`, a migrate script. **SCHEMA-TOUCHING.**
-**STATUS:** ✅ DONE in code (commit `cce0f78`) — **deploy gated on Turso DDL**. Idea.archived added; GET ?archived filter (default active); dedicated PATCH /:id/archive (no junction wipe); Active/Archived/All lozenges + per-card archive. Verified end-to-end on local SQLite + UI. ⚠ Owner must run the ALTER TABLE in the Turso console before this commit is pushed.
+**STATUS:** ✅ DONE & SHIPPED (commit `cce0f78`). Idea.archived added; GET ?archived filter (default active); dedicated PATCH /:id/archive (no junction wipe); Active/Archived/All lozenges + per-card archive. Verified end-to-end on local SQLite + UI. **Turso `ALTER TABLE "Idea" ADD COLUMN "archived" BOOLEAN NOT NULL DEFAULT 0` applied by the owner 2026-06-14; commit pushed; `/api/health` 200 db:ok post-deploy.** (Light owner check left: confirm the lozenges on the prod Ideas page.)
 
 ## Task 9 — Resizable free-text boxes on desktop (IN GENERAL)
 **Ask:** on desktop, an affordance to widen/narrow the free-text boxes (ideas, actions, meeting notes).

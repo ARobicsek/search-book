@@ -10,10 +10,10 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
    - Identified that the failure is due to LinkedIn's **lazy loading**. The user needs to scroll down the profile page to force the sections to render before copying the text.
 
 2. **Actions & Meetings Polish:**
-   - **Meeting Link in Actions:** The "Meeting #ID" text in the Action Detail view is now a clickable hyperlink (`/meetings?id=ID`) to quickly navigate back to the associated meeting.
-   - **Contact Auto-linking in Quick Log:** Follow-up actions created from the Meeting Log dialog now automatically carry over the meeting's participants (`participantIds`) and organizations (`orgValues`) into the action's standard `contactIds`/`companyIds`. Because these are properly populated upon creation, the newly created actions will display the contacts natively in the "Contact" column on the Actions List view.
+   - **Meeting Link in Actions:** The "Meeting #ID" text in the Action Detail view is now a clickable hyperlink (`/meetings?id=ID`) to quickly navigate back to the associated meeting. It now correctly uses `conversationDisplayName` to render the meeting's custom title, contact name, or company name instead of just its ID.
+   - **Action Contact Leak Fix:** Actions created via the Quick Log dialog were previously incorrectly assigning all meeting participants as action owners. Fixed `actionBody` to ensure only the explicitly selected "Who owes it" contacts are added to the action's payload. (Pre-existing actions from before the fix will need manual cleanup).
 
-**Verification:** prepush (`tsc` client+server) + full `vite build` green throughout. 
+**Verification:** prepush (`tsc` client+server) + full `vite build` green throughout. All code pushed to `main`. 
 
 ### What's Next
 1. **[OWNER, light]** Confirm on prod that the Ideas archive lozenges work (carried from last session).

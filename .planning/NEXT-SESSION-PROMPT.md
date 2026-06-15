@@ -3,7 +3,29 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (2026-06-14) — Minor UI Improvements batch (9 tasks)
+### What Was Just Completed (2026-06-15) — Two owner asks (schema-free, PUSHED)
+
+Both shipped to `main` (`dacdeaa`) and live on Vercel:
+
+- **`5314aad` fix(ideas) — screenshots no longer stretch collapsed Idea cards.** Pasted
+  screenshots (markdown images) were rendering full-size inside collapsed cards, ballooning height
+  (a 2-shot card grew ~300px → ~960px). Collapsed cards now hide images (`[&_img]:hidden`) on top of
+  the existing 4-line text clamp and show a small "N screenshots — click to view" hint; expanding
+  still shows the full markdown with full-size images. [client/src/pages/ideas/idea-list.tsx]
+- **`dacdeaa` feat(contacts) — connecting a contact promotes their employer org to Connected.**
+  When a contact becomes CONNECTED (created connected, status changed via `PUT /contacts/:id`, or
+  linked as EMPLOYED via `POST /companies/:id/contacts`), the org(s) they **currently** work at flip
+  to company status CONNECTED. Guard: only promotes from NONE/RESEARCHING — never downgrades
+  ENGAGED/PARTNER/CONNECTED; past employers (`isCurrent=false`) skipped; records a
+  `CompanyStatusHistory` row. New shared helper [server/src/company-status.ts] (no schema change).
+
+**Verification:** server logic API-tested end-to-end on local SQLite (promote RESEARCHING→CONNECTED;
+PARTNER not downgraded; create-as-connected promotes; current employer promoted but past employer
+not) — all test data deleted after. Ideas fix verified in-browser desktop + true 390px mobile:
+collapsed card stays 306px with images hidden + "2 screenshots" hint; expanded grows to 958px with
+both screenshots at full 320px height. `npm run prepush` + `tsc -b` (client + server) green.
+
+### What Was Completed (2026-06-14) — Minor UI Improvements batch (9 tasks)
 
 Plan `.planning/UI-IMPROVEMENTS-PLAN.md` — **all 9 tasks built + verified** (desktop + true 390px mobile via
 device emulation). Four commits:
@@ -66,9 +88,9 @@ prod Ideas page and confirm the Active/Archived/All lozenges work — the agent 
   390x844x3,mobile`) gives a true 390px viewport (the OS floors `resize_page` at ~500px).
 
 ### Working branch
-`main` — **all pushed, remote `main` = `16ceb9f`, live on Vercel.** This session shipped `2b88669`, `18f7b69`,
-`88ef0a6` (schema-free) and, after the owner applied the Turso DDL, `cce0f78` (Ideas/archive) + the docs commits.
-Working tree clean.
+`main` — **all pushed, remote `main` = `dacdeaa`, live on Vercel.** This session shipped `5314aad`
+(Ideas screenshot fix) + `dacdeaa` (connect→company-status), both schema-free. The prior UI batch
+(`2b88669`, `18f7b69`, `88ef0a6`, `cce0f78` + docs) remains live. Working tree clean.
 
 ---
 

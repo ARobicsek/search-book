@@ -2,7 +2,9 @@
 
 **Created:** 2026-06-15
 **Origin:** owner request — 4 Ideas asks + 5 Meetings asks.
-**Status:** IN PROGRESS.
+**Status:** Tasks 1–7 **DONE + verified + PUSHED** (`main` = `f0c5f37`, live on Vercel).
+Task 8 (Idea tags → app-wide Tag, SCHEMA) is **DONE + verified locally, committed but
+NOT pushed** (`c3f18dd`) — gated on the owner applying the Turso `CREATE TABLE "IdeaTag"`.
 
 ## Owner decisions (asked at session start)
 - **Idea tags (#3):** **Share app-wide tags** — Idea tags move to the real `Tag` table
@@ -81,3 +83,44 @@ migration script + Turso DDL.
 ## Verification
 - prepush + tsc -b + vite build green per task.
 - Browser smoke (desktop + 390px) for the UI-heavy ones (list view, highlight, autosave actions).
+
+---
+
+## Final status (2026-06-15 session 2)
+
+**Tasks 1–7 — DONE, verified, PUSHED** (`main` = `f0c5f37`, live on Vercel):
+- **T1 card trim** `c6c63dc` — Card gap-6 py-6 → gap-2 py-3; footer pb-4 dropped.
+- **T2 list view** `6945bff` — Card/List toggle (localStorage `ideas_view`); dense rows,
+  click-to-expand; shared render helpers.
+- **T3 description highlight** `c6fbb31` — self-contained rehype plugin
+  ([client/src/lib/highlight-markdown.ts](../client/src/lib/highlight-markdown.ts)) wraps
+  matches in `<mark>` inside the markdown body. *(Verified: 3 `<mark>` on "benchmark".)*
+- **T4 Next Steps markdown** `ff81036` — MarkdownTextarea + ReactMarkdown render (list +
+  series panel).
+- **T5/6/7 actions rework** `175dac7` — composer rows autosave as real Actions
+  (POST `/actions` w/ `conversationId`, debounced PUT; dedup via synchronous
+  `savedActionsRef`); per-row "Who owns it" picker (`owedByMe`+`owerContactIds`); solid
+  primary "Add action" button. *(API-verified: action links to convo, derives direction;
+  browser-verified add+owner+autosave.)*
+- **T8(plan)/#9 title→Edit** `f0c5f37` — meeting heading opens Edit; "series" chip keeps
+  the grouped view; anchor-contact chip shown for all contact-anchored meetings.
+
+**Task 8 (Idea tags → app-wide Tag, SCHEMA) — DONE + verified locally, committed `c3f18dd`,
+NOT PUSHED.** Gated on the owner applying the Turso `CREATE TABLE "IdeaTag"`. Verified
+locally end-to-end: create tag via combobox → idea persists `tagLinks`; PUT clears; chip
+displays; tag enters the shared `/tags` vocab. **Handoff (do in order):**
+1. Apply the schema to Turso — either run the migration (creates table + backfills):
+   `cd server && TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… node scripts/migrate-ideas-tags-to-junction.js`
+   (needs a **fresh** rw token — the committed one is stale), **or** paste this in the Turso
+   web console then run the script (still safe — it's idempotent) for the backfill:
+   ```sql
+   CREATE TABLE "IdeaTag" (
+       "ideaId" INTEGER NOT NULL,
+       "tagId" INTEGER NOT NULL,
+       PRIMARY KEY ("ideaId", "tagId"),
+       CONSTRAINT "IdeaTag_ideaId_fkey" FOREIGN KEY ("ideaId") REFERENCES "Idea" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+       CONSTRAINT "IdeaTag_tagId_fkey" FOREIGN KEY ("tagId") REFERENCES "Tag" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+   );
+   ```
+2. Then `git push` (sends `c3f18dd` + the doc commit). Vercel redeploys; confirm
+   `/api/health` is `200 db:ok` and the Ideas page loads.

@@ -3,129 +3,91 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (2026-06-15) — Four owner asks across two areas (all schema-free, PUSHED)
+### ⚠️ FIRST THING NEXT SESSION — one local commit is waiting on a Turso DDL
 
-All shipped to `main` (remote = `7f450c6`) and live on Vercel. Two doc commits along the way
-(`b886353`, `5929045`).
+`c3f18dd feat(ideas): move Idea tags to the app-wide Tag table (SCHEMA)` is **committed locally but NOT
+pushed.** It adds a new `IdeaTag` junction table. **Pushing it before the Turso DDL is applied will 500 the
+prod Ideas list** (the `tagLinks` include hits a missing table). To ship it:
+1. Apply the schema to Turso — run the migration (creates `IdeaTag` + backfills the legacy comma-tags):
+   `cd server && TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… node scripts/migrate-ideas-tags-to-junction.js`
+   (needs a **fresh** rw token — the one in `server/.env` is stale/401), **or** paste the `CREATE TABLE
+   "IdeaTag"` DDL (in `.planning/IDEAS-MEETINGS-POLISH-PLAN.md` → "Final status") into the Turso web SQL
+   console, then run the script anyway for the backfill (idempotent).
+2. `git push` (sends `c3f18dd` + the doc commit). Confirm `/api/health` = `200 db:ok` and the Ideas page loads.
 
-**Ideas + Contacts (`5314aad`, `dacdeaa`):**
-- **`5314aad` fix(ideas) — screenshots no longer stretch collapsed Idea cards.** Pasted
-  screenshots (markdown images) were rendering full-size inside collapsed cards, ballooning height
-  (a 2-shot card grew ~300px → ~960px). Collapsed cards now hide images (`[&_img]:hidden`) on top of
-  the existing 4-line text clamp and show a small "N screenshots — click to view" hint; expanding
-  still shows the full markdown with full-size images. [client/src/pages/ideas/idea-list.tsx]
-- **`dacdeaa` feat(contacts) — connecting a contact promotes their employer org to Connected.**
-  When a contact becomes CONNECTED (created connected, status changed via `PUT /contacts/:id`, or
-  linked as EMPLOYED via `POST /companies/:id/contacts`), the org(s) they **currently** work at flip
-  to company status CONNECTED. Guard: only promotes from NONE/RESEARCHING — never downgrades
-  ENGAGED/PARTNER/CONNECTED; past employers (`isCurrent=false`) skipped; records a
-  `CompanyStatusHistory` row. New shared helper [server/src/company-status.ts] (no schema change).
+### What Was Just Completed (2026-06-15 session 2) — 9 owner asks across Ideas + Meetings
 
-**Quick Log meeting dialog (`4ea562c`, `7f450c6`) — all in [client/src/components/quick-log-dialog.tsx]:**
-- **`4ea562c` feat(meetings) — Summary collapsed + autosaving, editable prep notes.** (1) Summary is
-  now behind a caret (like "Who was there"/"Actions…"), auto-expanded in edit mode if a summary
-  exists. (2) Prep notes autosave as you type — the composer POSTs the draft on the first pause then
-  PUTs further edits (no "Add prep note" click); "+ New note" starts a fresh one; saves are serialized
-  and flushed on blur + on Done (no lost keystrokes, never double-creates). (3) Saved prep notes are
-  inline-editable. Added an optional `onBlur` to `MarkdownTextarea`. The side-by-side prep panel is now
-  **desktop-only** (new `useIsDesktop` matchMedia hook); on mobile the prep list+composer render
-  full-width in the form (the "Actions, prep…" section auto-expands in edit mode when notes exist).
-- **`7f450c6` fix(meetings) — formatted prep notes + resize-drag no longer closes the dialog.**
-  (1) Saved prep notes now render **formatted markdown** by default; click the body or the pencil to
-  edit in place (raw md textarea, still autosaving), ✓/blur to return. Pencil uses
-  mousedown-preventDefault so the toggle doesn't race the blur. (2) Dragging the prep/form divider was
-  **closing the dialog** — root cause: react-resizable-panels' native pointerdown handler pre-empts
-  Radix's "inside" marker, so Radix mis-read the handle as an *outside* interaction (`content.contains
-  (handle)` is true, yet it dismissed on pointerdown). Fixed with an `onInteractOutside` guard that
-  ignores interactions originating in `[data-slot="resizable-handle"]` / `resizable-panel-group`
-  (genuine backdrop clicks still close it).
+Plan: `.planning/IDEAS-MEETINGS-POLISH-PLAN.md`. Owner answered two design questions at start:
+**(a) Idea tags → share the app-wide Tag vocabulary** (schema-touching); **(b) meeting title click → Edit
+dialog, keep a small "series" chip.**
 
-**Verification:** Contacts/company logic API-tested e2e on local SQLite (promote RESEARCHING→CONNECTED;
-PARTNER not downgraded; create-as-connected promotes; current employer promoted, past one not). Ideas
-fix in-browser desktop + true 390px mobile (collapsed 306px w/ images hidden + "2 screenshots" hint;
-expanded 958px). Quick Log verified in-browser: Summary caret reveals; prep note autosaved with no
-"Add" click; editing a note PUTs (no dup); "New note" commits + fresh composer POSTs a 2nd; Done
-flushes without dup; edit-mode reopen loads notes editable; mobile 390px single-column (notes 266px
-vs cramped ~110px before); formatted render (UL/LI/STRONG/H3) with pencil↔textarea toggle; **real CDP
-mouse drag** of the divider keeps the dialog open and resizes the panel. All test data deleted after.
-`npm run prepush` + `tsc -b` (client + server) + full `vite build` green throughout.
+**Tasks 1–7 — shipped to `main` (`f0c5f37`), live on Vercel, browser-verified (desktop + 390px):**
+- **Ideas card trim** (`c6c63dc`) — cut the default `gap-6 py-6` Card spacing to `gap-2 py-3`.
+- **Ideas List view** (`6945bff`) — Card/List toggle (persisted `ideas_view`); dense click-to-expand rows;
+  shared render helpers for actions/tag/related chips.
+- **Ideas description highlight** (`c6fbb31`) — new self-contained rehype plugin
+  [client/src/lib/highlight-markdown.ts](../client/src/lib/highlight-markdown.ts) wraps matches in `<mark>`
+  inside the rendered markdown body (skips code/pre). *(Verified: 3 marks on "benchmark".)*
+- **Meetings Next Steps → markdown** (`ff81036`) — `MarkdownTextarea` editor + `ReactMarkdown` render in the
+  meetings list and the Quick Log series-context panel.
+- **Meetings actions rework** (`175dac7`, asks #5/#6/#7) — Quick Log "Follow-up actions" rows now **autosave
+  as real Actions** (POST `/actions` with `conversationId`, then debounced PUT; dedup via a synchronous
+  `savedActionsRef` so a debounce+finalize can't double-create; remove deletes the Action); a compact
+  **"Who owns it"** picker per row (`owedByMe` + `owerContactIds`); the **"Add action"** button is now the
+  solid primary (white-on-dark). The conversation create/update no longer sends `createActions`.
+- **Meetings title → Edit** (`f0c5f37`, ask #9) — the list heading opens `quickLog.openEdit`; a small
+  **"series"** chip preserves the grouped series view; the anchor-contact chip now shows for any
+  contact-anchored meeting so navigation isn't lost.
 
-### What Was Completed (2026-06-14) — Minor UI Improvements batch (9 tasks)
+**Task 8 — Idea tags → app-wide Tag (`c3f18dd`, SCHEMA, committed locally, NOT pushed):** new `IdeaTag`
+junction; server includes `tagLinks` + accepts `tagIds`; Idea dialog tag input is a free-text `MultiCombobox`
+fed by `GET /tags` (`resolveTagIds` creates new tags on save, idempotent by name); card/list render tag chips
+from `tagLinks`; search scores tags from `tagLinks`. Migration script `migrate-ideas-tags-to-junction.js`
+(dual-mode local/Turso) creates the table + backfills the legacy `Idea.tags` strings.
 
-Plan `.planning/UI-IMPROVEMENTS-PLAN.md` — **all 9 tasks built + verified** (desktop + true 390px mobile via
-device emulation). Four commits:
-
-- **`2b88669` (Tasks 1, 3, 5) — Calendars, schema-free, PUSHED.** Actions page now has a **List/Calendar
-  view toggle** (`?view=calendar`), mirroring Meetings; the standalone **Calendar left-bar item + `/calendar`
-  route are gone** (`/calendar` redirects to `/actions?view=calendar`). `calendar.tsx`'s page became a reusable
-  `<ActionsCalendar>` embedded in the Actions page. Waiting-on-someone actions show a **⏳ title prefix + a
-  native "Waiting on: <names>" hover tooltip** (owerContactIds → `/contacts/names`). Both the Meetings **and**
-  Actions calendars now **blank FullCalendar's mobile "all-day" label** (`allDayText=""`).
-- **`18f7b69` (Tasks 2, 4) — Actions form, schema-free, PUSHED.** "Who owes it" → **"Who owns it"** (+ chip/
-  placeholder/helper + the dashboard waiting-card copy); internal `owedByMe`/`OWED_BY_ME`/`WAITING_ON_THEM`
-  unchanged. Added a **star-toggle next to each selected ower** to mark/unmark them a favorite in-context
-  (`PATCH /contacts/:id/favorite`), mirroring the company star-toggle in Ideas.
-- **`88ef0a6` (Task 9, Quick Log) — schema-free, PUSHED.** Quick Log dialog is **drag-resizable on desktop**.
-- **`cce0f78` (Tasks 6, 7, 8, 9-Idea) — Ideas, SCHEMA-TOUCHING, PUSHED (after the owner applied the DDL).**
-  Idea cards **click-to-expand** (full markdown + pasted screenshots, no editor); **Ideas-scoped search** gains
-  sort (Relevance/Newest/Oldest/A→Z) + match-case + multi-term AND + `HighlightedText`; **soft-archive**
-  (`Idea.archived`) with Active/Archived/All lozenges + per-card Archive/Unarchive (archived hidden by default,
-  searchable only when opted in); Idea dialog **drag-resizable** like Quick Log.
-
-**Verification:** local SQLite end-to-end for archive (PATCH preserves contact/company junctions; `?archived=
-only|all` filters correct) + full browser pass (expand, search+highlight, resize dialog → 760px reflow,
-calendar ⏳ tooltip "Waiting on: Sarah E. Saxton", mobile 390px on Ideas/Actions/Meetings calendars). `prepush`
-+ `tsc -b` + full `vite build` green. Test action + test favorite created during verification were **deleted/
-reverted** (data restored).
-
-### Turso DDL — APPLIED ✅ (2026-06-14)
-
-The owner ran `ALTER TABLE "Idea" ADD COLUMN "archived" BOOLEAN NOT NULL DEFAULT 0;` in the Turso console;
-`cce0f78` + the docs commits were then pushed (remote `main` = `16ceb9f`). Vercel redeployed; `/api/health`
-is `200 db:ok`. (Backfill wasn't needed — DEFAULT 0 makes every existing idea "active." Migration script kept
-for audit: `server/scripts/migrate-ideas-archived.js`.) **One light verification left for the owner:** load the
-prod Ideas page and confirm the Active/Archived/All lozenges work — the agent can't auth to prod to check the
-`Idea.archived` query directly, and the column-missing case would otherwise 500 the Ideas list.
+**Verification:** prepush (`tsc` client+server) + full `vite build` green throughout. Server contracts
+API-tested on local SQLite (action autosave: `conversationId` link + derived `direction`; idea tags:
+create/link/unlink/cleanup; both test datasets deleted). Browser-verified desktop + true 390px: Ideas
+card trim, List view, description `<mark>` highlight; Meetings title-button (`description="Edit meeting"`),
+Next-steps markdown block, Quick Log add-action → owner picker → **autosave confirmed** (action 240 →
+`conversationId`, `owedByMe`, `direction`); Idea Tags combobox free-text create → chip displays → tag joins
+the shared `/tags` vocab. All test data removed.
 
 ### What's Next
-1. **[OWNER, light]** On prod, open Ideas → confirm the lozenges + archive/unarchive work (the only check the
-   agent couldn't run, since prod needs the app password).
-2. Standing plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 —
+1. **[OWNER]** Apply the Turso `IdeaTag` DDL + backfill, then `git push` (see top of this file).
+2. **[OWNER, light]** Confirm on prod that the Ideas archive lozenges work (carried from last session).
+3. Standing plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 —
    don't push on those until the owner raises them.
 
 ### Carry-over items (pre-dating, lower priority)
-1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17) to activate error tracking.
+1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6).
-3. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
-4. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
+3. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
 
 ### Open Bugs / Known Caveats
-- **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** For the archive DDL, use the **Turso
-  web dashboard SQL console** (or mint a fresh no-expiry rw token). Vercel CLI installed but not logged in.
-- **⚠ `prisma db push` local-path gotcha:** from `server/`, `db push` resolves `file:./dev.db` to the **stray
-  empty `server/dev.db`**, not the populated `server/prisma/dev.db` the server opens. This session the archive
-  column was applied directly to `server/prisma/dev.db` via better-sqlite3 (correct path).
-- Run `tsc -b` (not just `npm run prepush`) before every push — it catches unused imports `typecheck` misses.
-- Dev smoke-testing: a stale dev server + a locked `chrome-devtools-mcp` chrome profile were both cleared this
-  session (stop the project `node` processes matching `searchbook` + `vite|ts-node-dev|concurrently`, and the
-  `chrome.exe` whose command line contains `chrome-devtools-mcp`, before starting fresh). Local app has no
-  `APP_PASSWORD` — pre-seed `localStorage.searchbook_password`. The device-emulation trick (`emulate
-  390x844x3,mobile`) gives a true 390px viewport (the OS floors `resize_page` at ~500px).
+- **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** Use the Turso web SQL console or
+  mint a fresh no-expiry rw token for the `IdeaTag` migration.
+- **⚠ `prisma db push` local-path gotcha:** from `server/`, `db push` resolves `file:./dev.db` to the stray
+  empty `server/dev.db`, not the populated `server/prisma/dev.db` the server opens (db.ts resolves relative
+  to `server/prisma/`). This session the `IdeaTag` table was applied to `prisma/dev.db` via the dual-mode
+  migration script (libsql `file:` URL) — worked fine even with the dev server running.
+- Run `tsc -b` / full `vite build` (not just `npm run prepush`) before every push — it catches unused imports.
+- Dev smoke: a dev stack was already running this session (server 3001, client 5173). The local app has no
+  `APP_PASSWORD` — pre-seed `localStorage.searchbook_password`. Device-emulation `390x844x3,mobile` gives a
+  true 390px viewport.
 
 ### Working branch
-`main` — **all pushed, remote `main` = `7f450c6`, live on Vercel.** This session shipped four schema-free
-feature/fix commits — `5314aad` (Ideas screenshot fix), `dacdeaa` (connect→company-status), `4ea562c`
-(Quick Log: Summary caret + autosaving/editable prep notes), `7f450c6` (formatted prep notes +
-resize-drag fix) — plus doc commits. The prior UI batch (`2b88669`, `18f7b69`, `88ef0a6`, `cce0f78`)
-remains live. Working tree clean.
+`main` — **Tasks 1–7 pushed (remote `main` = `f0c5f37`, live).** **One unpushed local commit `c3f18dd`**
+(Idea-tags schema) + this doc commit, both awaiting the Turso `IdeaTag` DDL before `git push`.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Minor UI Improvements batch (9 tasks) is **complete and
-> fully shipped** — all 5 commits are on `main` (`16ceb9f`) and live on Vercel, including the Ideas/archive
-> commit (`Idea.archived` Turso DDL was applied 2026-06-14). The only loose end is a light owner check that the
-> Ideas archive lozenges work on prod. The standing plan of record is now back to
-> `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't push on those until I raise them).
-> Standing owner action still open: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Ideas & Meetings polish batch (9 asks) is built and
+> verified. Tasks 1–7 are pushed and live (`f0c5f37`). **One local commit `c3f18dd` (Idea tags → app-wide
+> Tag table) is unpushed and must not be pushed until the Turso `CREATE TABLE "IdeaTag"` is applied** — run
+> `server/scripts/migrate-ideas-tags-to-junction.js` with a fresh Turso token (or paste the DDL in the web
+> console + run the script for the backfill), then `git push`. After that, the plan of record returns to
+> `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9). Standing owner action: set
+> `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.

@@ -3,7 +3,12 @@ import prisma from '../db';
 
 const router = Router();
 
-// GET /api/tags — list all tags
+// The reserved tag that powers favorite contacts/companies (no dedicated column —
+// see contacts.ts / companies.ts). It's an internal mechanism, never a user-facing
+// tag, so it's excluded from the tag list that feeds the tag pickers app-wide.
+const FAVORITE_TAG_NAME = 'Favorite';
+
+// GET /api/tags — list all tags (excluding the reserved Favorite tag)
 // NOTE: deliberately avoids `include: { _count }` — that generates a correlated
 // subquery that hangs the Prisma-libsql adapter on Turso (see CLAUDE.md). Instead
 // we count via groupBy on the join tables and merge the counts client-side, while
@@ -11,7 +16,7 @@ const router = Router();
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const [tags, contactCounts, companyCounts] = await Promise.all([
-      prisma.tag.findMany({ orderBy: { name: 'asc' } }),
+      prisma.tag.findMany({ where: { name: { not: FAVORITE_TAG_NAME } }, orderBy: { name: 'asc' } }),
       prisma.contactTag.groupBy({ by: ['tagId'], _count: { _all: true } }),
       prisma.companyTag.groupBy({ by: ['tagId'], _count: { _all: true } }),
     ]);

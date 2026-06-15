@@ -127,6 +127,98 @@ function formatPrepDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+// The side-by-side prep panel only makes sense on >= sm screens; on mobile the
+// prep notes render full-width inside the form instead of a cramped 35% column.
+function useIsDesktop() {
+  const query = '(min-width: 640px)'
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : true
+  )
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const onChange = () => setIsDesktop(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return isDesktop
+}
+
+// A saved prep note rendered as an inline-editable markdown textarea that
+// autosaves (debounced PUT) as you type, and flushes on blur (e.g. when you
+// click "Done"). Saves are serialized so a debounce + blur can't race.
+function EditablePrepNote({
+  note,
+  onDelete,
+}: {
+  note: ConversationPrepNote
+  onDelete: () => void
+}) {
+  const [content, setContent] = useState(note.content)
+  const [status, setStatus] = useState<SaveStatus>('idle')
+  const savedRef = useRef(note.content)
+  const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const chainRef = useRef<Promise<void>>(Promise.resolve())
+
+  // Re-sync if the underlying note changes identity (e.g. meeting reloaded).
+  useEffect(() => {
+    setContent(note.content)
+    savedRef.current = note.content
+  }, [note.id, note.content])
+
+  const flush = useCallback(() => {
+    const trimmed = content.trim()
+    if (!trimmed || content === savedRef.current) return
+    chainRef.current = chainRef.current.then(async () => {
+      if (content === savedRef.current) return
+      setStatus('saving')
+      try {
+        await api.put(`/conversation-prepnotes/${note.id}`, { content: trimmed })
+        savedRef.current = content
+        setStatus('saved')
+        if (flashRef.current) clearTimeout(flashRef.current)
+        flashRef.current = setTimeout(() => setStatus('idle'), 2000)
+      } catch {
+        setStatus('error')
+      }
+    })
+  }, [content, note.id])
+
+  // Debounced autosave ~1.2s after the last edit.
+  useEffect(() => {
+    if (content === savedRef.current || !content.trim()) return
+    const t = setTimeout(flush, 1200)
+    return () => clearTimeout(t)
+  }, [content, flush])
+
+  useEffect(() => () => { if (flashRef.current) clearTimeout(flashRef.current) }, [])
+
+  return (
+    <div className="space-y-1 rounded-md bg-yellow-50 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">{formatPrepDate(note.date)}</p>
+        <div className="flex items-center gap-2">
+          <SaveStatusIndicator status={status} className="text-xs" />
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-muted-foreground hover:text-destructive"
+            title="Delete prep note"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <MarkdownTextarea
+        value={content}
+        onChange={setContent}
+        onBlur={flush}
+        placeholder="Things to raise, questions to ask..."
+        rows={2}
+      />
+    </div>
+  )
+}
+
 function QuickLogDialog({
   open,
   onOpenChange,
@@ -151,6 +243,7 @@ function QuickLogDialog({
   const [participantNotes, setParticipantNotes] = useState<Record<string, string>>({})
   const [attendeesDescription, setAttendeesDescription] = useState('')
   const [tagIds, setTagIds] = useState<string[]>([])
+  const [showSummary, setShowSummary] = useState(false)
   const [showWho, setShowWho] = useState(false)
   const [showExtras, setShowExtras] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -176,6 +269,15 @@ function QuickLogDialog({
   const [prepNotes, setPrepNotes] = useState<ConversationPrepNote[]>([])
   const [pendingPrepNotes, setPendingPrepNotes] = useState<PendingPrepNote[]>([])
   const [newPrepContent, setNewPrepContent] = useState('')
+  // The in-progress (draft) prep note autosaves once the meeting record exists:
+  // first keystroke-batch POSTs it, later ones PUT. `Ref`s back the save logic so
+  // a debounce + blur + finalize can't double-create. `draftStatus` drives a small
+  // Saving/Saved indicator under the composer.
+  const [draftStatus, setDraftStatus] = useState<SaveStatus>('idle')
+  const newPrepNoteIdRef = useRef<number | null>(null)
+  const newPrepSavedRef = useRef('')
+  const draftFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prepSaveChainRef = useRef<Promise<void>>(Promise.resolve())
   const [attachments, setAttachments] = useState<ConversationAttachment[]>([])
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [uploadingFile, setUploadingFile] = useState(false)
@@ -202,6 +304,7 @@ function QuickLogDialog({
   const [lookupsLoaded, setLookupsLoaded] = useState(false)
 
   const isEdit = editId !== null
+  const isDesktop = useIsDesktop()
 
   useEffect(() => {
     if (!open) return
@@ -217,11 +320,16 @@ function QuickLogDialog({
     setParticipantNotes({})
     setAttendeesDescription('')
     setTagIds([])
+    setShowSummary(false)
     setShowWho(false)
     setShowExtras(false)
     setPrepNotes([])
     setPendingPrepNotes([])
     setNewPrepContent('')
+    setDraftStatus('idle')
+    newPrepNoteIdRef.current = null
+    newPrepSavedRef.current = ''
+    prepSaveChainRef.current = Promise.resolve()
     setAttachments([])
     setPendingAttachments([])
     setExistingActions([])
@@ -298,8 +406,11 @@ function QuickLogDialog({
           // Expand sections that already have content. The 1:1 anchor field is
           // gone, but a legacy anchor (conv.companyId/contactId) still means
           // there's "who" context worth showing.
+          setShowSummary(!!conv.summary)
           setShowWho(!!(conv.contactId || conv.companyId || conv.orgs?.length || conv.participants?.length || conv.attendeesDescription))
-          setShowExtras(!!(conv.nextSteps || conv.tags?.length || conv.actions?.length || conv.attachments?.length))
+          // Prep notes live inside this section on mobile (no side panel), so
+          // auto-expand it there when the meeting already has prep notes.
+          setShowExtras(!!(conv.nextSteps || conv.tags?.length || conv.actions?.length || conv.attachments?.length || (conv.prepNotes?.length && !isDesktop)))
           // Seed the autosave snapshot from the loaded record so opening an edit
           // doesn't trigger an immediate no-op PUT. Mirrors buildAutosaveBody().
           lastSnapshotRef.current = JSON.stringify({
@@ -446,6 +557,19 @@ function QuickLogDialog({
     attendeesDescription, orgValues, participantIds, participantNotes, tagIds])
 
   useEffect(() => () => { if (savedFlashRef.current) clearTimeout(savedFlashRef.current) }, [])
+  useEffect(() => () => { if (draftFlashRef.current) clearTimeout(draftFlashRef.current) }, [])
+
+  // Debounced autosave for the in-progress prep note (~1.2s after the last edit).
+  // Only fires once the meeting record exists; before that the draft is preserved
+  // locally and persisted on finalize.
+  useEffect(() => {
+    if (!open || loadingEdit || savedId === null) return
+    if (!newPrepContent.trim() || newPrepContent === newPrepSavedRef.current) return
+    const snapshot = newPrepContent
+    const timer = setTimeout(() => { void enqueuePrepSave(() => saveDraftPrepNote(snapshot)) }, 1200)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, loadingEdit, newPrepContent, savedId])
 
   // Resolve free-text combobox entries into real records (same pattern as the full editor)
   async function resolveWho() {
@@ -546,16 +670,25 @@ function QuickLogDialog({
         lastSnapshotRef.current = JSON.stringify(buildAutosaveBody())
         setNewActions([])
 
-        // Persist staged prep notes / attachments (those added before the record
-        // existed; ones added afterwards were saved live).
-        const stagedPrep = [...pendingPrepNotes]
-        if (newPrepContent.trim()) stagedPrep.push({ content: newPrepContent.trim(), date })
-        for (const note of stagedPrep) {
+        // Persist prep notes. Staged ones (added before the record existed) are
+        // created now; the in-progress draft is flushed once — PUT if it already
+        // autosaved live (has an id), otherwise POST. Draining the prep save chain
+        // first ensures any in-flight live save has set the id (no double-create).
+        for (const note of pendingPrepNotes) {
           await api.post('/conversation-prepnotes', {
             conversationId,
             content: note.content,
             date: note.date,
           })
+        }
+        await prepSaveChainRef.current
+        const draft = newPrepContent.trim()
+        if (draft) {
+          if (newPrepNoteIdRef.current !== null) {
+            await api.put(`/conversation-prepnotes/${newPrepNoteIdRef.current}`, { content: draft })
+          } else {
+            await api.post('/conversation-prepnotes', { conversationId, content: draft, date })
+          }
         }
         for (const att of pendingAttachments) {
           await api.post('/conversation-attachments', { conversationId, ...att })
@@ -601,27 +734,72 @@ function QuickLogDialog({
   }
 
   // ── Prep notes ────────────────────────────────────────────
-  async function addPrepNote() {
-    const content = newPrepContent.trim()
-    if (!content) return
-    // Once the meeting record exists (edit mode, or after the first autosave),
-    // persist live; otherwise stage until the record is created.
-    if (savedIdRef.current !== null) {
-      try {
+  // Serialize draft saves so a debounce + blur + finalize can't double-create.
+  function enqueuePrepSave(fn: () => Promise<void>): Promise<void> {
+    const next = prepSaveChainRef.current.then(fn, fn)
+    prepSaveChainRef.current = next
+    return next
+  }
+
+  // Autosave the in-progress draft note: POST on first save (capturing its id in
+  // a ref), PUT thereafter. No-op until the meeting record exists — staged drafts
+  // are persisted by finalize instead.
+  async function saveDraftPrepNote(rawContent: string) {
+    const convId = savedIdRef.current
+    const content = rawContent.trim()
+    if (convId === null || !content) return
+    if (rawContent === newPrepSavedRef.current) return
+    setDraftStatus('saving')
+    try {
+      if (newPrepNoteIdRef.current === null) {
         const created = await api.post<ConversationPrepNote>('/conversation-prepnotes', {
-          conversationId: savedIdRef.current,
+          conversationId: convId,
           content,
           date: new Date().toLocaleDateString('en-CA'),
         })
-        setPrepNotes((prev) => [...prev, created])
-        setNewPrepContent('')
-      } catch {
-        toast.error('Failed to add prep note')
+        newPrepNoteIdRef.current = created.id
+      } else {
+        await api.put(`/conversation-prepnotes/${newPrepNoteIdRef.current}`, { content })
       }
+      newPrepSavedRef.current = rawContent
+      setDraftStatus('saved')
+      if (draftFlashRef.current) clearTimeout(draftFlashRef.current)
+      draftFlashRef.current = setTimeout(() => setDraftStatus('idle'), 2000)
+    } catch {
+      setDraftStatus('error')
+    }
+  }
+
+  async function reloadPrepNotes() {
+    const convId = savedIdRef.current
+    if (convId === null) return
+    try {
+      const notes = await api.get<ConversationPrepNote[]>(`/conversation-prepnotes?conversationId=${convId}`)
+      setPrepNotes(notes)
+    } catch {
+      /* keep optimistic state on failure */
+    }
+  }
+
+  // "New note": commit the current draft and clear the composer for the next one.
+  // Live record → ensure it's saved, then pull the canonical list; otherwise stage.
+  async function commitDraftPrepNote() {
+    const content = newPrepContent.trim()
+    if (!content) return
+    if (savedIdRef.current !== null) {
+      await enqueuePrepSave(() => saveDraftPrepNote(newPrepContent))
+      await reloadPrepNotes()
     } else {
       setPendingPrepNotes((prev) => [...prev, { content, date: new Date().toLocaleDateString('en-CA') }])
-      setNewPrepContent('')
     }
+    setNewPrepContent('')
+    newPrepNoteIdRef.current = null
+    newPrepSavedRef.current = ''
+    setDraftStatus('idle')
+  }
+
+  function updatePendingPrepNote(index: number, content: string) {
+    setPendingPrepNotes((prev) => prev.map((n, i) => (i === index ? { ...n, content } : n)))
   }
 
   async function deletePrepNote(id: number) {
@@ -730,57 +908,57 @@ function QuickLogDialog({
   )
 
   // Prep info shown in the left panel: the meeting's own prep notes (live or
-  // staged) plus the previous meeting in the same series.
+  // staged) plus the previous meeting in the same series. The side panel is
+  // desktop-only — on mobile the same prep block renders inline in the form.
   const showPanel = prepNotes.length > 0 || pendingPrepNotes.length > 0 || !!seriesContext
+  const usePanel = showPanel && isDesktop
 
   // Prep notes list + composer. Rendered in the left panel when it's visible,
-  // otherwise inside the "Prep, tags & attachments" section.
+  // otherwise inside the "Prep, tags & attachments" section. Saved notes are
+  // inline-editable and autosave; the composer autosaves the in-progress draft.
   const prepNotesBlock = (
     <div className="space-y-2">
       {prepNotes.map((note) => (
-        <div key={note.id} className="flex items-start gap-2 rounded-md bg-yellow-50 p-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">{formatPrepDate(note.date)}</p>
-            <div className="prep-note-markdown text-sm">
-              <ReactMarkdown>{note.content}</ReactMarkdown>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => deletePrepNote(note.id)}
-            className="text-muted-foreground hover:text-destructive"
-            title="Delete prep note"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <EditablePrepNote key={note.id} note={note} onDelete={() => deletePrepNote(note.id)} />
       ))}
       {pendingPrepNotes.map((note, i) => (
-        <div key={i} className="flex items-start gap-2 rounded-md bg-yellow-50 p-2">
-          <div className="prep-note-markdown min-w-0 flex-1 text-sm">
-            <ReactMarkdown>{note.content}</ReactMarkdown>
+        <div key={`pending-${i}`} className="space-y-1 rounded-md bg-yellow-50 p-2">
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setPendingPrepNotes((prev) => prev.filter((_, j) => j !== i))}
+              className="text-muted-foreground hover:text-destructive"
+              title="Remove prep note"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setPendingPrepNotes((prev) => prev.filter((_, j) => j !== i))}
-            className="text-muted-foreground hover:text-destructive"
-            title="Remove prep note"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <MarkdownTextarea
+            value={note.content}
+            onChange={(v) => updatePendingPrepNote(i, v)}
+            placeholder="Things to raise, questions to ask..."
+            rows={2}
+          />
         </div>
       ))}
-      <MarkdownTextarea
-        value={newPrepContent}
-        onChange={setNewPrepContent}
-        placeholder="Things to raise, questions to ask..."
-        rows={2}
-      />
-      {newPrepContent.trim() && (
-        <Button type="button" variant="outline" size="sm" onClick={addPrepNote}>
-          Add prep note
-        </Button>
-      )}
+      <div className="space-y-1">
+        <MarkdownTextarea
+          value={newPrepContent}
+          onChange={setNewPrepContent}
+          onBlur={() => { void enqueuePrepSave(() => saveDraftPrepNote(newPrepContent)) }}
+          placeholder="Things to raise, questions to ask... (autosaves)"
+          rows={2}
+        />
+        {newPrepContent.trim() && (
+          <div className="flex items-center justify-between">
+            <SaveStatusIndicator status={draftStatus} className="text-xs" />
+            <Button type="button" variant="outline" size="sm" onClick={commitDraftPrepNote}>
+              <Plus className="mr-1 h-3 w-3" />
+              New note
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   )
 
@@ -813,14 +991,25 @@ function QuickLogDialog({
           </Select>
         </div>
       </div>
+      {/* Summary — collapsed by default; click the caret to reveal (rarely needed for a quick log) */}
       <div className="space-y-2">
-        <Label htmlFor="ql-summary">Summary</Label>
-        <Input
-          id="ql-summary"
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          placeholder="One-liner (optional)"
-        />
+        <button
+          type="button"
+          className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+          onClick={() => setShowSummary((v) => !v)}
+        >
+          {showSummary ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          Summary
+          {summary && <span className="text-xs text-primary">·</span>}
+        </button>
+        {showSummary && (
+          <Input
+            id="ql-summary"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder="One-liner (optional)"
+          />
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="ql-notes">Notes</Label>
@@ -1098,9 +1287,9 @@ function QuickLogDialog({
             />
           </div>
 
-          {/* Prep notes live in the left panel once any exist; the composer sits
-              here only until then */}
-          {!showPanel && (
+          {/* Prep notes live in the desktop left panel once any exist; otherwise
+              (and always on mobile) the list + composer sit here in the form */}
+          {!usePanel && (
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 <FileText className="h-3.5 w-3.5" /> Prep notes
@@ -1177,7 +1366,7 @@ function QuickLogDialog({
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
-      <DialogContent className={cn('max-h-[90vh] w-[95vw] overflow-y-auto sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', showPanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}>
+      <DialogContent className={cn('max-h-[90vh] w-[95vw] overflow-y-auto sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', usePanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}>
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-6">
             <DialogTitle>{isEdit ? 'Edit Meeting' : 'Quick Log Meeting'}</DialogTitle>
@@ -1193,7 +1382,7 @@ function QuickLogDialog({
           <div className="flex justify-center py-10">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : showPanel ? (
+        ) : usePanel ? (
           // Fixed height so the prep panel stays visible while the form scrolls
           <ResizablePanelGroup orientation="horizontal" className="h-[68vh]">
             <ResizablePanel defaultSize={35} minSize={20} className="pr-4 border-r mr-2">

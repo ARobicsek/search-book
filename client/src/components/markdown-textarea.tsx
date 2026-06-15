@@ -19,6 +19,7 @@ interface MarkdownTextareaProps {
   rows?: number
   className?: string
   autoFocus?: boolean
+  onBlur?: () => void
 }
 
 const LIST_PREFIX = /^(\s*)(- |\* |(\d+)\. )(.*)$/
@@ -31,6 +32,7 @@ export function MarkdownTextarea({
   rows = 4,
   className,
   autoFocus,
+  onBlur,
 }: MarkdownTextareaProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -279,6 +281,7 @@ export function MarkdownTextarea({
         onPaste={handlePaste}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onBlur={onBlur}
         placeholder={placeholder}
         rows={rows}
         className={className}

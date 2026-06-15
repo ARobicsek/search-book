@@ -454,12 +454,12 @@ export function IdeaListPage() {
             <Card
               key={idea.id}
               className={cn(
-                'flex cursor-pointer flex-col transition-colors hover:border-primary/40',
+                'flex cursor-pointer flex-col gap-2 py-3 transition-colors hover:border-primary/40',
                 idea.archived && 'opacity-70'
               )}
               onClick={() => setExpandedId(expanded ? null : idea.id)}
             >
-              <CardHeader className="pb-2">
+              <CardHeader className="gap-1 pb-0">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base leading-tight">{hl(idea.title)}</CardTitle>
                   <div className="flex shrink-0 gap-1">
@@ -535,7 +535,7 @@ export function IdeaListPage() {
                   </div>
                 )}
               </CardContent>
-              <div className="px-6 pb-4">
+              <div className="px-6">
                 <p className="text-xs text-muted-foreground">{formatDate(idea.createdAt)}</p>
               </div>
             </Card>

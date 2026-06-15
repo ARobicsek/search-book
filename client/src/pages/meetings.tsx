@@ -36,7 +36,7 @@ import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import {
-  Building2, CalendarDays, FileText, List, Loader2, MessageSquarePlus, Paperclip,
+  Building2, CalendarDays, FileText, Layers, List, Loader2, MessageSquarePlus, Paperclip,
   Pencil, Tag as TagIcon, Trash2, X,
 } from 'lucide-react'
 
@@ -535,30 +535,32 @@ export function MeetingsPage() {
                         </Button>
                       </div>
                     </div>
-                    {/* Display name: title (→ series view) → contact → company → first participant → description */}
-                    {conv.title ? (
+                    {/* Heading opens the Edit dialog. Displayed text falls back:
+                        title → contact → company → first participant → description.
+                        For series titles, a small "series" chip still opens the
+                        grouped series view. Contact/company/participant remain
+                        reachable via the badge chips below. */}
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         className="text-left text-sm font-semibold text-primary hover:underline"
-                        onClick={() => setParam('title', conv.title!)}
+                        onClick={() => quickLog.openEdit(conv.id)}
+                        title="Edit meeting"
                       >
-                        {hl(conv.title)}
+                        {hl(conv.title || conv.contact?.name || conv.company?.name || conv.participants?.[0]?.contact.name || conv.attendeesDescription || 'Meeting')}
                       </button>
-                    ) : conv.contact ? (
-                      <Link to={`/contacts/${conv.contact.id}`} className="block text-sm font-semibold hover:underline">
-                        {hl(conv.contact.name)}
-                      </Link>
-                    ) : conv.company ? (
-                      <Link to={`/companies/${conv.company.id}`} className="block text-sm font-semibold hover:underline">
-                        {hl(conv.company.name)}
-                      </Link>
-                    ) : conv.participants && conv.participants.length > 0 ? (
-                      <Link to={`/contacts/${conv.participants[0].contact.id}`} className="block text-sm font-semibold hover:underline">
-                        {hl(conv.participants[0].contact.name)}
-                      </Link>
-                    ) : (
-                      <p className="text-sm font-semibold">{conv.attendeesDescription ? hl(conv.attendeesDescription) : 'Meeting'}</p>
-                    )}
+                      {conv.title && (
+                        <button
+                          type="button"
+                          onClick={() => setParam('title', conv.title!)}
+                          className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-800 hover:bg-violet-100"
+                          title="View all meetings in this series"
+                        >
+                          <Layers className="h-3 w-3" />
+                          series
+                        </button>
+                      )}
+                    </div>
                     {conv.summary && <p className="text-sm font-medium">{hl(conv.summary)}</p>}
                     {conv.attendeesDescription && conv.title && (
                       <p className="text-xs italic text-muted-foreground">{hl(conv.attendeesDescription)}</p>
@@ -616,7 +618,7 @@ export function MeetingsPage() {
                       </div>
                     )}
                     <div className="flex flex-wrap gap-1 pt-1">
-                      {conv.contact && conv.title && (
+                      {conv.contact && (
                         <Link to={`/contacts/${conv.contact.id}`}>
                           <Badge variant="outline" className="text-xs hover:bg-muted">
                             {hl(conv.contact.name)}

@@ -26,6 +26,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, Star, X } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
+import { cn } from '@/lib/utils'
 
 interface LinkEntry {
   url: string
@@ -149,7 +150,7 @@ export function ActionFormPage() {
   // Collapsed fields still live in `form`, so they submit/auto-save regardless.
   const [showOptions, setShowOptions] = useState(false)
   const [showRelated, setShowRelated] = useState(false)
-  // "Who owes it" — collapsed by default (defaults to just "me"); auto-expand in edit
+  // "Who owns it" — collapsed by default (defaults to just "me"); auto-expand in edit
   // mode when the saved value is non-default so it's visible without a click.
   const [showOwers, setShowOwers] = useState(false)
 
@@ -166,6 +167,26 @@ export function ActionFormPage() {
   // Favorite contacts not already in the owers list — shown as quick-add chips
   // (mirrors the Quick Log "Who was there" favorites pattern).
   const quickAddOwerFavorites = favorites.filter((f) => !form.owerIds.includes(f.id.toString()))
+
+  const contactNameOf = (val: string) =>
+    contacts.find((c) => c.id.toString() === val)?.name || val
+
+  // Designate (mark/unmark) a contact as a favorite straight from the Action screen
+  // — mirrors toggleCompanyFavorite in idea-list. Optimistic; revert by re-fetching.
+  async function toggleOwerFavorite(contactId: number, name: string) {
+    const isFav = favorites.some((f) => f.id === contactId)
+    setFavorites((prev) =>
+      isFav
+        ? prev.filter((f) => f.id !== contactId)
+        : [...prev, { id: contactId, name }].sort((a, b) => a.name.localeCompare(b.name))
+    )
+    try {
+      await api.patch(`/contacts/${contactId}/favorite`, { favorite: !isFav })
+    } catch {
+      toast.error('Failed to update favorite')
+      api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
+    }
+  }
 
   // Track existing link IDs for deletion tracking
   const [existingLinkIds, setExistingLinkIds] = useState<number[]>([])
@@ -190,7 +211,7 @@ export function ActionFormPage() {
           setForm(formData)
           setOriginalForm(formData)
           setExistingLinkIds(links.map((l) => l.id))
-          // Reveal "Who owes it" when it's been customized (not the default "just me").
+          // Reveal "Who owns it" when it's been customized (not the default "just me").
           if (!formData.owedByMe || formData.owerIds.length > 0) setShowOwers(true)
         })
         .catch((err) => {
@@ -485,7 +506,7 @@ export function ActionFormPage() {
                 onClick={() => setShowOwers((v) => !v)}
               >
                 {showOwers ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                Who owes it
+                Who owns it
                 {(!form.owedByMe || form.owerIds.length > 0) && (
                   <span className="text-xs text-primary">·</span>
                 )}
@@ -525,7 +546,7 @@ export function ActionFormPage() {
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, owerIds: [...prev.owerIds, f.id.toString()] }))}
                         className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
-                        title="Add to who owes it"
+                        title="Add to who owns it"
                       >
                         <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                         {f.name}
@@ -537,9 +558,35 @@ export function ActionFormPage() {
                     options={contactOptions}
                     values={form.owerIds}
                     onChange={(vals) => setForm((prev) => ({ ...prev, owerIds: vals }))}
-                    placeholder="Add people who owe it..."
+                    placeholder="Add people who own it..."
                     searchPlaceholder="Search contacts..."
                   />
+                  {/* Star-toggle to designate a selected ower as a favorite (quick-add
+                      elsewhere) — mirrors the company star-toggle in Ideas. */}
+                  {form.owerIds.map((val) => {
+                    if (!/^\d+$/.test(val)) return null
+                    const isFav = favorites.some((f) => f.id === Number(val))
+                    return (
+                      <div key={val} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleOwerFavorite(Number(val), contactNameOf(val))}
+                          className="shrink-0"
+                          title={isFav ? 'Remove from favorites' : 'Mark as favorite (quick-add elsewhere)'}
+                        >
+                          <Star
+                            className={cn(
+                              'h-3.5 w-3.5',
+                              isFav ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground hover:text-amber-400'
+                            )}
+                          />
+                        </button>
+                        <span className="truncate text-xs text-muted-foreground" title={contactNameOf(val)}>
+                          {contactNameOf(val)}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

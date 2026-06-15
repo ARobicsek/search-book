@@ -236,7 +236,7 @@ export function DashboardPage() {
               Waiting on others ({waitingActions.length})
             </CardTitle>
             <CardDescription className="text-fuchsia-800/70">
-              Things other people owe you —{' '}
+              Actions owned by others —{' '}
               <Link to="/actions?filter=waiting" className="hover:underline text-fuchsia-900">
                 see all
               </Link>

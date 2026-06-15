@@ -28,10 +28,18 @@ last one:
   5xx**; the first probe after each idle ran ~0.4s (transparent reconnect) then settled to ~0.12s. The stale
   connection is now handled invisibly instead of surfacing the old 500. `prepush` + `tsc -b` + vite build green.
 
-### What's Next — standing plan of record returns to the NCQA adaptation plan
+### What's Next — a batch of minor UI improvements (owner-directed)
 
-The Actions/Ideas Polish batch is finished. **Resume `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+).**
-Phase 3 is gated on D8/D9 and Phase 4 on D5/D6 — **don't push on D5–D9 until the owner raises them.**
+The Actions/Ideas Polish batch is finished. **Next session is a batch of minor UI improvements** — the
+owner will bring the specific list at session start (don't invent one). These are almost certainly
+**client-only / schema-free**, so: small **atomic commit per fix**, and **re-test desktop + mobile (390px)
+for every change** — 390px is where UI regressions hide. If the list is more than a couple of items, write
+a lightweight plan doc (mirror `.planning/ACTIONS-IDEAS-POLISH-PLAN.md`) and confirm scope before building.
+Useful reusable UI primitives already exist: `MarkdownTextarea`, `HighlightedText`, the Quick Log
+progressive-disclosure (chevron) pattern, favorite-chip quick-add — prefer reuse over new components.
+
+**After the UI batch, the standing plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+),**
+gated on D5–D9 — don't push on those until the owner raises them.
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17) to activate error tracking.
@@ -66,10 +74,14 @@ Phase 3 is gated on D8/D9 and Phase 4 on D5/D6 — **don't push on D5–D9 until
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file, then **`.planning/NCQA-ADAPTATION-PLAN.md`** — the
-> standing plan of record is back to it now that the Actions/Ideas Polish batch is **complete** (all 5
-> tasks shipped, incl. Task 5 long-lived PrismaClient verified live). Work **Phase 3+**, but Phase 3 is
-> gated on D8/D9 and Phase 4 on D5/D6 — **don't push on D5–D9 until I raise them.** House rules unchanged:
-> atomic commit per task; `npm run prepush` **and** `tsc -b` + desktop/390px smoke before push; schema
-> changes need the Turso DDL applied first (committed `server/.env` token is stale — mint a fresh one or use
-> the dashboard SQL console). Standing owner action: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Actions/Ideas Polish batch is **complete** (all 5
+> tasks shipped; Task 5 long-lived PrismaClient verified live). This session is a batch of **minor UI
+> improvements** — I'll give you the list; don't start coding until I do. They're almost certainly
+> client-only/schema-free: do a small **atomic commit per fix**, prefer reusing existing primitives
+> (`MarkdownTextarea`, `HighlightedText`, the Quick Log chevron disclosure, favorite-chip quick-add) over
+> new components, run `npm run prepush` **and** `tsc -b`, and **re-test desktop + mobile 390px for each
+> change** (regressions hide at 390px). If it's more than a couple of items, write a lightweight plan doc
+> first and confirm scope with me. Push to `main` is authorized (auto-deploys to Vercel). The NCQA
+> adaptation plan (`.planning/NCQA-ADAPTATION-PLAN.md`, Phase 3+, gated D5–D9 — don't push on those until I
+> raise them) remains the standing plan of record after this UI batch. Standing owner action still open:
+> set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.

@@ -10,7 +10,7 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
    - **Detail View:** Conditionally hid the "Connections" card when empty to save vertical space. Moved the "Personal Details" card up, immediately below "Notes".
 
 2. **Action Creation Flow:**
-   - When creating a new action from a contact's detail page (`/actions/new?contactId=X`), the form now automatically pre-fills the contact as the "Who owns it" action owner (defaulting to "they owe it") and auto-expands that section.
+   - When creating a new action from a contact's detail page (`/actions/new?contactId=X`), the form now defaults to "Me" as the owner but automatically injects that contact as a quick-add chip so you can easily assign the action to them with one click. The "Who owns it" section also auto-expands so it's immediately visible.
 
 **Verification:** prepush (`tsc` client+server) + full `vite build` green throughout. All code pushed to `main`. 
 

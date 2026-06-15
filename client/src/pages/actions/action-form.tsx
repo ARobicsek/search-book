@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Action, Contact, Company, LinkRecord } from '@/lib/types'
@@ -135,8 +135,6 @@ export function ActionFormPage() {
     const qCompanyId = searchParams.get('companyId')
     if (qContactId) {
       initial.contactIds = [qContactId]
-      initial.owerIds = [qContactId]
-      initial.owedByMe = false
     }
     if (qCompanyId) initial.companyIds = [qCompanyId]
     return initial
@@ -170,7 +168,17 @@ export function ActionFormPage() {
 
   // Favorite contacts not already in the owers list — shown as quick-add chips
   // (mirrors the Quick Log "Who was there" favorites pattern).
-  const quickAddOwerFavorites = favorites.filter((f) => !form.owerIds.includes(f.id.toString()))
+  const quickAddOwerFavorites = useMemo(() => {
+    const list = [...favorites]
+    const qContactId = searchParams.get('contactId')
+    if (qContactId && !list.some((f) => f.id.toString() === qContactId)) {
+      const contact = contacts.find((c) => c.id.toString() === qContactId)
+      if (contact) {
+        list.unshift({ id: contact.id, name: contact.name })
+      }
+    }
+    return list.filter((f) => !form.owerIds.includes(f.id.toString()))
+  }, [favorites, contacts, searchParams, form.owerIds])
 
   const contactNameOf = (val: string) =>
     contacts.find((c) => c.id.toString() === val)?.name || val

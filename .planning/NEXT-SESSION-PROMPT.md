@@ -3,10 +3,12 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (2026-06-15) — Two owner asks (schema-free, PUSHED)
+### What Was Just Completed (2026-06-15) — Four owner asks across two areas (all schema-free, PUSHED)
 
-Both shipped to `main` (`dacdeaa`) and live on Vercel:
+All shipped to `main` (remote = `7f450c6`) and live on Vercel. Two doc commits along the way
+(`b886353`, `5929045`).
 
+**Ideas + Contacts (`5314aad`, `dacdeaa`):**
 - **`5314aad` fix(ideas) — screenshots no longer stretch collapsed Idea cards.** Pasted
   screenshots (markdown images) were rendering full-size inside collapsed cards, ballooning height
   (a 2-shot card grew ~300px → ~960px). Collapsed cards now hide images (`[&_img]:hidden`) on top of
@@ -19,11 +21,34 @@ Both shipped to `main` (`dacdeaa`) and live on Vercel:
   ENGAGED/PARTNER/CONNECTED; past employers (`isCurrent=false`) skipped; records a
   `CompanyStatusHistory` row. New shared helper [server/src/company-status.ts] (no schema change).
 
-**Verification:** server logic API-tested end-to-end on local SQLite (promote RESEARCHING→CONNECTED;
-PARTNER not downgraded; create-as-connected promotes; current employer promoted but past employer
-not) — all test data deleted after. Ideas fix verified in-browser desktop + true 390px mobile:
-collapsed card stays 306px with images hidden + "2 screenshots" hint; expanded grows to 958px with
-both screenshots at full 320px height. `npm run prepush` + `tsc -b` (client + server) green.
+**Quick Log meeting dialog (`4ea562c`, `7f450c6`) — all in [client/src/components/quick-log-dialog.tsx]:**
+- **`4ea562c` feat(meetings) — Summary collapsed + autosaving, editable prep notes.** (1) Summary is
+  now behind a caret (like "Who was there"/"Actions…"), auto-expanded in edit mode if a summary
+  exists. (2) Prep notes autosave as you type — the composer POSTs the draft on the first pause then
+  PUTs further edits (no "Add prep note" click); "+ New note" starts a fresh one; saves are serialized
+  and flushed on blur + on Done (no lost keystrokes, never double-creates). (3) Saved prep notes are
+  inline-editable. Added an optional `onBlur` to `MarkdownTextarea`. The side-by-side prep panel is now
+  **desktop-only** (new `useIsDesktop` matchMedia hook); on mobile the prep list+composer render
+  full-width in the form (the "Actions, prep…" section auto-expands in edit mode when notes exist).
+- **`7f450c6` fix(meetings) — formatted prep notes + resize-drag no longer closes the dialog.**
+  (1) Saved prep notes now render **formatted markdown** by default; click the body or the pencil to
+  edit in place (raw md textarea, still autosaving), ✓/blur to return. Pencil uses
+  mousedown-preventDefault so the toggle doesn't race the blur. (2) Dragging the prep/form divider was
+  **closing the dialog** — root cause: react-resizable-panels' native pointerdown handler pre-empts
+  Radix's "inside" marker, so Radix mis-read the handle as an *outside* interaction (`content.contains
+  (handle)` is true, yet it dismissed on pointerdown). Fixed with an `onInteractOutside` guard that
+  ignores interactions originating in `[data-slot="resizable-handle"]` / `resizable-panel-group`
+  (genuine backdrop clicks still close it).
+
+**Verification:** Contacts/company logic API-tested e2e on local SQLite (promote RESEARCHING→CONNECTED;
+PARTNER not downgraded; create-as-connected promotes; current employer promoted, past one not). Ideas
+fix in-browser desktop + true 390px mobile (collapsed 306px w/ images hidden + "2 screenshots" hint;
+expanded 958px). Quick Log verified in-browser: Summary caret reveals; prep note autosaved with no
+"Add" click; editing a note PUTs (no dup); "New note" commits + fresh composer POSTs a 2nd; Done
+flushes without dup; edit-mode reopen loads notes editable; mobile 390px single-column (notes 266px
+vs cramped ~110px before); formatted render (UL/LI/STRONG/H3) with pencil↔textarea toggle; **real CDP
+mouse drag** of the divider keeps the dialog open and resizes the panel. All test data deleted after.
+`npm run prepush` + `tsc -b` (client + server) + full `vite build` green throughout.
 
 ### What Was Completed (2026-06-14) — Minor UI Improvements batch (9 tasks)
 
@@ -88,9 +113,11 @@ prod Ideas page and confirm the Active/Archived/All lozenges work — the agent 
   390x844x3,mobile`) gives a true 390px viewport (the OS floors `resize_page` at ~500px).
 
 ### Working branch
-`main` — **all pushed, remote `main` = `dacdeaa`, live on Vercel.** This session shipped `5314aad`
-(Ideas screenshot fix) + `dacdeaa` (connect→company-status), both schema-free. The prior UI batch
-(`2b88669`, `18f7b69`, `88ef0a6`, `cce0f78` + docs) remains live. Working tree clean.
+`main` — **all pushed, remote `main` = `7f450c6`, live on Vercel.** This session shipped four schema-free
+feature/fix commits — `5314aad` (Ideas screenshot fix), `dacdeaa` (connect→company-status), `4ea562c`
+(Quick Log: Summary caret + autosaving/editable prep notes), `7f450c6` (formatted prep notes +
+resize-drag fix) — plus doc commits. The prior UI batch (`2b88669`, `18f7b69`, `88ef0a6`, `cce0f78`)
+remains live. Working tree clean.
 
 ---
 

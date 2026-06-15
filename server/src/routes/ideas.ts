@@ -12,10 +12,16 @@ const ideaIncludes = {
   },
 };
 
-// GET /api/ideas — list all ideas
-router.get('/', async (_req: Request, res: Response) => {
+// GET /api/ideas — list ideas. `archived` query param controls the soft-archive
+// filter: omitted/false → active only (default); 'only' → archived only; 'all' → both.
+router.get('/', async (req: Request, res: Response) => {
   try {
+    const { archived } = req.query;
+    const where: Record<string, unknown> = {};
+    if (archived === 'only') where.archived = true;
+    else if (archived !== 'all') where.archived = false;
     const ideas = await prisma.idea.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: ideaIncludes,
     });
@@ -119,6 +125,30 @@ router.put('/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error updating idea:', error);
     res.status(500).json({ error: 'Failed to update idea' });
+  }
+});
+
+// PATCH /api/ideas/:id/archive — body { archived: boolean }. Dedicated endpoint so
+// archiving never touches the contact/company junctions (the PUT handler rebuilds
+// those, which would wipe links if a caller sent only { archived }).
+router.patch('/:id/archive', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const archived = req.body.archived === true;
+    const existing = await prisma.idea.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Idea not found' });
+      return;
+    }
+    const idea = await prisma.idea.update({
+      where: { id },
+      data: { archived },
+      include: ideaIncludes,
+    });
+    res.json(idea);
+  } catch (error) {
+    console.error('Error archiving idea:', error);
+    res.status(500).json({ error: 'Failed to archive idea' });
   }
 });
 

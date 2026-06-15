@@ -158,6 +158,7 @@ export interface Idea {
   title: string;
   description: string | null;
   tags: string | null;
+  archived: boolean;
   createdAt: string;
   contacts?: { contact: { id: number; name: string } }[];
   companies?: { company: { id: number; name: string } }[];

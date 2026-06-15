@@ -22,11 +22,62 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { MultiCombobox } from '@/components/ui/combobox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { HighlightedText } from '@/components/highlighted-text'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star } from 'lucide-react'
+import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { cn } from '@/lib/utils'
+
+// Archive lozenge filter — archived ideas are hidden by default and only loaded
+// (so only searchable) when the user opts into "Archived" or "All".
+type ArchiveFilter = 'active' | 'archived' | 'all'
+const ARCHIVE_FILTERS: { value: ArchiveFilter; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'all', label: 'All' },
+]
+
+// Ideas-only search/sort (scoped to Ideas — never the global multi-entity search).
+type IdeaSort = 'relevance' | 'newest' | 'oldest' | 'alpha'
+const IDEA_SORT_OPTIONS: { value: IdeaSort; label: string }[] = [
+  { value: 'relevance', label: 'Relevance' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'alpha', label: 'A → Z' },
+]
+
+// Returns a relevance score for an idea against all search terms (AND across
+// terms), or -1 if any term is missing. Title hits weigh most, then tags, then
+// related people/orgs, then the description body.
+function ideaMatchScore(idea: Idea, terms: string[], caseSensitive: boolean): number {
+  const norm = (s: string) => (caseSensitive ? s : s.toLowerCase())
+  const title = norm(idea.title)
+  const tags = norm(idea.tags || '')
+  const names = norm([
+    ...(idea.contacts?.map((ic) => ic.contact.name) || []),
+    ...(idea.companies?.map((ic) => ic.company.name) || []),
+  ].join(' '))
+  const desc = norm(idea.description || '')
+  let score = 0
+  for (const raw of terms) {
+    const term = norm(raw)
+    const inTitle = title.includes(term)
+    const inTags = tags.includes(term)
+    const inNames = names.includes(term)
+    const inDesc = desc.includes(term)
+    if (!inTitle && !inTags && !inNames && !inDesc) return -1
+    score += (inTitle ? 4 : 0) + (inTags ? 3 : 0) + (inNames ? 2 : 0) + (inDesc ? 1 : 0)
+  }
+  return score
+}
 
 type IdeaForm = {
   title: string
@@ -56,6 +107,12 @@ export function IdeaListPage() {
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<IdeaSort>('relevance')
+  const [caseSensitive, setCaseSensitive] = useState(false)
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('active')
+  // Click-to-expand: collapsed cards clamp the description to 4 lines; expanded
+  // shows the full markdown (incl. pasted screenshots) without opening the editor.
+  const [expandedId, setExpandedId] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
@@ -70,16 +127,21 @@ export function IdeaListPage() {
   const [form, setForm] = useState<IdeaForm>(emptyForm)
   const [originalForm, setOriginalForm] = useState<IdeaForm | null>(null)
 
-  function loadIdeas() {
+  const loadIdeas = useCallback(() => {
+    setLoading(true)
+    const qs = archiveFilter === 'active' ? '' : archiveFilter === 'archived' ? '?archived=only' : '?archived=all'
     api
-      .get<Idea[]>('/ideas')
+      .get<Idea[]>(`/ideas${qs}`)
       .then(setIdeas)
       .catch((err) => toast.error(err.message || 'Failed to load ideas'))
       .finally(() => setLoading(false))
-  }
+  }, [archiveFilter])
 
   useEffect(() => {
     loadIdeas()
+  }, [loadIdeas])
+
+  useEffect(() => {
     api.get<{ id: number; name: string }[]>('/contacts/names').then(
       (data) => setAllContacts(data)
     ).catch(() => {})
@@ -91,15 +153,43 @@ export function IdeaListPage() {
     ).catch(() => {})
   }, [])
 
-  const filteredIdeas = ideas.filter((idea) => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (
-      idea.title.toLowerCase().includes(s) ||
-      (idea.description?.toLowerCase().includes(s) ?? false) ||
-      (idea.tags?.toLowerCase().includes(s) ?? false)
-    )
-  })
+  async function toggleArchive(idea: Idea) {
+    try {
+      await api.patch(`/ideas/${idea.id}/archive`, { archived: !idea.archived })
+      toast.success(idea.archived ? 'Idea unarchived' : 'Idea archived')
+      loadIdeas()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update idea')
+    }
+  }
+
+  const searchTerms = search.trim().split(/\s+/).filter(Boolean)
+  const filteredIdeas = ideas
+    .map((idea) => ({ idea, score: searchTerms.length ? ideaMatchScore(idea, searchTerms, caseSensitive) : 0 }))
+    .filter((x) => searchTerms.length === 0 || x.score >= 0)
+    .sort((a, b) => {
+      const newest = (x: typeof a) => new Date(x.idea.createdAt).getTime()
+      switch (sort) {
+        case 'relevance':
+          // Best match first; fall back to newest within equal scores / no query.
+          if (searchTerms.length && b.score !== a.score) return b.score - a.score
+          return newest(b) - newest(a)
+        case 'newest':
+          return newest(b) - newest(a)
+        case 'oldest':
+          return newest(a) - newest(b)
+        case 'alpha':
+          return a.idea.title.localeCompare(b.idea.title)
+      }
+    })
+    .map((x) => x.idea)
+
+  // Highlight matched terms in plain-text fields (title/tags/related names); the
+  // markdown description is left un-highlighted (same precedent as Meetings).
+  const hl = (text: string) =>
+    searchTerms.length
+      ? <HighlightedText text={text} terms={searchTerms} caseSensitive={caseSensitive} />
+      : text
 
   function openNew() {
     setEditId(null)
@@ -279,15 +369,61 @@ export function IdeaListPage() {
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative w-full sm:max-w-sm">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search ideas..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-8"
-        />
+      {/* Search + sort + match-case (Ideas only) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:flex-1 sm:max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search ideas..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <div className="flex items-center gap-2 sm:ml-auto">
+          <button
+            type="button"
+            onClick={() => setCaseSensitive((v) => !v)}
+            title={caseSensitive ? 'Match case: on' : 'Match case: off'}
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors',
+              caseSensitive
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-input bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            <CaseSensitive className="h-4 w-4" />
+          </button>
+          <Select value={sort} onValueChange={(v) => setSort(v as IdeaSort)}>
+            <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {IDEA_SORT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Archive lozenges — archived ideas only appear when opted into here */}
+      <div className="flex flex-wrap items-center gap-2">
+        {ARCHIVE_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => setArchiveFilter(f.value)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              archiveFilter === f.value
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-input bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {/* Ideas grid */}
@@ -309,17 +445,38 @@ export function IdeaListPage() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredIdeas.map((idea) => (
-            <Card key={idea.id} className="flex flex-col">
+          {filteredIdeas.map((idea) => {
+            const expanded = expandedId === idea.id
+            return (
+            <Card
+              key={idea.id}
+              className={cn(
+                'flex cursor-pointer flex-col transition-colors hover:border-primary/40',
+                idea.archived && 'opacity-70'
+              )}
+              onClick={() => setExpandedId(expanded ? null : idea.id)}
+            >
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-base leading-tight">{idea.title}</CardTitle>
+                  <CardTitle className="text-base leading-tight">{hl(idea.title)}</CardTitle>
                   <div className="flex shrink-0 gap-1">
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 sm:h-7 sm:w-7"
-                      onClick={() => openEdit(idea)}
+                      title={idea.archived ? 'Unarchive' : 'Archive'}
+                      onClick={(e) => { e.stopPropagation(); toggleArchive(idea) }}
+                    >
+                      {idea.archived
+                        ? <ArchiveRestore className="h-4 w-4 sm:h-3 sm:w-3" />
+                        : <Archive className="h-4 w-4 sm:h-3 sm:w-3" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 sm:h-7 sm:w-7"
+                      title="Edit"
+                      onClick={(e) => { e.stopPropagation(); openEdit(idea) }}
                     >
                       <Pencil className="h-4 w-4 sm:h-3 sm:w-3" />
                     </Button>
@@ -327,7 +484,8 @@ export function IdeaListPage() {
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 sm:h-7 sm:w-7"
-                      onClick={() => setDeleteId(idea.id)}
+                      title="Delete"
+                      onClick={(e) => { e.stopPropagation(); setDeleteId(idea.id) }}
                     >
                       <Trash2 className="h-4 w-4 sm:h-3 sm:w-3" />
                     </Button>
@@ -337,7 +495,7 @@ export function IdeaListPage() {
                   <CardDescription className="text-xs">
                     {idea.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag, i) => (
                       <span key={i} className="inline-block bg-muted rounded px-1.5 py-0.5 mr-1 mb-1">
-                        {tag}
+                        {hl(tag)}
                       </span>
                     ))}
                   </CardDescription>
@@ -345,7 +503,7 @@ export function IdeaListPage() {
               </CardHeader>
               <CardContent className="flex-1">
                 {idea.description ? (
-                  <div className="prep-note-markdown text-sm text-muted-foreground line-clamp-4">
+                  <div className={cn('prep-note-markdown text-sm text-muted-foreground', !expanded && 'line-clamp-4')}>
                     <ReactMarkdown>{idea.description}</ReactMarkdown>
                   </div>
                 ) : (
@@ -355,12 +513,12 @@ export function IdeaListPage() {
                   <div className="flex flex-wrap gap-1 mt-2">
                     {idea.contacts?.map((ic) => (
                       <span key={`c-${ic.contact.id}`} className="inline-block bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded px-1.5 py-0.5 text-xs">
-                        {ic.contact.name}
+                        {hl(ic.contact.name)}
                       </span>
                     ))}
                     {idea.companies?.map((ic) => (
                       <span key={`co-${ic.company.id}`} className="inline-block bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 rounded px-1.5 py-0.5 text-xs">
-                        {ic.company.name}
+                        {hl(ic.company.name)}
                       </span>
                     ))}
                   </div>
@@ -370,13 +528,18 @@ export function IdeaListPage() {
                 <p className="text-xs text-muted-foreground">{formatDate(idea.createdAt)}</p>
               </div>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 
       {/* Create/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+        {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
+        <DialogContent
+          className="sm:w-[28rem] sm:min-w-[22rem] sm:max-w-[92vw] sm:max-h-[85vh] sm:resize sm:overflow-auto"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle>{editId ? 'Edit Idea' : 'New Idea'}</DialogTitle>

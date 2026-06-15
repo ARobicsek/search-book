@@ -336,6 +336,7 @@ model Idea {
   title       String
   description String?
   tags        String?
+  archived    Boolean  @default(false) // Soft-archive: hidden from the default Ideas list/search; revealed via the lozenge filter
   createdAt   DateTime @default(now())
 
   contacts    IdeaContact[]

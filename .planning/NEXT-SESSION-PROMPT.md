@@ -3,85 +3,84 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (2026-06-14) — Task 5 shipped; Actions/Ideas Polish batch COMPLETE
+### What Was Just Completed (2026-06-14) — Minor UI Improvements batch (9 tasks)
 
-Plan `.planning/ACTIONS-IDEAS-POLISH-PLAN.md` is now **fully done (all 5 tasks)**. This session shipped the
-last one:
+Plan `.planning/UI-IMPROVEMENTS-PLAN.md` — **all 9 tasks built + verified** (desktop + true 390px mobile via
+device emulation). Four commits:
 
-- **Task 5 — Long-lived PrismaClient (commit `7551da2`, schema-free).** Retired the per-request
-  `resetPrisma()` middleware in [app.ts](../server/src/app.ts) (the 2026-03-24 stale-connection fix that
-  rebuilt the `PrismaClient` + libsql adapter on **every** `/api` request). [db.ts](../server/src/db.ts) now
-  keeps **one** long-lived `_client` and rebuilds it **only on an actual connection/transport error**,
-  retrying that one query **once** against the fresh client (`runWithRetry`). `isConnectionError` matches
-  Prisma `P1xxx` + transport signals (`ECONNRESET`/`fetch failed`/`stream closed`/`socket hang up`/`und_err`/…)
-  but **never** `P2xxx` known-request errors — so a write that already reached the DB is never double-applied.
-  Concurrent failures (a `Promise.all` hitting one stale connection) rebuild the client only once (guarded by
-  `_client === client`). The `Proxy` indirection is **kept and deepened** so route code is untouched: raw
-  queries + `$transaction` wrap the call itself; model delegates (`prisma.contact.findMany`, …) wrap each
-  method — safe because all 15 `$transaction` usages are the **callback form** (lazy `PrismaPromise`
-  semantics preserved; array form is unused anywhere). The CLAUDE.md "Per-request fresh PrismaClient" note
-  was updated to describe the new pattern.
-- **Verification:** local SQLite smoke (delegate / `$queryRaw` / `$queryRaw`-in-`Promise.all` /
-  `$transaction` create→delete — all 200) **and**, because the stale-connection bug only reproduces on
-  Turso-on-Vercel, a **live-deploy idle test**: `/api/health` (which runs `$queryRaw` through the Turso
-  adapter) probed across **two idle cycles (6 min + 9 min)** — **10/10 post-idle probes `200 db:ok`, zero
-  5xx**; the first probe after each idle ran ~0.4s (transparent reconnect) then settled to ~0.12s. The stale
-  connection is now handled invisibly instead of surfacing the old 500. `prepush` + `tsc -b` + vite build green.
+- **`2b88669` (Tasks 1, 3, 5) — Calendars, schema-free, PUSHED.** Actions page now has a **List/Calendar
+  view toggle** (`?view=calendar`), mirroring Meetings; the standalone **Calendar left-bar item + `/calendar`
+  route are gone** (`/calendar` redirects to `/actions?view=calendar`). `calendar.tsx`'s page became a reusable
+  `<ActionsCalendar>` embedded in the Actions page. Waiting-on-someone actions show a **⏳ title prefix + a
+  native "Waiting on: <names>" hover tooltip** (owerContactIds → `/contacts/names`). Both the Meetings **and**
+  Actions calendars now **blank FullCalendar's mobile "all-day" label** (`allDayText=""`).
+- **`18f7b69` (Tasks 2, 4) — Actions form, schema-free, PUSHED.** "Who owes it" → **"Who owns it"** (+ chip/
+  placeholder/helper + the dashboard waiting-card copy); internal `owedByMe`/`OWED_BY_ME`/`WAITING_ON_THEM`
+  unchanged. Added a **star-toggle next to each selected ower** to mark/unmark them a favorite in-context
+  (`PATCH /contacts/:id/favorite`), mirroring the company star-toggle in Ideas.
+- **`88ef0a6` (Task 9, Quick Log) — schema-free, PUSHED.** Quick Log dialog is **drag-resizable on desktop**.
+- **`cce0f78` (Tasks 6, 7, 8, 9-Idea) — Ideas, SCHEMA-TOUCHING, ⚠ COMMITTED LOCALLY BUT NOT PUSHED.**
+  Idea cards **click-to-expand** (full markdown + pasted screenshots, no editor); **Ideas-scoped search** gains
+  sort (Relevance/Newest/Oldest/A→Z) + match-case + multi-term AND + `HighlightedText`; **soft-archive**
+  (`Idea.archived`) with Active/Archived/All lozenges + per-card Archive/Unarchive (archived hidden by default,
+  searchable only when opted in); Idea dialog **drag-resizable** like Quick Log.
 
-### What's Next — a batch of minor UI improvements (owner-directed)
+**Verification:** local SQLite end-to-end for archive (PATCH preserves contact/company junctions; `?archived=
+only|all` filters correct) + full browser pass (expand, search+highlight, resize dialog → 760px reflow,
+calendar ⏳ tooltip "Waiting on: Sarah E. Saxton", mobile 390px on Ideas/Actions/Meetings calendars). `prepush`
++ `tsc -b` + full `vite build` green. Test action + test favorite created during verification were **deleted/
+reverted** (data restored).
 
-The Actions/Ideas Polish batch is finished. **Next session is a batch of minor UI improvements** — the
-owner will bring the specific list at session start (don't invent one). These are almost certainly
-**client-only / schema-free**, so: small **atomic commit per fix**, and **re-test desktop + mobile (390px)
-for every change** — 390px is where UI regressions hide. If the list is more than a couple of items, write
-a lightweight plan doc (mirror `.planning/ACTIONS-IDEAS-POLISH-PLAN.md`) and confirm scope before building.
-Useful reusable UI primitives already exist: `MarkdownTextarea`, `HighlightedText`, the Quick Log
-progressive-disclosure (chevron) pattern, favorite-chip quick-add — prefer reuse over new components.
+### ⚠ ACTION REQUIRED before the Ideas commit can ship (owner)
 
-**After the UI batch, the standing plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+),**
-gated on D5–D9 — don't push on those until the owner raises them.
+`cce0f78` is **committed locally but intentionally NOT pushed** — it adds `Idea.archived`, and pushing it
+auto-deploys a server that queries `WHERE archived = …`, which 500s until the Turso column exists. **Apply this
+in the Turso web console (Databases → searchbook-arobicsek → SQL/Console), then push:**
+
+```sql
+ALTER TABLE "Idea" ADD COLUMN "archived" BOOLEAN NOT NULL DEFAULT 0;
+```
+
+(Backfill not needed — DEFAULT 0 makes every existing idea "active." Migration script for audit/reproducibility:
+`server/scripts/migrate-ideas-archived.js`, run with a **fresh** rw token.) **After the ALTER succeeds:**
+`git push` (sends `cce0f78` + the docs commit). The local `server/prisma/dev.db` column was already applied.
+The agent was correctly **blocked from running the prod DDL itself** (reserved for the owner).
+
+### What's Next
+1. **[OWNER]** Apply the `ALTER TABLE` above in Turso, then `git push` to ship the Ideas/archive commit.
+2. Standing plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 —
+   don't push on those until the owner raises them.
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17) to activate error tracking.
-2. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6). Don't push on D5–D9 until raised.
+2. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6).
 3. #12 LinkedIn-on-mobile deferred (screenshot→gpt-4o-mini vision is the ready option if revisited).
-4. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete — see the `prisma db push` gotcha below.
+4. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
 
 ### Open Bugs / Known Caveats
-- **⚠ The committed Turso rw token in `server/.env` is STALE** — structurally a valid no-expiry rw JWT but
-  Turso rejects it with a hard **401** (rotated/revoked server-side; Vercel holds the live one). For any
-  future **schema** task, either mint a **fresh** rw token from the Turso dashboard (Databases →
-  searchbook-arobicsek → Create Token, no expiry) or apply DDL via the **Turso web dashboard SQL console**.
-  The Vercel CLI is installed but **not logged in**. *(Task 5 was schema-free, so this didn't bite this session.)*
-- **⚠ `prisma db push` local-path gotcha:** run from `server/`, `npx prisma db push` resolves `file:./dev.db`
-  to the **stray empty `server/dev.db`**, NOT the populated `server/prisma/dev.db` the server actually opens
-  (db.ts resolves relative to `__dirname` → `prisma/dev.db`). Net: db push reports "in sync" but the server
-  still 500s with `column ... does not exist`. Fix: apply DDL directly to `server/prisma/dev.db`, or
-  `db push --url file:./prisma/dev.db`.
-- The `tsc -b` build (`noUnusedLocals`) remains the gate that catches unused imports the `typecheck` script
-  misses — run it (not just `npm run prepush`) before every push.
-- Dev smoke-testing note: orphaned dev processes pile up (`concurrently`/`ts-node-dev`/`vite` on 3001 +
-  5173–5176, plus a locked chrome-devtools-mcp profile). Stop the stale project `node` processes
-  (CommandLine matches `searchbook` + `vite|ts-node-dev|concurrently`) and the stale `chrome.exe` whose
-  command line contains `chrome-devtools-mcp` before starting fresh. Local app has no `APP_PASSWORD`, so the
-  login gate accepts any password (pre-seed `localStorage.searchbook_password`). **Note:** `ts-node-dev
-  --respawn` *does* reload on save — this session it respawned with the edited `db.ts` automatically.
+- **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** For the archive DDL, use the **Turso
+  web dashboard SQL console** (or mint a fresh no-expiry rw token). Vercel CLI installed but not logged in.
+- **⚠ `prisma db push` local-path gotcha:** from `server/`, `db push` resolves `file:./dev.db` to the **stray
+  empty `server/dev.db`**, not the populated `server/prisma/dev.db` the server opens. This session the archive
+  column was applied directly to `server/prisma/dev.db` via better-sqlite3 (correct path).
+- Run `tsc -b` (not just `npm run prepush`) before every push — it catches unused imports `typecheck` misses.
+- Dev smoke-testing: a stale dev server + a locked `chrome-devtools-mcp` chrome profile were both cleared this
+  session (stop the project `node` processes matching `searchbook` + `vite|ts-node-dev|concurrently`, and the
+  `chrome.exe` whose command line contains `chrome-devtools-mcp`, before starting fresh). Local app has no
+  `APP_PASSWORD` — pre-seed `localStorage.searchbook_password`. The device-emulation trick (`emulate
+  390x844x3,mobile`) gives a true 390px viewport (the OS floors `resize_page` at ~500px).
 
 ### Working branch
-`main`. This session: Task 5 code commit `7551da2` (live on Vercel) + a docs commit for these planning updates.
+`main`. Pushed this session: `2b88669`, `18f7b69`, `88ef0a6` (schema-free, live on Vercel). **Held local:**
+`cce0f78` (Ideas/archive — push after the Turso DDL) + the pending docs commit.
 
 ---
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Actions/Ideas Polish batch is **complete** (all 5
-> tasks shipped; Task 5 long-lived PrismaClient verified live). This session is a batch of **minor UI
-> improvements** — I'll give you the list; don't start coding until I do. They're almost certainly
-> client-only/schema-free: do a small **atomic commit per fix**, prefer reusing existing primitives
-> (`MarkdownTextarea`, `HighlightedText`, the Quick Log chevron disclosure, favorite-chip quick-add) over
-> new components, run `npm run prepush` **and** `tsc -b`, and **re-test desktop + mobile 390px for each
-> change** (regressions hide at 390px). If it's more than a couple of items, write a lightweight plan doc
-> first and confirm scope with me. Push to `main` is authorized (auto-deploys to Vercel). The NCQA
-> adaptation plan (`.planning/NCQA-ADAPTATION-PLAN.md`, Phase 3+, gated D5–D9 — don't push on those until I
-> raise them) remains the standing plan of record after this UI batch. Standing owner action still open:
-> set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. The Minor UI Improvements batch is built (9 tasks); the 3
+> schema-free commits are live, and the Ideas/archive commit `cce0f78` is committed locally but **unpushed,
+> gated on a one-line Turso `ALTER TABLE "Idea" ADD COLUMN "archived"`**. If I've applied that DDL, push
+> `cce0f78` + the docs commit and confirm the archive feature works on prod. Otherwise the standing plan of
+> record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't push on those until I raise
+> them). Standing owner action still open: set `SENTRY_DSN`/`VITE_SENTRY_DSN` in Vercel.

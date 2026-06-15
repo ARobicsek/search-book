@@ -7,7 +7,17 @@ const router = Router();
 const actionIncludes = {
   contact: { select: { id: true, name: true, company: { select: { name: true } }, companyName: true } },
   company: { select: { id: true, name: true } },
-  conversation: { select: { id: true, summary: true } },
+  conversation: { 
+    select: { 
+      id: true, 
+      title: true,
+      summary: true, 
+      attendeesDescription: true,
+      contact: { select: { name: true } },
+      company: { select: { name: true } },
+      participants: { select: { contact: { select: { name: true } } } }
+    } 
+  },
   actionContacts: {
     include: { contact: { select: { id: true, name: true, company: { select: { name: true } }, companyName: true } } },
   },

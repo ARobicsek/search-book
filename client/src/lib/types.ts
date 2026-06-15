@@ -114,7 +114,15 @@ export interface Action {
   companyId: number | null;
   company: { id: number; name: string } | null;
   conversationId: number | null;
-  conversation: { id: number; summary: string | null } | null;
+  conversation: { 
+    id: number; 
+    summary: string | null;
+    title?: string | null;
+    attendeesDescription?: string | null;
+    contact?: { name: string } | null;
+    company?: { name: string } | null;
+    participants?: { contact: { name: string } }[];
+  } | null;
   priority: ActionPriority;
   direction: ActionDirection; // derived mirror of owedByMe/owerContactIds — still read by dashboard/list/detail
   owedByMe: boolean; // Task 3: the removable "me" chip

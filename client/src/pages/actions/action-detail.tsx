@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Action, LinkRecord } from '@/lib/types'
-import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
+import type { Action, LinkRecord, Conversation } from '@/lib/types'
+import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, conversationDisplayName } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -334,7 +334,7 @@ export function ActionDetailPage() {
             <Field label="Meeting">
               {action.conversation && (
                 <Link to={`/meetings?id=${action.conversationId}`} className="text-primary hover:underline">
-                  {action.conversation.summary ?? `Meeting #${action.conversationId}`}
+                  {conversationDisplayName(action.conversation as Conversation)}
                 </Link>
               )}
             </Field>

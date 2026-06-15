@@ -1176,7 +1176,8 @@ function QuickLogDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className={cn('max-h-[90vh] w-[95vw] overflow-y-auto', showPanel ? 'sm:max-w-5xl' : 'sm:max-w-xl')}>
+      {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
+      <DialogContent className={cn('max-h-[90vh] w-[95vw] overflow-y-auto sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', showPanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}>
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-6">
             <DialogTitle>{isEdit ? 'Edit Meeting' : 'Quick Log Meeting'}</DialogTitle>

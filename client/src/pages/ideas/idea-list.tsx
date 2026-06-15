@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/select'
 import { HighlightedText } from '@/components/highlighted-text'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon } from 'lucide-react'
+import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon, List as ListIcon, LayoutGrid } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { cn } from '@/lib/utils'
@@ -110,7 +110,12 @@ export function IdeaListPage() {
   const [sort, setSort] = useState<IdeaSort>('relevance')
   const [caseSensitive, setCaseSensitive] = useState(false)
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('active')
-  // Click-to-expand: collapsed cards clamp the description to 4 lines; expanded
+  // Card (default) vs. compact List view; persisted so the choice sticks.
+  const [view, setView] = useState<'card' | 'list'>(
+    () => (localStorage.getItem('ideas_view') === 'list' ? 'list' : 'card')
+  )
+  useEffect(() => { localStorage.setItem('ideas_view', view) }, [view])
+  // Click-to-expand: collapsed cards/rows clamp the description to 4 lines; expanded
   // shows the full markdown (incl. pasted screenshots) without opening the editor.
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -354,6 +359,53 @@ export function IdeaListPage() {
     }
   }
 
+  // Shared bits between the card and list views ─────────────────
+  const renderIdeaActions = (idea: Idea) => (
+    <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9 sm:h-7 sm:w-7"
+        title={idea.archived ? 'Unarchive' : 'Archive'}
+        onClick={() => toggleArchive(idea)}
+      >
+        {idea.archived
+          ? <ArchiveRestore className="h-4 w-4 sm:h-3 sm:w-3" />
+          : <Archive className="h-4 w-4 sm:h-3 sm:w-3" />}
+      </Button>
+      <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-7 sm:w-7" title="Edit" onClick={() => openEdit(idea)}>
+        <Pencil className="h-4 w-4 sm:h-3 sm:w-3" />
+      </Button>
+      <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-7 sm:w-7" title="Delete" onClick={() => setDeleteId(idea.id)}>
+        <Trash2 className="h-4 w-4 sm:h-3 sm:w-3" />
+      </Button>
+    </div>
+  )
+
+  const renderTagChips = (idea: Idea) =>
+    idea.tags
+      ? idea.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag, i) => (
+          <span key={i} className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs">
+            {hl(tag)}
+          </span>
+        ))
+      : null
+
+  const renderRelatedChips = (idea: Idea) => (
+    <>
+      {idea.contacts?.map((ic) => (
+        <span key={`c-${ic.contact.id}`} className="inline-block rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+          {hl(ic.contact.name)}
+        </span>
+      ))}
+      {idea.companies?.map((ic) => (
+        <span key={`co-${ic.company.id}`} className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+          {hl(ic.company.name)}
+        </span>
+      ))}
+    </>
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -363,10 +415,34 @@ export function IdeaListPage() {
             {loading ? '' : `${filteredIdeas.length} of ${ideas.length} idea${ideas.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button onClick={openNew} className="w-full sm:w-auto">
-          <Plus className="mr-2 h-4 w-4" />
-          New Idea
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-md border p-0.5">
+            <Button
+              variant={view === 'card' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 gap-1 px-2"
+              onClick={() => setView('card')}
+              title="Card view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span className="hidden sm:inline">Cards</span>
+            </Button>
+            <Button
+              variant={view === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 gap-1 px-2"
+              onClick={() => setView('list')}
+              title="List view"
+            >
+              <ListIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">List</span>
+            </Button>
+          </div>
+          <Button onClick={openNew} className="w-full sm:w-auto">
+            <Plus className="mr-2 h-4 w-4" />
+            New Idea
+          </Button>
+        </div>
       </div>
 
       {/* Search + sort + match-case (Ideas only) */}
@@ -443,6 +519,59 @@ export function IdeaListPage() {
             )}
           </CardContent>
         </Card>
+      ) : view === 'list' ? (
+        /* Compact list view — dense rows; click a row to expand its description */
+        <div className="overflow-hidden rounded-md border">
+          {filteredIdeas.map((idea, idx) => {
+            const expanded = expandedId === idea.id
+            const imageCount = (idea.description?.match(/!\[[^\]]*\]\(/g) || []).length
+            return (
+              <div
+                key={idea.id}
+                className={cn(
+                  'cursor-pointer px-3 py-2 transition-colors hover:bg-muted/40',
+                  idx > 0 && 'border-t',
+                  idea.archived && 'opacity-70'
+                )}
+                onClick={() => setExpandedId(expanded ? null : idea.id)}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-sm font-medium leading-tight">{hl(idea.title)}</span>
+                      {renderTagChips(idea)}
+                    </div>
+                    {(idea.contacts?.length || idea.companies?.length) ? (
+                      <div className="mt-1 flex flex-wrap gap-1">{renderRelatedChips(idea)}</div>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="hidden whitespace-nowrap text-xs text-muted-foreground sm:inline">
+                      {formatDate(idea.createdAt)}
+                    </span>
+                    {renderIdeaActions(idea)}
+                  </div>
+                </div>
+                {expanded ? (
+                  <div className="mt-2 border-t pt-2" onClick={(e) => e.stopPropagation()}>
+                    {idea.description ? (
+                      <div className="prep-note-markdown text-sm text-muted-foreground">
+                        <ReactMarkdown>{idea.description}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm italic text-muted-foreground/50">No description</p>
+                    )}
+                  </div>
+                ) : imageCount > 0 ? (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground/70">
+                    <ImageIcon className="h-3 w-3 shrink-0" />
+                    {imageCount} screenshot{imageCount !== 1 ? 's' : ''} — click to view
+                  </p>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredIdeas.map((idea) => {
@@ -462,45 +591,11 @@ export function IdeaListPage() {
               <CardHeader className="gap-1 pb-0">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base leading-tight">{hl(idea.title)}</CardTitle>
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 sm:h-7 sm:w-7"
-                      title={idea.archived ? 'Unarchive' : 'Archive'}
-                      onClick={(e) => { e.stopPropagation(); toggleArchive(idea) }}
-                    >
-                      {idea.archived
-                        ? <ArchiveRestore className="h-4 w-4 sm:h-3 sm:w-3" />
-                        : <Archive className="h-4 w-4 sm:h-3 sm:w-3" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 sm:h-7 sm:w-7"
-                      title="Edit"
-                      onClick={(e) => { e.stopPropagation(); openEdit(idea) }}
-                    >
-                      <Pencil className="h-4 w-4 sm:h-3 sm:w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 sm:h-7 sm:w-7"
-                      title="Delete"
-                      onClick={(e) => { e.stopPropagation(); setDeleteId(idea.id) }}
-                    >
-                      <Trash2 className="h-4 w-4 sm:h-3 sm:w-3" />
-                    </Button>
-                  </div>
+                  {renderIdeaActions(idea)}
                 </div>
                 {idea.tags && (
-                  <CardDescription className="text-xs">
-                    {idea.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag, i) => (
-                      <span key={i} className="inline-block bg-muted rounded px-1.5 py-0.5 mr-1 mb-1">
-                        {hl(tag)}
-                      </span>
-                    ))}
+                  <CardDescription className="flex flex-wrap gap-1 text-xs">
+                    {renderTagChips(idea)}
                   </CardDescription>
                 )}
               </CardHeader>
@@ -521,17 +616,8 @@ export function IdeaListPage() {
                   </p>
                 )}
                 {((idea.contacts && idea.contacts.length > 0) || (idea.companies && idea.companies.length > 0)) && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {idea.contacts?.map((ic) => (
-                      <span key={`c-${ic.contact.id}`} className="inline-block bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded px-1.5 py-0.5 text-xs">
-                        {hl(ic.contact.name)}
-                      </span>
-                    ))}
-                    {idea.companies?.map((ic) => (
-                      <span key={`co-${ic.company.id}`} className="inline-block bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 rounded px-1.5 py-0.5 text-xs">
-                        {hl(ic.company.name)}
-                      </span>
-                    ))}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {renderRelatedChips(idea)}
                   </div>
                 )}
               </CardContent>

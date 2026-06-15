@@ -3,17 +3,12 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### ⚠️ FIRST THING NEXT SESSION — one local commit is waiting on a Turso DDL
+### ✅ Idea-tags schema is LIVE (owner applied the Turso DDL + pushed, 2026-06-15)
 
-`c3f18dd feat(ideas): move Idea tags to the app-wide Tag table (SCHEMA)` is **committed locally but NOT
-pushed.** It adds a new `IdeaTag` junction table. **Pushing it before the Turso DDL is applied will 500 the
-prod Ideas list** (the `tagLinks` include hits a missing table). To ship it:
-1. Apply the schema to Turso — run the migration (creates `IdeaTag` + backfills the legacy comma-tags):
-   `cd server && TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… node scripts/migrate-ideas-tags-to-junction.js`
-   (needs a **fresh** rw token — the one in `server/.env` is stale/401), **or** paste the `CREATE TABLE
-   "IdeaTag"` DDL (in `.planning/IDEAS-MEETINGS-POLISH-PLAN.md` → "Final status") into the Turso web SQL
-   console, then run the script anyway for the backfill (idempotent).
-2. `git push` (sends `c3f18dd` + the doc commit). Confirm `/api/health` = `200 db:ok` and the Ideas page loads.
+The `CREATE TABLE "IdeaTag"` + comma-tag backfill were applied to Turso via the web SQL console, and
+`c3f18dd` (Idea tags → app-wide Tag) was pushed. **All 9 asks are now live on Vercel.** Follow-up fix
+`bd1fbb7` hides the reserved `Favorite` tag (the internal favorites mechanism) from `GET /tags` so it no
+longer leaks into the tag pickers (Ideas/Meetings/Quick Log/contact-detail). Remote `main` = `bd1fbb7`.
 
 ### What Was Just Completed (2026-06-15 session 2) — 9 owner asks across Ideas + Meetings
 
@@ -54,9 +49,8 @@ Next-steps markdown block, Quick Log add-action → owner picker → **autosave 
 the shared `/tags` vocab. All test data removed.
 
 ### What's Next
-1. **[OWNER]** Apply the Turso `IdeaTag` DDL + backfill, then `git push` (see top of this file).
-2. **[OWNER, light]** Confirm on prod that the Ideas archive lozenges work (carried from last session).
-3. Standing plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 —
+1. **[OWNER, light]** Confirm on prod that the Ideas archive lozenges work (carried from last session).
+2. Standing plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 —
    don't push on those until the owner raises them.
 
 ### Carry-over items (pre-dating, lower priority)
@@ -77,8 +71,9 @@ the shared `/tags` vocab. All test data removed.
   true 390px viewport.
 
 ### Working branch
-`main` — **Tasks 1–7 pushed (remote `main` = `f0c5f37`, live).** **One unpushed local commit `c3f18dd`**
-(Idea-tags schema) + this doc commit, both awaiting the Turso `IdeaTag` DDL before `git push`.
+`main` — **everything pushed and live (remote `main` = `bd1fbb7`).** All 9 asks shipped; the Idea-tags
+schema (`c3f18dd`) went out after the owner applied the Turso `IdeaTag` DDL; `bd1fbb7` hid the reserved
+`Favorite` tag from the pickers. Working tree clean.
 
 ---
 

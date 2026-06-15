@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { HighlightedText } from '@/components/highlighted-text'
+import { highlightRehype } from '@/lib/highlight-markdown'
 import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon, List as ListIcon, LayoutGrid } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
@@ -189,12 +190,15 @@ export function IdeaListPage() {
     })
     .map((x) => x.idea)
 
-  // Highlight matched terms in plain-text fields (title/tags/related names); the
-  // markdown description is left un-highlighted (same precedent as Meetings).
+  // Highlight matched terms in plain-text fields (title/tags/related names)…
   const hl = (text: string) =>
     searchTerms.length
       ? <HighlightedText text={text} terms={searchTerms} caseSensitive={caseSensitive} />
       : text
+
+  // …and inside the rendered markdown description (rehype plugin wraps matches in
+  // <mark>), so search terms are highlighted anywhere in the card.
+  const descRehype = searchTerms.length ? [highlightRehype(searchTerms, caseSensitive)] : undefined
 
   function openNew() {
     setEditId(null)
@@ -556,7 +560,7 @@ export function IdeaListPage() {
                   <div className="mt-2 border-t pt-2" onClick={(e) => e.stopPropagation()}>
                     {idea.description ? (
                       <div className="prep-note-markdown text-sm text-muted-foreground">
-                        <ReactMarkdown>{idea.description}</ReactMarkdown>
+                        <ReactMarkdown rehypePlugins={descRehype}>{idea.description}</ReactMarkdown>
                       </div>
                     ) : (
                       <p className="text-sm italic text-muted-foreground/50">No description</p>
@@ -604,7 +608,7 @@ export function IdeaListPage() {
                   // Collapsed: clamp text to 4 lines AND hide images so screenshots
                   // never stretch the card. Expanded shows the full markdown + images.
                   <div className={cn('prep-note-markdown text-sm text-muted-foreground', !expanded && 'line-clamp-4 [&_img]:hidden')}>
-                    <ReactMarkdown>{idea.description}</ReactMarkdown>
+                    <ReactMarkdown rehypePlugins={descRehype}>{idea.description}</ReactMarkdown>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">No description</p>

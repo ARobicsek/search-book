@@ -48,7 +48,7 @@ import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import {
   Check, ChevronDown, ChevronRight, FileText, ListTodo, Loader2, Paperclip,
-  Plus, Star, Trash2, X,
+  Pencil, Plus, Star, Trash2, X,
 } from 'lucide-react'
 
 // Optional prefill when opening a new meeting from a contact/company context —
@@ -143,9 +143,10 @@ function useIsDesktop() {
   return isDesktop
 }
 
-// A saved prep note rendered as an inline-editable markdown textarea that
-// autosaves (debounced PUT) as you type, and flushes on blur (e.g. when you
-// click "Done"). Saves are serialized so a debounce + blur can't race.
+// A saved prep note. Shows rendered markdown by default (so formatting is
+// visible); click the body or the pencil to edit it in place. Edits autosave
+// (debounced PUT) and flush on blur / when you click Done. Saves are serialized
+// so a debounce + blur can't race.
 function EditablePrepNote({
   note,
   onDelete,
@@ -154,6 +155,7 @@ function EditablePrepNote({
   onDelete: () => void
 }) {
   const [content, setContent] = useState(note.content)
+  const [editing, setEditing] = useState(false)
   const [status, setStatus] = useState<SaveStatus>('idle')
   const savedRef = useRef(note.content)
   const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -183,12 +185,12 @@ function EditablePrepNote({
     })
   }, [content, note.id])
 
-  // Debounced autosave ~1.2s after the last edit.
+  // Debounced autosave ~1.2s after the last edit (only while editing).
   useEffect(() => {
-    if (content === savedRef.current || !content.trim()) return
+    if (!editing || content === savedRef.current || !content.trim()) return
     const t = setTimeout(flush, 1200)
     return () => clearTimeout(t)
-  }, [content, flush])
+  }, [content, editing, flush])
 
   useEffect(() => () => { if (flashRef.current) clearTimeout(flashRef.current) }, [])
 
@@ -200,6 +202,16 @@ function EditablePrepNote({
           <SaveStatusIndicator status={status} className="text-xs" />
           <button
             type="button"
+            // Keep textarea focus on mousedown so the click toggles cleanly (no blur race).
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { if (editing) { flush(); setEditing(false) } else { setEditing(true) } }}
+            className="text-muted-foreground hover:text-foreground"
+            title={editing ? 'Done editing' : 'Edit prep note'}
+          >
+            {editing ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
             onClick={onDelete}
             className="text-muted-foreground hover:text-destructive"
             title="Delete prep note"
@@ -208,13 +220,26 @@ function EditablePrepNote({
           </button>
         </div>
       </div>
-      <MarkdownTextarea
-        value={content}
-        onChange={setContent}
-        onBlur={flush}
-        placeholder="Things to raise, questions to ask..."
-        rows={2}
-      />
+      {editing ? (
+        <MarkdownTextarea
+          value={content}
+          onChange={setContent}
+          onBlur={() => { flush(); setEditing(false) }}
+          placeholder="Things to raise, questions to ask..."
+          rows={3}
+          autoFocus
+        />
+      ) : (
+        <div
+          className="prep-note-markdown cursor-text text-sm"
+          onClick={(e) => { if (!(e.target as HTMLElement).closest('a')) setEditing(true) }}
+          title="Click to edit"
+        >
+          {content.trim()
+            ? <ReactMarkdown>{content}</ReactMarkdown>
+            : <span className="italic text-muted-foreground/60">Empty note — click to edit</span>}
+        </div>
+      )}
     </div>
   )
 }
@@ -1366,7 +1391,18 @@ function QuickLogDialog({
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
-      <DialogContent className={cn('max-h-[90vh] w-[95vw] overflow-y-auto sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', usePanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}>
+      <DialogContent
+        className={cn('max-h-[90vh] w-[95vw] overflow-y-auto sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', usePanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}
+        // Dragging the prep/form resize handle fires a pointer-down that Radix
+        // mis-reads as an outside interaction (react-resizable-panels' native
+        // handler pre-empts Radix's "inside" marker) — keep the dialog open for it.
+        onInteractOutside={(e) => {
+          const t = e.detail.originalEvent.target as HTMLElement | null
+          if (t?.closest?.('[data-slot="resizable-handle"],[data-slot="resizable-panel-group"]')) {
+            e.preventDefault()
+          }
+        }}
+      >
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-6">
             <DialogTitle>{isEdit ? 'Edit Meeting' : 'Quick Log Meeting'}</DialogTitle>

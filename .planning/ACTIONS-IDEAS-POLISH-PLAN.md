@@ -1,9 +1,9 @@
 # SearchBook — Actions/Ideas Polish + Engineering Cleanup
 
 **Created:** 2026-06-14 (for the **next** session)
-**Status:** IN PROGRESS — **Tasks 1, 2, 3, 4 SHIPPED** (commits `6588def`, `7723ffb`, + Task 3 2026-06-14).
-**Only Task 5 remains** (long-lived PrismaClient — its own focused session). After it ships, the standing
-plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on D5–D9).
+**Status:** ✅ COMPLETE — **all 5 tasks shipped** (commits `6588def`, `7723ffb`, Task 3, + Task 5 `7551da2`,
+all 2026-06-14). The standing plan of record now returns to `.planning/NCQA-ADAPTATION-PLAN.md`
+(Phase 3+, gated on D5–D9 — don't push on those until the owner raises them).
 
 > **Deferral note (2026-06-14):** the build session had ~half a token budget. Tasks 1/2/4 (schema-free,
 > self-contained) were completed and pushed. **Task 3 was NOT started on purpose** — it is the only
@@ -170,7 +170,21 @@ client), or rely on adapter pooling. Keep the `Proxy` indirection so route code 
 Naive reuse can reintroduce stale-connection 500s that surface only on Turso-on-Vercel, **not** local SQLite.
 Must verify against the live deploy (hit endpoints after an idle period) before calling it done.
 **Files:** [server/src/db.ts](../server/src/db.ts), middleware in [server/src/app.ts](../server/src/app.ts).
-**STATUS:** Not started.
+**STATUS:** ✅ DONE 2026-06-14 (commit `7551da2`). One long-lived `_client` reused across requests;
+the per-request `resetPrisma()` middleware in `app.ts` is removed (and the export deleted). A deepened
+`Proxy` keeps route code untouched while routing every query through `runWithRetry`, which rebuilds the
+client and retries **once** only on a connection/transport error — `isConnectionError` matches Prisma
+`P1xxx` + transport signals (`ECONNRESET`/`fetch failed`/`stream closed`/`socket hang up`/`und_err`/…)
+but **never** `P2xxx` known-request errors, so a write that reached the DB is never double-applied.
+Concurrent failures (a `Promise.all` on one stale connection) rebuild the client only once (guarded by
+`_client === client`). Raw queries + `$transaction` wrap the call itself; model delegates
+(`prisma.contact.findMany`, …) wrap each method — safe because all 15 `$transaction` usages are the
+**callback form** (lazy `PrismaPromise` semantics preserved; the array form is unused). Schema-free.
+**Verified locally** (delegate / `$queryRaw` / `$queryRaw`-in-`Promise.all` / `$transaction` create→delete
+all 200) and **on the live deploy after idle** — `/api/health` (runs `$queryRaw` through the Turso adapter)
+probed across two idle cycles (6 min, then 9 min): all probes `200 db:ok`, **zero 5xx**; the first probe
+after each idle ran slower (~0.4s reconnect) then settled to ~0.12s, i.e. the stale connection was handled
+invisibly instead of surfacing the old 500. `prepush` + `tsc -b` + vite build green.
 
 ---
 

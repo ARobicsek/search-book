@@ -44,7 +44,7 @@ const emptyForm: FormData = {
   size: '',
   website: '',
   hqLocation: '',
-  status: 'RESEARCHING',
+  status: 'NONE',
   notes: '',
 }
 

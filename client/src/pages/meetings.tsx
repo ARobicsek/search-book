@@ -226,7 +226,8 @@ export function MeetingsPage() {
   const toFilter = searchParams.get('to') || ''
   const qFilter = searchParams.get('q') || ''
   const idFilter = searchParams.get('id') || ''
-  const sortBy = searchParams.get('sortBy') || 'date'
+  // Default sort: most-recently-updated first (owner preference).
+  const sortBy = searchParams.get('sortBy') || 'updatedAt'
   const sortDir = searchParams.get('sortDir') || 'desc'
   // Series view (seriesFilter) is inherently a chronological list, so the
   // calendar toggle is hidden there and the view is forced back to list.
@@ -239,6 +240,12 @@ export function MeetingsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // Series rename / delete (only reachable from the series view header)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [deleteSeriesOpen, setDeleteSeriesOpen] = useState(false)
+  const [deletingSeries, setDeletingSeries] = useState(false)
 
   // Free-text input is debounced before it hits the URL/server
   const [qInput, setQInput] = useState(qFilter)
@@ -357,6 +364,39 @@ export function MeetingsPage() {
     }
   }
 
+  async function handleRenameSeries() {
+    const name = renameValue.trim()
+    if (!name || !seriesFilter) return
+    setRenaming(true)
+    try {
+      await api.put(`/series/${seriesFilter}`, { name })
+      toast.success('Series renamed')
+      setRenameOpen(false)
+      loadSeries()
+      loadMeetings()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to rename series')
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  async function handleDeleteSeries() {
+    if (!seriesFilter) return
+    setDeletingSeries(true)
+    try {
+      await api.delete(`/series/${seriesFilter}`)
+      toast.success('Series deleted — its meetings were kept')
+      setDeleteSeriesOpen(false)
+      loadSeries()
+      setParam('seriesId', '') // back to all meetings
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete series')
+    } finally {
+      setDeletingSeries(false)
+    }
+  }
+
   const hasFilters = !!(seriesFilter || companyFilter || tagFilter || (typeFilter && typeFilter !== 'all') || fromFilter || toFilter || qFilter || idFilter)
 
   const seriesName = seriesOptions.find((o) => o.value === seriesFilter)?.label || 'Series'
@@ -389,9 +429,33 @@ export function MeetingsPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {seriesFilter ? seriesName : 'Meetings'}
-          </h1>
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold tracking-tight">
+              {seriesFilter ? seriesName : 'Meetings'}
+            </h1>
+            {seriesFilter && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title="Rename series"
+                  onClick={() => { setRenameValue(seriesName); setRenameOpen(true) }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  title="Delete series"
+                  onClick={() => setDeleteSeriesOpen(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+          </div>
           {seriesFilter && (
             <p className="text-sm text-muted-foreground">
               All meetings in this series, newest first
@@ -728,6 +792,53 @@ export function MeetingsPage() {
             <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename series */}
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename series</DialogTitle>
+            <DialogDescription>
+              The new name applies to every meeting in this series.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="rename-series" className="text-xs">Series name</Label>
+            <Input
+              id="rename-series"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSeries() }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
+            <Button onClick={handleRenameSeries} disabled={renaming || !renameValue.trim()}>
+              {renaming ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete series */}
+      <Dialog open={deleteSeriesOpen} onOpenChange={setDeleteSeriesOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this series?</DialogTitle>
+            <DialogDescription>
+              The {total} meeting{total === 1 ? '' : 's'} in this series {total === 1 ? 'is' : 'are'} kept —
+              they just leave the series. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteSeriesOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteSeries} disabled={deletingSeries}>
+              {deletingSeries ? 'Deleting...' : 'Delete series'}
             </Button>
           </DialogFooter>
         </DialogContent>

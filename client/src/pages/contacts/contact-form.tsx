@@ -916,7 +916,6 @@ export function ContactFormPage() {
         <Card>
           <CardHeader>
             <CardTitle>Classification</CardTitle>
-            <CardDescription>Ecosystem and Status</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

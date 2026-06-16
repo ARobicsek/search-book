@@ -100,7 +100,6 @@ const SORT_OPTIONS: { value: SearchSort; label: string }[] = [
 const PREFS_KEY = 'searchbook_search_prefs'
 
 interface SearchPrefs {
-  scopes?: SearchScope[]
   sort?: SearchSort
   caseSensitive?: boolean
 }
@@ -591,8 +590,11 @@ export function SearchPage() {
   const urlSort = searchParams.get('sort') || ''
 
   const [query, setQuery] = useState(queryParam)
+  // Always default to every scope on (incl. "Useful for"); a narrowed selection is
+  // deliberately NOT remembered across visits, so search always starts broad. URL
+  // scopes still win so shared/deep links keep their narrower selection.
   const [scopes, setScopes] = useState<SearchScope[]>(
-    urlScopes.length > 0 ? urlScopes : (prefs.scopes?.filter(isScope).length ? prefs.scopes.filter(isScope) : ALL_SCOPES)
+    urlScopes.length > 0 ? urlScopes : ALL_SCOPES
   )
   const [sort, setSort] = useState<SearchSort>(
     isSort(urlSort) ? urlSort : (prefs.sort && isSort(prefs.sort) ? prefs.sort : 'relevance')
@@ -687,7 +689,7 @@ export function SearchPage() {
     if (sort !== 'relevance') next.set('sort', sort)
     if (caseSensitive) next.set('cs', '1')
     setSearchParams(next, { replace: true })
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ scopes, sort, caseSensitive }))
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ sort, caseSensitive }))
     doSearch(debouncedQuery, scopes, sort, caseSensitive)
   }, [debouncedQuery, scopes, sort, caseSensitive, allScopesOn, setSearchParams, doSearch])
 
@@ -698,10 +700,18 @@ export function SearchPage() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // One badge cycles: all → just-this → all-except-this → all → …
+  //  • From the all-on default, a click ISOLATES to just that scope (search only it).
+  //  • Clicking that same lone scope again INVERTS to everything except it.
+  //  • Otherwise it's a plain add/remove on the current subset (keeping ≥1).
+  // The "All" chip jumps straight back to everything.
   function toggleScope(scope: SearchScope) {
     setScopes((prev) => {
+      if (prev.length === ALL_SCOPES.length) return [scope]
+      if (prev.length === 1 && prev[0] === scope) {
+        return ALL_SCOPES.filter((s) => s !== scope)
+      }
       if (prev.includes(scope)) {
-        // Keep at least one scope active
         return prev.length > 1 ? prev.filter((s) => s !== scope) : prev
       }
       return [...prev, scope]
@@ -753,6 +763,19 @@ export function SearchPage() {
 
       {/* Scope chips + sort + case sensitivity */}
       <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setScopes([...ALL_SCOPES])}
+          title="Search everything"
+          className={cn(
+            'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+            allScopesOn
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-input bg-background text-muted-foreground hover:bg-muted'
+          )}
+        >
+          All
+        </button>
         {SCOPE_OPTIONS.map((s) => {
           const active = scopes.includes(s.value)
           return (

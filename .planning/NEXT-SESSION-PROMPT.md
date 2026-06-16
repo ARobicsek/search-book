@@ -31,6 +31,11 @@ passes; verified end-to-end in the running app via chrome-devtools. Committed at
    Series filter** opening `ManageSeriesDialog` (every series w/ meeting count + last date, inline rename,
    delete-with-confirm). Deleting the currently-viewed series clears the filter. The header icons stay.
 6. **New Organization status defaults to blank** (`company-form.tsx`) — `emptyForm.status` `RESEARCHING` → `NONE` ("—").
+7. **Meetings search now also matches participant + series name** (`meetings.ts`, follow-up ask). The `?q=`
+   filter matches TITLE + any named PARTICIPANT + SERIES name for all meetings (the participant/series
+   clauses were lifted out of the untitled-only gate); untitled meetings still also match anchor
+   contact/org/attendees. Verified via API (a meeting surfaced by its series name when its title didn't
+   contain the query). Highlight stays heading-only.
 
 ### What's Next
 1. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on decisions D5–D9 —

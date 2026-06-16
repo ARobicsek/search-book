@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { fetchUndoState, performUndo, type UndoState } from '@/lib/undo'
 
 // Where to send the user after restoring a top-level entity (so they can confirm it's
@@ -99,19 +100,26 @@ export function UndoProvider({ children }: { children: ReactNode }) {
 }
 
 // Persistent header affordance — only rendered when there's a delete to undo.
+// Uses the Radix Tooltip (not a native `title`) so the label re-reads on every open;
+// the button element never remounts, and browsers cache the native tooltip text per
+// element, which would otherwise freeze it at an earlier delete's label.
 export function UndoButton() {
   const { state, undo } = useUndo()
   if (!state.canUndo) return null
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => void undo()}
-      title={`Undo delete${state.label ? ` — ${state.label}` : ''}`}
-      aria-label={`Undo last delete${state.label ? `: ${state.label}` : ''}`}
-    >
-      <Undo2 className="h-4 w-4 sm:mr-1" />
-      <span className="hidden sm:inline">Undo</span>
-    </Button>
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void undo()}
+          aria-label={`Undo last delete${state.label ? `: ${state.label}` : ''}`}
+        >
+          <Undo2 className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">Undo</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{`Undo delete${state.label ? ` — ${state.label}` : ''}`}</TooltipContent>
+    </Tooltip>
   )
 }

@@ -77,11 +77,32 @@ router.get('/', async (req: Request, res: Response) => {
     if (from) AND.push({ date: { gte: from as string } });
     if (to) AND.push({ date: { lte: to as string } });
 
-    // Free-text search matches the meeting TITLE only — participants, orgs and
-    // tags each have a dedicated filter above, and notes/summaries are excluded
-    // on purpose so a title search stays a title search.
+    // Free-text search matches what's shown as the meeting heading: the TITLE,
+    // or — when a meeting has no title — the name displayed in its place (first
+    // participant → anchor contact → org → attendees text, mirroring the client's
+    // conversationDisplayName). Notes/summaries/tags stay out so a title search
+    // stays a title search; people/orgs/tags have their own filters above.
     const qTerm = typeof q === 'string' && q.trim() ? q.trim() : null;
-    if (qTerm) AND.push({ title: { contains: qTerm } });
+    if (qTerm) {
+      AND.push({
+        OR: [
+          { title: { contains: qTerm } },
+          {
+            AND: [
+              { OR: [{ title: null }, { title: '' }] },
+              {
+                OR: [
+                  { participants: { some: { contact: { name: { contains: qTerm } } } } },
+                  { contact: { name: { contains: qTerm } } },
+                  { company: { name: { contains: qTerm } } },
+                  { attendeesDescription: { contains: qTerm } },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    }
 
     // Legacy `title` filter (kept for back-compat deep links): plain contains.
     // The series view now uses the `seriesId` param above.

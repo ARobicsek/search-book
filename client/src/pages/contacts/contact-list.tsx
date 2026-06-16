@@ -608,9 +608,9 @@ export function ContactListPage() {
     if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
     if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
     if (!includeNoOutreach) params.set('includeNoOutreach', 'false')
-    // Server-side sorting for lastOutreachDate
-    if (sorting.length > 0 && sorting[0].id === 'lastOutreachDate') {
-      params.set('sortBy', 'lastOutreachDate')
+    // Server-side sorting for all columns
+    if (sorting.length > 0) {
+      params.set('sortBy', sorting[0].id)
       params.set('sortDir', sorting[0].desc ? 'desc' : 'asc')
     }
     // Pagination
@@ -678,6 +678,7 @@ export function ContactListPage() {
     data: filteredData,
     columns,
     state: { sorting, columnFilters, globalFilter, columnVisibility },
+    manualSorting: true,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,

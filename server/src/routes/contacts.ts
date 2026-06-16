@@ -41,6 +41,21 @@ router.get('/', async (req: Request, res: Response) => {
     const sortDescending = sortDir !== 'asc'; // default desc
     const sortByLastOutreach = sortBy === 'lastOutreachDate';
 
+    let prismaOrderBy: any = undefined;
+    if (!sortByLastOutreach && sortBy) {
+      const dir = sortDescending ? 'desc' : 'asc';
+      if (sortBy === 'name') prismaOrderBy = { name: dir };
+      else if (sortBy === 'title') prismaOrderBy = { title: dir };
+      else if (sortBy === 'ecosystem') prismaOrderBy = { ecosystem: dir };
+      else if (sortBy === 'status') prismaOrderBy = { status: dir };
+      else if (sortBy === 'location') prismaOrderBy = { location: dir };
+      else if (sortBy === 'updatedAt') prismaOrderBy = { updatedAt: dir };
+      else if (sortBy === 'company') prismaOrderBy = { companyName: dir };
+      else prismaOrderBy = { updatedAt: 'desc' };
+    } else if (!sortByLastOutreach) {
+      prismaOrderBy = { updatedAt: 'desc' };
+    }
+
     // When sorting by lastOutreachDate, we need to fetch all contacts first,
     // compute lastOutreachDate, sort, then paginate
     const contacts = await prisma.contact.findMany({
@@ -60,7 +75,7 @@ router.get('/', async (req: Request, res: Response) => {
         createdAt: true,
         updatedAt: true,
       },
-      orderBy: sortByLastOutreach ? undefined : { updatedAt: 'desc' },
+      orderBy: sortByLastOutreach ? undefined : prismaOrderBy,
       take: sortByLastOutreach ? undefined : take,
       skip: sortByLastOutreach ? undefined : skip,
     });

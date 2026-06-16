@@ -15,9 +15,9 @@ import {
 const mainNav = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard, exact: true },
   { title: 'Contacts', url: '/contacts', icon: BookUser },
-  { title: 'Organizations', url: '/companies', icon: Building2 },
   { title: 'Meetings', url: '/meetings', icon: MessageSquare },
   { title: 'Actions', url: '/actions', icon: ListTodo },
+  { title: 'Organizations', url: '/companies', icon: Building2 },
   { title: 'Ideas', url: '/ideas', icon: Lightbulb },
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   { title: 'Duplicates', url: '/duplicates', icon: Users },

@@ -1267,12 +1267,10 @@ export function ContactFormPage() {
             resolved.push({ companyId: cid, title: e.title, isCurrent: e.isCurrent })
           }
 
-          const currentRoles = resolved.filter(r => r.isCurrent)
-          const pastRoles = resolved.filter(r => !r.isCurrent)
-
-          // 4) Add current roles to companyEntries, deduping against entries already
+          // 4) Add all roles (current and past) to companyEntries, deduping against entries already
           //    in the form (covers re-import and entries the user pre-filled).
-          if (currentRoles.length > 0) {
+          //    Also silently clean up "Unknown" dummy companies if present.
+          if (resolved.length > 0) {
             setForm((prev) => {
               const existingIds = new Set<number>()
               for (const entry of prev.companyEntries) {
@@ -1286,11 +1284,20 @@ export function ContactFormPage() {
                   ?? newlyCreated.find(c => normalizeCompanyNameForDedupe(c.name) === norm)
                 if (match) existingIds.add(match.id)
               }
-              const additions = currentRoles
+              
+              let currentEntries = [...prev.companyEntries]
+              // Filter out any entries that resolve to "Unknown"
+              const unknownCompany = companies.find(c => normalizeCompanyNameForDedupe(c.name) === 'unknown')
+              if (unknownCompany) {
+                currentEntries = currentEntries.filter(e => e.value !== unknownCompany.id.toString())
+              }
+              currentEntries = currentEntries.filter(e => normalizeCompanyNameForDedupe(e.value) !== 'unknown')
+
+              const additions = resolved
                 .filter(r => !existingIds.has(r.companyId))
-                .map(r => ({ value: r.companyId.toString(), isCurrent: true }))
-              if (additions.length === 0) return prev
-              return { ...prev, companyEntries: [...prev.companyEntries, ...additions] }
+                .map(r => ({ value: r.companyId.toString(), isCurrent: r.isCurrent }))
+              if (additions.length === 0 && currentEntries.length === prev.companyEntries.length) return prev
+              return { ...prev, companyEntries: [...currentEntries, ...additions] }
             })
           }
 
@@ -1298,6 +1305,7 @@ export function ContactFormPage() {
           //    Edit mode: write rows immediately, deduping against the contact's
           //    existing history. Create mode: buffer until handleSubmit creates
           //    the contact, then flush from the buffer.
+          const pastRoles = resolved.filter(r => !r.isCurrent)
           if (pastRoles.length > 0) {
             const dedupKey = (companyId: number, title: string) =>
               `${companyId}|${title.toLowerCase().trim()}`

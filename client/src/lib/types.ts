@@ -29,6 +29,7 @@ export interface Contact {
   openQuestions: string | null;
   notes: string | null;
   personalDetails: string | null;
+  usefulFor: string | null; // What this person could help with in future; non-empty = a "useful person"
   flagged: boolean;
   createdAt: string;
   updatedAt: string;

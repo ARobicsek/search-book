@@ -17,7 +17,7 @@ router.get('/', async (req: Request, res: Response) => {
     const skip = parseInt(offset as string) || 0;
 
     // Build where clause for server-side filtering
-    const { flagged } = req.query;
+    const { flagged, useful } = req.query;
     const where: Record<string, unknown> = {};
     if (ecosystem && ecosystem !== 'all') {
       where.ecosystem = ecosystem;
@@ -28,6 +28,14 @@ router.get('/', async (req: Request, res: Response) => {
     if (flagged === 'true') {
       where.flagged = true;
     }
+    // "Useful people" filter: anyone with non-empty usefulFor notes. Uses an AND
+    // array so it composes with the search OR below (top-level keys are ANDed).
+    if (useful === 'true') {
+      where.AND = [
+        { usefulFor: { not: null } },
+        { usefulFor: { not: '' } },
+      ];
+    }
     if (search && typeof search === 'string' && search.trim()) {
       const searchTerm = search.trim();
       where.OR = [
@@ -36,6 +44,7 @@ router.get('/', async (req: Request, res: Response) => {
         { company: { name: { contains: searchTerm } } },
         { companyName: { contains: searchTerm } },
         { location: { contains: searchTerm } },
+        { usefulFor: { contains: searchTerm } },
       ];
     }
 
@@ -72,6 +81,7 @@ router.get('/', async (req: Request, res: Response) => {
         status: true,
         location: true,
         flagged: true,
+        usefulFor: true,
         photoUrl: true,
         createdAt: true,
         updatedAt: true,

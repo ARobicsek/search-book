@@ -12,7 +12,7 @@ import {
   flexRender,
 } from '@tanstack/react-table'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag, ChevronLeft, ChevronRight, Pencil, Lightbulb } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus, DatePrecision, LinkRecord } from '@/lib/types'
@@ -201,13 +201,20 @@ function buildColumns(
           )
         }
         return (
-          <Link
-            to={`/contacts/${row.original.id}`}
-            className="font-medium text-foreground hover:underline block max-w-[150px] truncate sm:max-w-[200px]"
-            title={row.original.name}
-          >
-            {row.original.name}
-          </Link>
+          <div className="flex items-center gap-1.5">
+            <Link
+              to={`/contacts/${row.original.id}`}
+              className="font-medium text-foreground hover:underline block max-w-[150px] truncate sm:max-w-[200px]"
+              title={row.original.name}
+            >
+              {row.original.name}
+            </Link>
+            {row.original.usefulFor && row.original.usefulFor.trim() && (
+              <span title={`Useful for: ${row.original.usefulFor}`} className="shrink-0">
+                <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+              </span>
+            )}
+          </div>
         )
       },
     },
@@ -447,6 +454,7 @@ export function ContactListPage() {
   const [includeNoOutreach, setIncludeNoOutreach] = useState(true)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [showFlaggedOnly, setShowFlaggedOnly] = useState(false)
+  const [showUsefulOnly, setShowUsefulOnly] = useState(false)
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const [batchForm, setBatchForm] = useState({
     title: '',
@@ -496,6 +504,7 @@ export function ContactListPage() {
             openQuestions: parsed.openQuestions || null,
             notes: parsed.notes || null,
             personalDetails: parsed.personalDetails || null,
+            usefulFor: parsed.usefulFor || null,
             flagged: false,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -604,6 +613,7 @@ export function ContactListPage() {
     if (ecosystemFilter !== 'all') params.set('ecosystem', ecosystemFilter)
     if (statusFilter !== 'all') params.set('status', statusFilter)
     if (showFlaggedOnly) params.set('flagged', 'true')
+    if (showUsefulOnly) params.set('useful', 'true')
     if (debouncedSearch) params.set('search', debouncedSearch)
     if (lastOutreachFrom) params.set('lastOutreachFrom', lastOutreachFrom)
     if (lastOutreachTo) params.set('lastOutreachTo', lastOutreachTo)
@@ -641,7 +651,7 @@ export function ContactListPage() {
   useEffect(() => {
     setCurrentPage(0)
     loadContacts(0)
-  }, [ecosystemFilter, statusFilter, showFlaggedOnly, debouncedSearch, lastOutreachFrom, lastOutreachTo, includeNoOutreach, sorting])
+  }, [ecosystemFilter, statusFilter, showFlaggedOnly, showUsefulOnly, debouncedSearch, lastOutreachFrom, lastOutreachTo, includeNoOutreach, sorting])
 
   // Load contacts when page changes
   useEffect(() => {
@@ -659,7 +669,7 @@ export function ContactListPage() {
       return [...matchingDrafts, ...contacts]
     }
     return contacts
-  }, [contacts, drafts, currentPage, globalFilter, ecosystemFilter, statusFilter, showFlaggedOnly])
+  }, [contacts, drafts, currentPage, globalFilter, ecosystemFilter, statusFilter, showFlaggedOnly, showUsefulOnly])
 
   const flaggedCount = contacts.filter((c) => c.flagged).length
 
@@ -704,7 +714,8 @@ export function ContactListPage() {
         contact.location,
         contact.notes,
         contact.openQuestions,
-        contact.roleDescription
+        contact.roleDescription,
+        contact.usefulFor
       ]
 
       return searchTerms.every((term: string) =>
@@ -714,7 +725,7 @@ export function ContactListPage() {
   })
 
   const hasDateFilter = lastOutreachFrom || lastOutreachTo
-  const hasFilters = globalFilter || ecosystemFilter !== 'all' || statusFilter !== 'all' || hasDateFilter || showFlaggedOnly
+  const hasFilters = globalFilter || ecosystemFilter !== 'all' || statusFilter !== 'all' || hasDateFilter || showFlaggedOnly || showUsefulOnly
 
   function clearFilters() {
     setGlobalFilter('')
@@ -724,6 +735,7 @@ export function ContactListPage() {
     setLastOutreachTo('')
     setIncludeNoOutreach(true)
     setShowFlaggedOnly(false)
+    setShowUsefulOnly(false)
   }
 
   async function exportToCsv() {
@@ -948,6 +960,16 @@ export function ContactListPage() {
           >
             <Flag className="mr-2 h-4 w-4" />
             Flagged{flaggedCount > 0 ? ` (${flaggedCount})` : ''}
+          </Button>
+          <Button
+            variant={showUsefulOnly ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowUsefulOnly(!showUsefulOnly)}
+            className="flex-1 sm:flex-initial"
+            title="Show only people with 'Useful for' notes"
+          >
+            <Lightbulb className="mr-2 h-4 w-4" />
+            Useful
           </Button>
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>

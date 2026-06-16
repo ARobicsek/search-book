@@ -37,6 +37,7 @@ model Contact {
   openQuestions     String?
   notes             String?
   personalDetails   String?
+  usefulFor         String?  // Free text: what this person could help NCQA with in future (topic/collaboration). Non-empty = a "useful person"; drives the contacts "Useful people" filter + search.
   flagged           Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

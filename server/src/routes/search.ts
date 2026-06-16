@@ -210,6 +210,7 @@ router.get('/', async (req: Request, res: Response) => {
           { notes: { contains: term } },
           { personalDetails: { contains: term } },
           { openQuestions: { contains: term } },
+          { usefulFor: { contains: term } },
           { mutualConnections: { contains: term } },
           { prepNotes: { some: { content: { contains: term } } } },
           // Per-participant meeting takeaways live on ConversationParticipant.note;
@@ -227,7 +228,7 @@ router.get('/', async (req: Request, res: Response) => {
           id: true, name: true, title: true, ecosystem: true, status: true, updatedAt: true,
           email: true, additionalEmails: true, phone: true, linkedinUrl: true, location: true,
           roleDescription: true, howConnected: true, whereFound: true, companyName: true,
-          notes: true, personalDetails: true, openQuestions: true, mutualConnections: true,
+          notes: true, personalDetails: true, openQuestions: true, usefulFor: true, mutualConnections: true,
           additionalCompanyIds: true, connectedCompanyIds: true, referredById: true,
           company: { select: { id: true, name: true } },
           tags: { select: { tag: { select: { name: true } } } },
@@ -282,6 +283,9 @@ router.get('/', async (req: Request, res: Response) => {
         pushField(fields, 'notes', c.notes, 1);
         pushField(fields, 'personal details', c.personalDetails, 1);
         pushField(fields, 'open questions', c.openQuestions, 1);
+        // High-signal curated field → weight 2 (tag tier), so a topic match here
+        // ranks the person above an incidental mention in free-text notes.
+        pushField(fields, 'useful for', c.usefulFor, 2);
         pushField(fields, 'mutual connections', c.mutualConnections, 1);
         for (const pn of c.prepNotes || []) pushField(fields, 'prep note', pn.content, 1);
         for (const pic of c.participantInConversations || []) pushField(fields, 'meeting takeaway', pic.note, 1);

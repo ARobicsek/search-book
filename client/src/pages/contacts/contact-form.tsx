@@ -29,7 +29,7 @@ import {
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
 import { toast } from 'sonner'
-import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink, Linkedin } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink, Linkedin, Lightbulb } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { useAutoSaveGuard } from '@/hooks/use-autosave-guard'
 import { useEditDraft } from '@/hooks/use-edit-draft'
@@ -64,6 +64,7 @@ type FormData = {
   openQuestions: string
   notes: string
   personalDetails: string
+  usefulFor: string
 }
 
 const emptyForm: FormData = {
@@ -87,6 +88,7 @@ const emptyForm: FormData = {
   openQuestions: '',
   notes: '',
   personalDetails: '',
+  usefulFor: '',
 }
 
 function contactToForm(contact: Contact): FormData {
@@ -148,6 +150,7 @@ function contactToForm(contact: Contact): FormData {
     openQuestions: contact.openQuestions ?? '',
     notes: contact.notes ?? '',
     personalDetails: contact.personalDetails ?? '',
+    usefulFor: contact.usefulFor ?? '',
   }
 }
 
@@ -178,6 +181,7 @@ function formToPayload(form: FormData, companyEntries: { id: number; isCurrent: 
     openQuestions: form.openQuestions.trim() || null,
     notes: form.notes.trim() || null,
     personalDetails: form.personalDetails.trim() || null,
+    usefulFor: form.usefulFor.trim() || null,
   }
 }
 
@@ -1014,6 +1018,32 @@ export function ContactFormPage() {
                 onChange={(e) => set('notes', e.target.value)}
                 placeholder="General personalized research notes"
                 rows={6}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Useful For — what this person could help NCQA with in future. Non-empty
+            marks them a "useful person" (drives the contacts filter + search). */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-amber-500" />
+              Useful For
+            </CardTitle>
+            <CardDescription>
+              What could this person help with in future? (e.g. "build GI quality measures";
+              "co-author a study on ambient AI for physician-explanation quality"). Searchable later.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Textarea
+                id="usefulFor"
+                value={form.usefulFor}
+                onChange={(e) => set('usefulFor', e.target.value)}
+                placeholder="Topics, expertise, or collaborations this person offered or is suited for"
+                rows={3}
               />
             </div>
           </CardContent>

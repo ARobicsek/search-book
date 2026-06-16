@@ -72,6 +72,7 @@ import {
   ArrowUp,
   ArrowDown,
   Building2,
+  Lightbulb,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -777,6 +778,21 @@ export function ContactDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Useful For — surfaced when set; recall via the contacts "Useful people" filter + search */}
+          {contact.usefulFor && (
+            <Card className="border-amber-200 dark:border-amber-900/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-4 w-4 text-amber-500" />
+                  Useful For
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="prep-note-markdown"><ReactMarkdown>{contact.usefulFor}</ReactMarkdown></div>
+              </CardContent>
+            </Card>
+          )}
 
           {contact.personalDetails && (
             <Card>

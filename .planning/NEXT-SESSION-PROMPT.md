@@ -3,42 +3,40 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (Session 12) — "Useful people" affordance — ✅ SHIPPED
+### What Was Just Completed (Session 13) — owner-requested UI polish (5 items) — ✅ SHIPPED
 
-Owner-requested feature: **recall who you've identified as someone to reach out to for a future topic /
-collaboration** (e.g. "could help build GI quality measures"; "co-author an ambient-AI study"). Owner chose a
-**field-driven** design (deliberately **not** a reserved tag — single source of truth, nothing to keep in sync).
-Schema change; **owner applied the Turso DDL**, typecheck + full client build pass, data layer verified.
+All client-only (no schema changes, so no Turso DDL needed). `npm run prepush` (client+server typecheck)
+passes; verified end-to-end in the running app via chrome-devtools. Committed atomically + pushed to `main`.
 
-1. **Schema** — additive `Contact.usefulFor String?` (free text: what this person could help with in future).
-   Local `dev.db` migrated + Turso `ALTER TABLE "Contact" ADD COLUMN "usefulFor" TEXT` applied by owner.
-   Dual-mode migration: `server/scripts/migrate-contact-usefulfor.js` (idempotent, guarded).
-2. **Capture** — "Useful For" card on the contact **edit form** (`contact-form.tsx`), a free-text box.
-   Non-empty = the person is "useful". Passes through the existing `processFormData` PUT/POST (no route change).
-3. **Display** — amber 💡 "Useful For" card on the contact **detail** page (`contact-detail.tsx`), shown when set.
-4. **Recall (contacts list, `contact-list.tsx`)** — a **Useful** filter button (💡) → `?useful=true`
-   (server `where.AND:[{usefulFor:{not:null}},{usefulFor:{not:''}}]`, composes with the search `OR`); and
-   `usefulFor` folded into the list `search` OR, so **Useful + type a topic** narrows to matching people.
-   A small 💡 marks useful rows while browsing. (`contacts.ts` list `select` now includes `usefulFor`.)
-5. **Recall (global search, `search.ts` + `search.tsx`)** — `usefulFor` has its **own dedicated scope**
-   (`useful`, chip "Useful for") so it can be searched in **isolation** ("who is useful for <topic>"), separate
-   from People — notes; weight 2. A contact query runs if any of the three people scopes is on (`anyPeople`).
-   Result cards **flag a useful-field hit** with an amber 💡 + "useful for:" label (`MatchEvidence`).
-6. **Merge carry-over (`duplicates.ts`)** — contact merge **unions** `usefulFor` from both sides (kept text
-   first, removed appended only if it adds something new; `unionUsefulFor`), independent of the merge
-   field-selections, so a "useful" person is never dropped whichever contact is removed.
-
-Verified: a throwaway Prisma script confirmed write/read, the `useful=true` filter, the composed
-`AND(useful)+OR(search)` where clause, and exclusion of non-matching searches (script removed after).
+1. **Contact card — paste images into the photo box** (`photo-upload.tsx`). A page-level `paste` listener
+   uploads a clipboard image while the drop zone is showing (no photo set yet). It ignores pastes whose
+   target is an `input`/`textarea`/`[contenteditable]` so it never hijacks the notes editor. Hint text now
+   reads "Drag, drop, or paste an image — or click to browse". (`<PhotoUpload>` has a single instance —
+   contact form — so the document listener can't collide.)
+2. **Contact card — markdown toolbar + paste/drag in the Notes box** (`contact-form.tsx`). The plain
+   `Textarea` for Notes was swapped for the shared `MarkdownTextarea` (H3/bold/italic/lists toolbar +
+   Ctrl shortcuts + paste/drag screenshots). The contact **detail** page already renders notes via
+   `ReactMarkdown`, so formatting displays correctly. (Only Notes — other contact textareas left plain.)
+3. **Meetings — prep-note bar opens on the caret** (`quick-log-dialog.tsx`). Added `showTagsPrep` to the
+   `showPanel` condition, so expanding the desktop "Tags, prep notes & attachments" section opens the left
+   **Prep Notes** bar right away (previously it only appeared after a note was saved + the dialog reopened).
+   Prep notes render in the left bar; the section keeps Tags + Attachments. Mobile unchanged.
+4. **Global Search — faster scope narrowing + all-on default** (`search.tsx`). Badges **default to all-on
+   every visit** (scope selection no longer persisted; sort + case still are). Added an **"All" reset chip**.
+   New click model: from all-on, **one click isolates** to that scope; a **second click on that lone scope
+   inverts** to everything-except-it; otherwise plain add/remove (≥1 kept). URL `?scopes=` still wins so
+   shared/deep links keep a narrower selection. ("Useful for" is one of the always-on scopes.)
+5. **Series — discoverable Manage dialog** (`meetings.tsx`). `/api/series` rename/delete already existed but
+   was only reachable via easy-to-miss icons in the series-view header. Added a **"Manage" link beside the
+   Series filter** opening `ManageSeriesDialog` (every series w/ meeting count + last date, inline rename,
+   delete-with-confirm). Deleting the currently-viewed series clears the filter. The header icons stay.
+6. **New Organization status defaults to blank** (`company-form.tsx`) — `emptyForm.status` `RESEARCHING` → `NONE` ("—").
 
 ### What's Next
-1. **[OWNER, optional]** Quick visual pass at **390px mobile** for the new Contacts "Useful" filter button row
-   (it mirrors the existing Flagged button's `flex-1 sm:flex-initial`, so low risk) and the form/detail cards.
-2. **[OWNER, light]** Run the organization status sweep script against production Turso (carry-over from S11):
-   export `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`, then `node scripts/sweep-company-status.js` from `server/`.
-3. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 — don't push on
-   those until the owner raises them. (The "useful for" field is a clean future target for the Phase-3 Copilot
-   recap ingest: auto-append "offered to help with X" into `Contact.usefulFor`.)
+1. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on decisions D5–D9 —
+   don't push on those until the owner raises them.
+2. **[OWNER, light]** Run the organization status sweep script against production Turso (carry-over): export
+   `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`, then `node scripts/sweep-company-status.js` from `server/`.
 
 ### Carry-over items (pre-dating, lower priority)
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
@@ -67,8 +65,9 @@ Verified: a throwaway Prisma script confirmed write/read, the `useful=true` filt
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. Session 12 shipped the **"Useful people"** affordance
-> (field-driven `Contact.usefulFor` free text + Contacts "Useful" filter/search + global-search indexing) so the
-> owner can recall who to reach out to for a future topic/collaboration — owner-confirmed design, Turso DDL
-> applied, live. Plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't
-> push on those until the owner raises them).
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. Session 13 shipped five owner-requested UI polish items
+> (contact photo-paste + markdown Notes box; Quick Log prep bar opening on the tags/prep/attachments caret;
+> Search default-all scopes with click-to-isolate / double-click-to-invert + an "All" chip; a discoverable
+> "Manage series" dialog; new-org status defaults to blank) — all client-only, verified, pushed, live. Plan
+> of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't push on those until
+> the owner raises them).

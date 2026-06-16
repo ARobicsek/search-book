@@ -246,6 +246,10 @@ model ConversationParticipant {
   contactId      Int
   contact        Contact      @relation("ParticipantInConversations", fields: [contactId], references: [id], onDelete: Cascade)
   note           String?
+  // Entry order within the meeting (0-based). Drives the displayed meeting title
+  // when no title is set (first participant entered). Set on create from the
+  // submitted array index; without it, reads come back in arbitrary index order.
+  ordering       Int     @default(0)
 
   @@id([conversationId, contactId])
 }

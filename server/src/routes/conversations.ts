@@ -8,6 +8,7 @@ const conversationIncludes = {
   company: { select: { id: true, name: true } },
   participants: {
     include: { contact: { select: { id: true, name: true } } },
+    orderBy: { ordering: 'asc' as const },
   },
   contactsDiscussed: {
     include: { contact: { select: { id: true, name: true } } },
@@ -210,9 +211,10 @@ router.post('/', async (req: Request, res: Response) => {
             : undefined,
           participants: participants.length
             ? {
-              create: participants.map((p) => ({
+              create: participants.map((p, i) => ({
                 contactId: p.contactId,
                 note: p.note || null,
+                ordering: i,
               })),
             }
             : undefined,
@@ -413,9 +415,10 @@ router.put('/:id', async (req: Request, res: Response) => {
             : undefined,
           participants: participants?.length
             ? {
-              create: participants.map((p) => ({
+              create: participants.map((p, i) => ({
                 contactId: p.contactId,
                 note: p.note || null,
+                ordering: i,
               })),
             }
             : undefined,

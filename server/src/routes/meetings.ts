@@ -11,6 +11,7 @@ const meetingListInclude = {
   company: { select: { id: true, name: true } },
   participants: {
     include: { contact: { select: { id: true, name: true } } },
+    orderBy: { ordering: 'asc' as const },
   },
   orgs: { include: { company: { select: { id: true, name: true } } } },
   tags: { include: { tag: { select: { id: true, name: true } } } },

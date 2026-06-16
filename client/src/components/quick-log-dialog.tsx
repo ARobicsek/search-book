@@ -1097,7 +1097,10 @@ function QuickLogDialog({
   // Prep info shown in the left panel: the meeting's own prep notes (live or
   // staged) plus the previous meeting in the same series. The side panel is
   // desktop-only — on mobile the same prep block renders inline in the form.
-  const showPanel = prepNotes.length > 0 || pendingPrepNotes.length > 0 || !!seriesContext
+  // The left prep panel opens whenever prep context exists OR the user expands the
+  // "Tags, prep notes & attachments" section — so clicking that caret reveals the
+  // prep-note bar on desktop right away (not only after a note is saved + reopened).
+  const showPanel = prepNotes.length > 0 || pendingPrepNotes.length > 0 || !!seriesContext || showTagsPrep
   const usePanel = showPanel && isDesktop
 
   // Prep notes list + composer. Rendered in the left panel when it's visible,

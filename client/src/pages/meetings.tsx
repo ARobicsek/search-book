@@ -252,8 +252,10 @@ function MeetingCard({
     return () => ro.disconnect()
   }, [])
 
-  // Title-only search → highlight the term in the heading only.
-  const hlTitle = (text: string) =>
+  // Highlight the search term wherever it can match a card: the heading (title /
+  // display name), the series chip, and participant names — mirroring the server's
+  // q match (title + participants + series) in meetings.ts.
+  const hl = (text: string) =>
     qTerm ? <HighlightedText text={text} terms={[qTerm]} caseSensitive={false} /> : text
 
   const clamped = !expanded && overflowing
@@ -315,7 +317,7 @@ function MeetingCard({
                 onClick={onEdit}
                 title="Edit meeting"
               >
-                {hlTitle(conversationDisplayName(conv))}
+                {hl(conversationDisplayName(conv))}
               </button>
               {conv.series && (
                 <button
@@ -325,7 +327,7 @@ function MeetingCard({
                   title="View all meetings in this series"
                 >
                   <Layers className="h-3 w-3" />
-                  {conv.series.name}
+                  {hl(conv.series.name)}
                 </button>
               )}
             </div>
@@ -412,7 +414,7 @@ function MeetingCard({
               {conv.participants?.map((p) => (
                 <Link key={p.contact.id} to={`/contacts/${p.contact.id}`}>
                   <Badge variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100" title={p.note || undefined}>
-                    {p.contact.name}
+                    {hl(p.contact.name)}
                   </Badge>
                 </Link>
               ))}

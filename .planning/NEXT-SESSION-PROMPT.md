@@ -24,6 +24,9 @@ Schema change; **owner applied the Turso DDL**, typecheck + full client build pa
    (`useful`, chip "Useful for") so it can be searched in **isolation** ("who is useful for <topic>"), separate
    from People — notes; weight 2. A contact query runs if any of the three people scopes is on (`anyPeople`).
    Result cards **flag a useful-field hit** with an amber 💡 + "useful for:" label (`MatchEvidence`).
+6. **Merge carry-over (`duplicates.ts`)** — contact merge **unions** `usefulFor` from both sides (kept text
+   first, removed appended only if it adds something new; `unionUsefulFor`), independent of the merge
+   field-selections, so a "useful" person is never dropped whichever contact is removed.
 
 Verified: a throwaway Prisma script confirmed write/read, the `useful=true` filter, the composed
 `AND(useful)+OR(search)` where clause, and exclusion of non-matching searches (script removed after).

@@ -11,12 +11,13 @@ behavior verified live** against the running dev API. Client UI compiled & HMR-l
 but **not yet visually verified** (chrome-devtools MCP couldn't attach — a browser
 held its automation profile). Owner should eyeball on localhost:5173 / prod.
 
-1. **Search = title only.** The Meetings Search box now matches `Conversation.title`
-   (contains) only — no longer people/notes/summary/tags. Removed the JS relevance-rank
-   path; search now respects the chosen sort. Placeholder → "Search meeting titles…",
-   highlight only on the card heading. *(Reverses the earlier "rank title+participant"
-   behavior — a deliberate owner override. Global `/api/search` is unchanged, so people
-   are still findable there.)* Verified: `q=<participant-name>` now returns 0.
+1. **Search = the meeting's heading text.** The Meetings Search box matches
+   `Conversation.title` (contains), and for **untitled** meetings also the name shown in
+   its place (first participant → anchor contact → org → attendees text, per
+   `conversationDisplayName`). Titled meetings match title only; notes/summary/tags stay
+   out. Removed the JS relevance-rank path; search respects the chosen sort. Global
+   `/api/search` unchanged. Verified live: a participant's name now returns their untitled
+   meetings; a titled meeting still won't match on its people.
 2. **Org filter widened.** Organization filter now also pulls meetings where the anchor
    contact / any participant **currently works** at that org (not just meetings with the
    org in the org field). New `meetingOrgClauses()` in `meetings.ts`; reuses
@@ -28,11 +29,12 @@ held its automation profile). Owner should eyeball on localhost:5173 / prod.
    fade + "Show more"/"Show less"; clicking a clamped card expands it (inner links/buttons
    excluded). `MeetingCard` extracted; overflow measured via `ResizeObserver`. **This is
    the one change to eyeball** (runtime measurement / click-to-expand).
-5. **"Recently updated" question — answered, no code change.** Old-dated meetings appearing
-   at the top of "Recently updated" is **expected, not the status-sweep scripts' fault**:
-   `updatedAt` = when the record was logged/last edited; the card shows the meeting `date`
-   (often back-dated). The sweep scripts only touch `Company`/`Contact` and can't bump
-   `Conversation.updatedAt` (confirmed: all conversations have `updatedAt == createdAt`).
+5. **"Recently updated" — merge bug found & fixed.** Root cause of old meetings jumping to
+   the top: **merging duplicate contacts** re-linked their meetings via
+   `conversation.updateMany`, and Prisma `@updatedAt` bumped `updatedAt` to now. Fixed in
+   `duplicates.ts` — re-link via raw SQL so a merge isn't an "edit". Forward-only: meetings
+   a *past* merge already bumped stay bumped (can't safely distinguish from real edits).
+   (Ruled out: status-sweep scripts, editing a contact card — neither writes conversations.)
 
 ### What Was Completed (Session 10)
 

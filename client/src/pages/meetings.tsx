@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -35,8 +35,8 @@ import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import {
-  Building2, CalendarDays, FileText, Layers, List, Loader2, MessageSquarePlus, Paperclip,
-  Pencil, Tag as TagIcon, Trash2, X,
+  Building2, CalendarDays, ChevronDown, ChevronUp, FileText, Layers, List, Loader2,
+  MessageSquarePlus, Paperclip, Pencil, Tag as TagIcon, Trash2, X,
 } from 'lucide-react'
 
 const conversationTypeColors: Record<string, string> = {
@@ -209,6 +209,239 @@ function MeetingsCalendar() {
         noEventsText="No meetings in this range"
       />
     </div>
+  )
+}
+
+// Collapsed meeting cards are clamped to roughly this content height (~2 inches)
+// so the list scans compactly; clicking a clamped card (or "Show more") expands it.
+const COLLAPSED_MAX_PX = 168
+
+// A single meeting card. Renders compact by default — if its content overflows the
+// collapsed height it clamps with a fade and a "Show more" toggle, and a click
+// anywhere on the (clamped) card expands it. Clicks on links/buttons inside are
+// left to do their own thing (they never toggle the card).
+function MeetingCard({
+  conv,
+  qTerm,
+  onEdit,
+  onDelete,
+  onSeriesClick,
+  onTagClick,
+}: {
+  conv: Conversation
+  qTerm: string
+  onEdit: () => void
+  onDelete: () => void
+  onSeriesClick: (seriesId: number) => void
+  onTagClick: (tagId: number) => void
+}) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [overflowing, setOverflowing] = useState(false)
+
+  // The inner content div is never clamped (the clamp lives on the wrapper), so its
+  // measured height is always the full content height — compare it to the collapsed
+  // cap. ResizeObserver re-checks when late content (images, markdown) changes height.
+  useLayoutEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    const check = () => setOverflowing(el.offsetHeight > COLLAPSED_MAX_PX + 8)
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Title-only search → highlight the term in the heading only.
+  const hlTitle = (text: string) =>
+    qTerm ? <HighlightedText text={text} terms={[qTerm]} caseSensitive={false} /> : text
+
+  const clamped = !expanded && overflowing
+
+  return (
+    <Card>
+      <CardContent
+        className={`p-4 ${clamped ? 'cursor-pointer' : ''}`}
+        onClick={(e) => {
+          // Only a click on the empty/clamped card body expands it — never collapse
+          // on click (use the toggle), and never hijack a link/button click.
+          if (expanded || !overflowing) return
+          if ((e.target as HTMLElement).closest('a,button')) return
+          setExpanded(true)
+        }}
+      >
+        <div
+          className="relative"
+          style={clamped ? { maxHeight: COLLAPSED_MAX_PX, overflow: 'hidden' } : undefined}
+        >
+          <div ref={contentRef} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className={`text-xs ${conversationTypeColors[conv.type]}`}>
+                {getLabel(conv.type, CONVERSATION_TYPE_OPTIONS)}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
+              </span>
+              <div className="ml-auto flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title="Edit meeting"
+                  onClick={onEdit}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  title="Delete meeting"
+                  onClick={onDelete}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            {/* Heading opens the Edit dialog. Displayed text falls back:
+                title → first participant → contact → company → description.
+                A "series" chip appears only for meetings in a series and
+                opens the grouped series view. Contact/company/participant
+                remain reachable via the badge chips below. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="text-left text-sm font-semibold text-primary hover:underline"
+                onClick={onEdit}
+                title="Edit meeting"
+              >
+                {hlTitle(conversationDisplayName(conv))}
+              </button>
+              {conv.series && (
+                <button
+                  type="button"
+                  onClick={() => onSeriesClick(conv.series!.id)}
+                  className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-800 hover:bg-violet-100"
+                  title="View all meetings in this series"
+                >
+                  <Layers className="h-3 w-3" />
+                  {conv.series.name}
+                </button>
+              )}
+            </div>
+            {conv.summary && <p className="text-sm font-medium">{conv.summary}</p>}
+            {conv.attendeesDescription && conv.title && (
+              <p className="text-xs italic text-muted-foreground">{conv.attendeesDescription}</p>
+            )}
+            {conv.prepNotes && conv.prepNotes.length > 0 && (
+              <div className="rounded-md bg-amber-50/60 p-2">
+                <p className="mb-1 flex items-center gap-1 text-xs font-medium text-amber-900">
+                  <FileText className="h-3 w-3" /> Prep notes
+                </p>
+                {conv.prepNotes.map((note) => (
+                  <div key={note.id} className="prep-note-markdown text-sm text-muted-foreground">
+                    <ReactMarkdown>{note.content}</ReactMarkdown>
+                  </div>
+                ))}
+              </div>
+            )}
+            {conv.notes && (
+              <div className="prep-note-markdown text-sm text-muted-foreground">
+                <ReactMarkdown>{conv.notes}</ReactMarkdown>
+              </div>
+            )}
+            {conv.attachments && conv.attachments.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {conv.attachments.map((att) =>
+                  (att.mimeType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(att.url) ? (
+                    <a key={att.id} href={att.url} target="_blank" rel="noreferrer" title={att.name}>
+                      <img
+                        src={att.url}
+                        alt={att.name}
+                        className="h-16 w-16 rounded-md border object-cover hover:opacity-80"
+                      />
+                    </a>
+                  ) : (
+                    <a
+                      key={att.id}
+                      href={att.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs text-primary hover:underline"
+                      title={att.name}
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      <span className="max-w-40 truncate">{att.name}</span>
+                    </a>
+                  )
+                )}
+              </div>
+            )}
+            {conv.nextSteps && (
+              <div className="text-sm text-muted-foreground">
+                <span className="text-xs font-medium">Next steps:</span>
+                <div className="prep-note-markdown">
+                  <ReactMarkdown>{conv.nextSteps}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1 pt-1">
+              {conv.contact && (
+                <Link to={`/contacts/${conv.contact.id}`}>
+                  <Badge variant="outline" className="text-xs hover:bg-muted">
+                    {conv.contact.name}
+                  </Badge>
+                </Link>
+              )}
+              {conv.company && (
+                <Link to={`/companies/${conv.company.id}`}>
+                  <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100">
+                    <Building2 className="mr-1 h-3 w-3" />
+                    {conv.company.name}
+                  </Badge>
+                </Link>
+              )}
+              {conv.orgs?.map((o) => (
+                <Link key={o.company.id} to={`/companies/${o.company.id}`}>
+                  <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100">
+                    <Building2 className="mr-1 h-3 w-3" />
+                    {o.company.name}
+                  </Badge>
+                </Link>
+              ))}
+              {conv.participants?.map((p) => (
+                <Link key={p.contact.id} to={`/contacts/${p.contact.id}`}>
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100" title={p.note || undefined}>
+                    {p.contact.name}
+                  </Badge>
+                </Link>
+              ))}
+              {conv.tags?.map((t) => (
+                <button key={t.tag.id} type="button" onClick={() => onTagClick(t.tag.id)}>
+                  <Badge variant="outline" className="text-xs bg-violet-50 text-violet-800 border-violet-200 hover:bg-violet-100">
+                    <TagIcon className="mr-1 h-3 w-3" />
+                    {t.tag.name}
+                  </Badge>
+                </button>
+              ))}
+            </div>
+          </div>
+          {clamped && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-card to-transparent" />
+          )}
+        </div>
+        {overflowing && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
+            className="mt-2 flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {expanded ? 'Show less' : 'Show more'}
+          </button>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -418,12 +651,9 @@ export function MeetingsPage() {
     setSearchParams({}, { replace: true })
   }
 
-  // When the free-text filter is active, wrap matches in <mark> in the
-  // plain-text fields (markdown notes are left un-highlighted). The server
-  // trims `q` to a single case-insensitive term, so we mirror that here.
+  // The search box matches the meeting title only (see server route), so the
+  // term is highlighted only in the card heading — handled inside MeetingCard.
   const qTerm = qFilter.trim()
-  const hl = (text: string) =>
-    qTerm ? <HighlightedText text={text} terms={[qTerm]} caseSensitive={false} /> : text
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -509,8 +739,29 @@ export function MeetingsPage() {
         <MeetingsCalendar />
       ) : (
       <>
-      {/* Filters */}
+      {/* Filters — most-used (Search) sits top-left; least-used (Type) bottom-left. */}
       <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Search</Label>
+          <div className="relative">
+            <Input
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              placeholder="Search meeting titles…"
+              className={qInput ? 'pr-10' : undefined}
+            />
+            {qInput && (
+              <button
+                type="button"
+                onClick={() => setQInput('')}
+                aria-label="Clear search text"
+                className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
         <div className="space-y-1">
           <Label className="text-xs">Series</Label>
           <Combobox
@@ -532,16 +783,6 @@ export function MeetingsPage() {
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Tag</Label>
-          <Combobox
-            options={tagOptions}
-            value={tagFilter}
-            onChange={(v) => setParam('tagId', v)}
-            placeholder="Any tag"
-            searchPlaceholder="Search tags..."
-          />
-        </div>
-        <div className="space-y-1">
           <Label className="text-xs">Type</Label>
           <Select value={typeFilter} onValueChange={(v) => setParam('type', v === 'all' ? '' : v)}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -554,32 +795,21 @@ export function MeetingsPage() {
           </Select>
         </div>
         <div className="space-y-1">
+          <Label className="text-xs">Tag</Label>
+          <Combobox
+            options={tagOptions}
+            value={tagFilter}
+            onChange={(v) => setParam('tagId', v)}
+            placeholder="Any tag"
+            searchPlaceholder="Search tags..."
+          />
+        </div>
+        <div className="space-y-1">
           <Label className="text-xs">Date range</Label>
           <div className="flex items-center gap-2">
             <Input type="date" value={fromFilter} onChange={(e) => setParam('from', e.target.value)} />
             <span className="text-xs text-muted-foreground">to</span>
             <Input type="date" value={toFilter} onChange={(e) => setParam('to', e.target.value)} />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Search</Label>
-          <div className="relative">
-            <Input
-              value={qInput}
-              onChange={(e) => setQInput(e.target.value)}
-              placeholder="Search title, people, notes…"
-              className={qInput ? 'pr-10' : undefined}
-            />
-            {qInput && (
-              <button
-                type="button"
-                onClick={() => setQInput('')}
-                aria-label="Clear search text"
-                className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </div>
         {hasFilters && (
@@ -608,162 +838,15 @@ export function MeetingsPage() {
           </p>
           <div className="space-y-3">
             {meetings.map((conv) => (
-              <Card key={conv.id}>
-                <CardContent className="p-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={`text-xs ${conversationTypeColors[conv.type]}`}>
-                        {getLabel(conv.type, CONVERSATION_TYPE_OPTIONS)}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
-                      </span>
-                      <div className="ml-auto flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                          title="Edit meeting"
-                          onClick={() => quickLog.openEdit(conv.id)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          title="Delete meeting"
-                          onClick={() => setDeleteId(conv.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                    {/* Heading opens the Edit dialog. Displayed text falls back:
-                        title → first participant → contact → company → description.
-                        A "series" chip appears only for meetings in a series and
-                        opens the grouped series view. Contact/company/participant
-                        remain reachable via the badge chips below. */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="text-left text-sm font-semibold text-primary hover:underline"
-                        onClick={() => quickLog.openEdit(conv.id)}
-                        title="Edit meeting"
-                      >
-                        {hl(conversationDisplayName(conv))}
-                      </button>
-                      {conv.series && (
-                        <button
-                          type="button"
-                          onClick={() => setParam('seriesId', conv.series!.id.toString())}
-                          className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-800 hover:bg-violet-100"
-                          title="View all meetings in this series"
-                        >
-                          <Layers className="h-3 w-3" />
-                          {conv.series.name}
-                        </button>
-                      )}
-                    </div>
-                    {conv.summary && <p className="text-sm font-medium">{hl(conv.summary)}</p>}
-                    {conv.attendeesDescription && conv.title && (
-                      <p className="text-xs italic text-muted-foreground">{hl(conv.attendeesDescription)}</p>
-                    )}
-                    {conv.prepNotes && conv.prepNotes.length > 0 && (
-                      <div className="rounded-md bg-amber-50/60 p-2">
-                        <p className="mb-1 flex items-center gap-1 text-xs font-medium text-amber-900">
-                          <FileText className="h-3 w-3" /> Prep notes
-                        </p>
-                        {conv.prepNotes.map((note) => (
-                          <div key={note.id} className="prep-note-markdown text-sm text-muted-foreground">
-                            <ReactMarkdown>{note.content}</ReactMarkdown>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {conv.notes && (
-                      <div className="prep-note-markdown text-sm text-muted-foreground">
-                        <ReactMarkdown>{conv.notes}</ReactMarkdown>
-                      </div>
-                    )}
-                    {conv.attachments && conv.attachments.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {conv.attachments.map((att) =>
-                          (att.mimeType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(att.url) ? (
-                            <a key={att.id} href={att.url} target="_blank" rel="noreferrer" title={att.name}>
-                              <img
-                                src={att.url}
-                                alt={att.name}
-                                className="h-16 w-16 rounded-md border object-cover hover:opacity-80"
-                              />
-                            </a>
-                          ) : (
-                            <a
-                              key={att.id}
-                              href={att.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs text-primary hover:underline"
-                              title={att.name}
-                            >
-                              <Paperclip className="h-3 w-3" />
-                              <span className="max-w-40 truncate">{att.name}</span>
-                            </a>
-                          )
-                        )}
-                      </div>
-                    )}
-                    {conv.nextSteps && (
-                      <div className="text-sm text-muted-foreground">
-                        <span className="text-xs font-medium">Next steps:</span>
-                        <div className="prep-note-markdown">
-                          <ReactMarkdown>{conv.nextSteps}</ReactMarkdown>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {conv.contact && (
-                        <Link to={`/contacts/${conv.contact.id}`}>
-                          <Badge variant="outline" className="text-xs hover:bg-muted">
-                            {hl(conv.contact.name)}
-                          </Badge>
-                        </Link>
-                      )}
-                      {conv.company && (
-                        <Link to={`/companies/${conv.company.id}`}>
-                          <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100">
-                            <Building2 className="mr-1 h-3 w-3" />
-                            {hl(conv.company.name)}
-                          </Badge>
-                        </Link>
-                      )}
-                      {conv.orgs?.map((o) => (
-                        <Link key={o.company.id} to={`/companies/${o.company.id}`}>
-                          <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100">
-                            <Building2 className="mr-1 h-3 w-3" />
-                            {hl(o.company.name)}
-                          </Badge>
-                        </Link>
-                      ))}
-                      {conv.participants?.map((p) => (
-                        <Link key={p.contact.id} to={`/contacts/${p.contact.id}`}>
-                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100" title={p.note || undefined}>
-                            {hl(p.contact.name)}
-                          </Badge>
-                        </Link>
-                      ))}
-                      {conv.tags?.map((t) => (
-                        <button key={t.tag.id} type="button" onClick={() => setParam('tagId', t.tag.id.toString())}>
-                          <Badge variant="outline" className="text-xs bg-violet-50 text-violet-800 border-violet-200 hover:bg-violet-100">
-                            <TagIcon className="mr-1 h-3 w-3" />
-                            {hl(t.tag.name)}
-                          </Badge>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <MeetingCard
+                key={conv.id}
+                conv={conv}
+                qTerm={qTerm}
+                onEdit={() => quickLog.openEdit(conv.id)}
+                onDelete={() => setDeleteId(conv.id)}
+                onSeriesClick={(id) => setParam('seriesId', id.toString())}
+                onTagClick={(id) => setParam('tagId', id.toString())}
+              />
             ))}
           </div>
           {hasMore && (

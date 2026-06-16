@@ -381,7 +381,7 @@ export interface SearchMatch {
   snippet: string;
 }
 
-export type SearchScope = 'people-profile' | 'people-notes' | 'orgs' | 'meetings' | 'actions' | 'ideas';
+export type SearchScope = 'people-profile' | 'people-notes' | 'useful' | 'orgs' | 'meetings' | 'actions' | 'ideas';
 export type SearchSort = 'relevance' | 'newest' | 'oldest' | 'alpha' | 'recent-contact';
 
 export interface SearchResult {

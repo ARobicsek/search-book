@@ -8,8 +8,8 @@ const router = Router();
 // "people-profile" vs "people-notes" split lets "Boston" find people located
 // in Boston without drowning in every meeting note that mentions Boston.
 
-type Scope = 'people-profile' | 'people-notes' | 'orgs' | 'meetings' | 'actions' | 'ideas';
-const ALL_SCOPES: Scope[] = ['people-profile', 'people-notes', 'orgs', 'meetings', 'actions', 'ideas'];
+type Scope = 'people-profile' | 'people-notes' | 'useful' | 'orgs' | 'meetings' | 'actions' | 'ideas';
+const ALL_SCOPES: Scope[] = ['people-profile', 'people-notes', 'useful', 'orgs', 'meetings', 'actions', 'ideas'];
 
 type SortMode = 'relevance' | 'newest' | 'oldest' | 'alpha' | 'recent-contact';
 
@@ -158,6 +158,11 @@ router.get('/', async (req: Request, res: Response) => {
 
     const peopleProfile = scopes.has('people-profile');
     const peopleNotes = scopes.has('people-notes');
+    // "Useful" is its own scope (not part of People — notes) so it can be searched
+    // in isolation: "who is useful for <topic>". A contact query runs if any of the
+    // three people scopes is on.
+    const useful = scopes.has('useful');
+    const anyPeople = peopleProfile || peopleNotes || useful;
 
     const tStart = Date.now();
 
@@ -210,7 +215,6 @@ router.get('/', async (req: Request, res: Response) => {
           { notes: { contains: term } },
           { personalDetails: { contains: term } },
           { openQuestions: { contains: term } },
-          { usefulFor: { contains: term } },
           { mutualConnections: { contains: term } },
           { prepNotes: { some: { content: { contains: term } } } },
           // Per-participant meeting takeaways live on ConversationParticipant.note;
@@ -218,10 +222,13 @@ router.get('/', async (req: Request, res: Response) => {
           { participantInConversations: { some: { note: { contains: term } } } },
         );
       }
+      if (useful) {
+        clauses.push({ usefulFor: { contains: term } });
+      }
       return clauses;
     };
 
-    const contactsPromise: Promise<any[]> = (peopleProfile || peopleNotes)
+    const contactsPromise: Promise<any[]> = anyPeople
       ? prisma.contact.findMany({
         where: { AND: terms.map((t) => ({ OR: contactClausesFor(t) })) },
         select: {
@@ -283,12 +290,15 @@ router.get('/', async (req: Request, res: Response) => {
         pushField(fields, 'notes', c.notes, 1);
         pushField(fields, 'personal details', c.personalDetails, 1);
         pushField(fields, 'open questions', c.openQuestions, 1);
-        // High-signal curated field → weight 2 (tag tier), so a topic match here
-        // ranks the person above an incidental mention in free-text notes.
-        pushField(fields, 'useful for', c.usefulFor, 2);
         pushField(fields, 'mutual connections', c.mutualConnections, 1);
         for (const pn of c.prepNotes || []) pushField(fields, 'prep note', pn.content, 1);
         for (const pic of c.participantInConversations || []) pushField(fields, 'meeting takeaway', pic.note, 1);
+      }
+      if (useful) {
+        // High-signal curated field → weight 2 (tag tier), so a topic match here
+        // ranks the person above an incidental mention in free-text notes. The
+        // 'useful for' field label drives the lightbulb marker on result cards.
+        pushField(fields, 'useful for', c.usefulFor, 2);
       }
       return fields;
     };
@@ -560,7 +570,7 @@ router.get('/', async (req: Request, res: Response) => {
       };
     } else {
       const [tContacts, tCompanies, tConversations, tActions, tIdeas] = await Promise.all([
-        peopleProfile || peopleNotes
+        anyPeople
           ? prisma.contact.count({ where: { AND: terms.map((t) => ({ OR: contactClausesFor(t) })) } })
           : 0,
         scopes.has('orgs')

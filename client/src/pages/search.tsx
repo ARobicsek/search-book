@@ -80,6 +80,7 @@ const companyStatusColors: Record<CompanyStatus, string> = {
 const SCOPE_OPTIONS: { value: SearchScope; label: string }[] = [
   { value: 'people-profile', label: 'People — profile' },
   { value: 'people-notes', label: 'People — notes' },
+  { value: 'useful', label: 'Useful for' },
   { value: 'orgs', label: 'Organizations' },
   { value: 'meetings', label: 'Meetings' },
   { value: 'actions', label: 'Actions' },
@@ -146,12 +147,18 @@ function MatchEvidence({
   if (!matches || matches.length === 0) return null
   return (
     <div className="mt-1.5 space-y-0.5">
-      {matches.map((m, i) => (
-        <p key={i} className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground/70">{m.field}:</span>{' '}
-          <HighlightedText text={m.snippet} terms={terms} caseSensitive={caseSensitive} />
-        </p>
-      ))}
+      {matches.map((m, i) => {
+        // Flag matches from the "Useful For" field so it's unmistakable why the
+        // person surfaced: amber + a lightbulb (mirrors the contact-page marker).
+        const isUseful = m.field === 'useful for'
+        return (
+          <p key={i} className={cn('text-xs', isUseful ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
+            {isUseful && <Lightbulb className="mr-0.5 inline h-3 w-3 -translate-y-px text-amber-500" />}
+            <span className={cn('font-medium', isUseful ? 'text-amber-700 dark:text-amber-400' : 'text-foreground/70')}>{m.field}:</span>{' '}
+            <HighlightedText text={m.snippet} terms={terms} caseSensitive={caseSensitive} />
+          </p>
+        )
+      })}
     </div>
   )
 }
@@ -710,7 +717,7 @@ export function SearchPage() {
     caseSensitive,
   }
 
-  const showPeople = scopes.includes('people-profile') || scopes.includes('people-notes')
+  const showPeople = scopes.includes('people-profile') || scopes.includes('people-notes') || scopes.includes('useful')
   const showOrgs = scopes.includes('orgs')
   const showMeetings = scopes.includes('meetings')
   const showActions = scopes.includes('actions')

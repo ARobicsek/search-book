@@ -58,7 +58,7 @@ async function meetingOrgClauses(companyId: number): Promise<Record<string, unkn
 // GET /api/meetings — paginated list of all conversations with filters.
 // Filters: seriesId (series view), title (contains, legacy), companyId (org field
 // OR a current employee of that org attended), tagId, type, from/to (date range),
-// q (meeting-TITLE contains — people/orgs/tags have their own filters), id
+// q (title / participant name / series name contains — people/orgs/tags have their own filters), id
 // (single-meeting deep link). Sort: sortBy (date|updatedAt|createdAt) + sortDir
 // (asc|desc), default date desc. Returns the standard pagination envelope.
 router.get('/', async (req: Request, res: Response) => {
@@ -77,22 +77,23 @@ router.get('/', async (req: Request, res: Response) => {
     if (from) AND.push({ date: { gte: from as string } });
     if (to) AND.push({ date: { lte: to as string } });
 
-    // Free-text search matches what's shown as the meeting heading: the TITLE,
-    // or — when a meeting has no title — the name displayed in its place (first
-    // participant → anchor contact → org → attendees text, mirroring the client's
-    // conversationDisplayName). Notes/summaries/tags stay out so a title search
-    // stays a title search; people/orgs/tags have their own filters above.
+    // Free-text search matches the meeting's TITLE, any named PARTICIPANT, and its
+    // SERIES name (owner ask). For UNTITLED meetings it also matches the rest of the
+    // name shown in the title's place (anchor contact → org → attendees text,
+    // mirroring the client's conversationDisplayName), so the heading stays findable.
+    // Notes/summaries/tags stay out — they have their own filters above.
     const qTerm = typeof q === 'string' && q.trim() ? q.trim() : null;
     if (qTerm) {
       AND.push({
         OR: [
           { title: { contains: qTerm } },
+          { participants: { some: { contact: { name: { contains: qTerm } } } } },
+          { series: { name: { contains: qTerm } } },
           {
             AND: [
               { OR: [{ title: null }, { title: '' }] },
               {
                 OR: [
-                  { participants: { some: { contact: { name: { contains: qTerm } } } } },
                   { contact: { name: { contains: qTerm } } },
                   { company: { name: { contains: qTerm } } },
                   { attendeesDescription: { contains: qTerm } },

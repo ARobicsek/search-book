@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { currentEmployerCompanyIds } from '../company-status';
 
 const router = Router();
 
@@ -20,79 +21,46 @@ const meetingListInclude = {
   attachments: true,
 };
 
-// Free-text ranking needs the discussed people/orgs too, so a meeting that
-// matched only via a discussed name scores (instead of silently ranking 0).
-const meetingRankInclude = {
-  ...meetingListInclude,
-  contactsDiscussed: { include: { contact: { select: { id: true, name: true } } } },
-  companiesDiscussed: { include: { company: { select: { id: true, name: true } } } },
-};
-
-// Free-text (`q`) coverage: every meeting field, mirroring search.ts'
-// conversationClausesFor so the Meetings box and global Search agree.
-function meetingMatchClauses(term: string): Record<string, unknown>[] {
-  return [
-    { title: { contains: term } },
-    { summary: { contains: term } },
-    { notes: { contains: term } },
-    { nextSteps: { contains: term } },
-    { attendeesDescription: { contains: term } },
-    { tags: { some: { tag: { name: { contains: term } } } } },
-    { prepNotes: { some: { content: { contains: term } } } },
-    { attachments: { some: { name: { contains: term } } } },
-    { contact: { name: { contains: term } } },
-    { company: { name: { contains: term } } },
-    { orgs: { some: { company: { name: { contains: term } } } } },
-    { participants: { some: { contact: { name: { contains: term } } } } },
-    { participants: { some: { note: { contains: term } } } },
-    { contactsDiscussed: { some: { contact: { name: { contains: term } } } } },
-    { companiesDiscussed: { some: { company: { name: { contains: term } } } } },
-  ];
-}
-
-// Relevance weight for a meeting against a free-text term (case-insensitive,
-// matching SQLite LIKE). Highest matching field wins:
-//   title=4 > people in the meeting=3 > org names + attendees desc=2 > rest=1.
-function scoreMeeting(conv: any, termLower: string): number {
-  let score = 0;
-  const has = (v: string | null | undefined) => !!v && v.toLowerCase().includes(termLower);
-  const bump = (n: number) => { if (n > score) score = n; };
-
-  if (has(conv.title)) bump(4);
-  // People in the meeting (anchor contact + participants)
-  if (has(conv.contact?.name)) bump(3);
-  for (const p of conv.participants || []) if (has(p.contact?.name)) bump(3);
-  // Org names + attendees description
-  if (has(conv.company?.name)) bump(2);
-  for (const o of conv.orgs || []) if (has(o.company?.name)) bump(2);
-  if (has(conv.attendeesDescription)) bump(2);
-  // Everything else
-  if (has(conv.summary)) bump(1);
-  if (has(conv.notes)) bump(1);
-  if (has(conv.nextSteps)) bump(1);
-  for (const t of conv.tags || []) if (has(t.tag?.name)) bump(1);
-  for (const pn of conv.prepNotes || []) if (has(pn.content)) bump(1);
-  for (const a of conv.attachments || []) if (has(a.name)) bump(1);
-  for (const p of conv.participants || []) if (has(p.note)) bump(1);
-  for (const cd of conv.contactsDiscussed || []) if (has(cd.contact?.name)) bump(1);
-  for (const cc of conv.companiesDiscussed || []) if (has(cc.company?.name)) bump(1);
-
-  return score;
-}
-
-// Cap for the free-text ranking path: fetch a superset, rank in JS, then
-// paginate the ranked array (same fetch-all-then-slice shape as series view).
-const RANK_FETCH_CAP = 300;
-
-// Sort whitelist for the default list path (the `q` ranking path keeps its own
-// score-then-date order). Maps the client's sortBy to a real column.
+// Sort whitelist for the list. Maps the client's sortBy to a real column.
 const SORT_FIELDS = new Set(['date', 'updatedAt', 'createdAt']);
 
+// Org filter, widened: a meeting matches `companyId` when the company is the
+// meeting's anchor/additional org OR when the meeting's anchor contact / any named
+// participant CURRENTLY works there. The "currently works there" set can't be
+// queried precisely against the contacts' JSON `additionalCompanyIds`, so we
+// prefilter candidates with a cheap substring match and confirm each with the
+// shared `currentEmployerCompanyIds` rule. Single-user dataset → sub-second; if a
+// future dataset made this slow we'd drop the employee expansion, not page it.
+async function meetingOrgClauses(companyId: number): Promise<Record<string, unknown>[]> {
+  const clauses: Record<string, unknown>[] = [
+    { companyId },                     // anchor org
+    { orgs: { some: { companyId } } }, // additional orgs the meeting was WITH
+  ];
+  const candidates = await prisma.contact.findMany({
+    where: {
+      OR: [
+        { companyId },
+        { additionalCompanyIds: { contains: `${companyId}` } },
+      ],
+    },
+    select: { id: true, companyId: true, additionalCompanyIds: true },
+  });
+  const employeeIds = candidates
+    .filter((c) => currentEmployerCompanyIds(c).includes(companyId))
+    .map((c) => c.id);
+  if (employeeIds.length) {
+    clauses.push({ contactId: { in: employeeIds } });                              // anchor contact (1:1 legacy)
+    clauses.push({ participants: { some: { contactId: { in: employeeIds } } } });  // named participant
+  }
+  return clauses;
+}
+
 // GET /api/meetings — paginated list of all conversations with filters.
-// Filters: seriesId (series view), title (contains, legacy), companyId, tagId,
-// type, from/to (date range), q (weighted free text), id (single-meeting deep
-// link). Sort: sortBy (date|updatedAt|createdAt) + sortDir (asc|desc), default
-// date desc. Returns the standard pagination envelope.
+// Filters: seriesId (series view), title (contains, legacy), companyId (org field
+// OR a current employee of that org attended), tagId, type, from/to (date range),
+// q (meeting-TITLE contains — people/orgs/tags have their own filters), id
+// (single-meeting deep link). Sort: sortBy (date|updatedAt|createdAt) + sortDir
+// (asc|desc), default date desc. Returns the standard pagination envelope.
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { title, seriesId, companyId, tagId, type, from, to, q, id, sortBy, sortDir, limit, offset } = req.query;
@@ -104,17 +72,16 @@ router.get('/', async (req: Request, res: Response) => {
     if (id) AND.push({ id: parseInt(id as string) });
     if (seriesId) AND.push({ seriesId: parseInt(seriesId as string) });
     if (type && type !== 'all') AND.push({ type });
-    if (companyId) {
-      // Match the anchor org OR any additional org on the meeting
-      const cId = parseInt(companyId as string);
-      AND.push({ OR: [{ companyId: cId }, { orgs: { some: { companyId: cId } } }] });
-    }
+    if (companyId) AND.push({ OR: await meetingOrgClauses(parseInt(companyId as string)) });
     if (tagId) AND.push({ tags: { some: { tagId: parseInt(tagId as string) } } });
     if (from) AND.push({ date: { gte: from as string } });
     if (to) AND.push({ date: { lte: to as string } });
 
+    // Free-text search matches the meeting TITLE only — participants, orgs and
+    // tags each have a dedicated filter above, and notes/summaries are excluded
+    // on purpose so a title search stays a title search.
     const qTerm = typeof q === 'string' && q.trim() ? q.trim() : null;
-    if (qTerm) AND.push({ OR: meetingMatchClauses(qTerm) });
+    if (qTerm) AND.push({ title: { contains: qTerm } });
 
     // Legacy `title` filter (kept for back-compat deep links): plain contains.
     // The series view now uses the `seriesId` param above.
@@ -126,29 +93,6 @@ router.get('/', async (req: Request, res: Response) => {
     const sortField = SORT_FIELDS.has(sortBy as string) ? (sortBy as string) : 'date';
     const dir = sortDir === 'asc' ? 'asc' : 'desc';
     const orderBy = { [sortField]: dir } as Record<string, 'asc' | 'desc'>;
-
-    // Weighted free-text path: fetch a capped superset of the filtered set,
-    // score each meeting, then sort by score desc, date desc and paginate.
-    if (qTerm) {
-      const rows = await prisma.conversation.findMany({
-        where,
-        include: meetingRankInclude,
-        orderBy: { date: 'desc' },
-        take: RANK_FETCH_CAP,
-      });
-      const termLower = qTerm.toLowerCase();
-      const ranked = rows
-        .map((r) => ({ r, score: scoreMeeting(r, termLower) }))
-        .sort((a, b) => b.score - a.score || (b.r.date || '').localeCompare(a.r.date || ''))
-        .map((x) => x.r);
-      const total = ranked.length;
-      const data = ranked.slice(skip, skip + take);
-      res.json({
-        data,
-        pagination: { total, limit: take, offset: skip, hasMore: skip + data.length < total },
-      });
-      return;
-    }
 
     const [total, data] = await Promise.all([
       prisma.conversation.count({ where }),

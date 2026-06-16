@@ -20,8 +20,10 @@ Schema change; **owner applied the Turso DDL**, typecheck + full client build pa
    (server `where.AND:[{usefulFor:{not:null}},{usefulFor:{not:''}}]`, composes with the search `OR`); and
    `usefulFor` folded into the list `search` OR, so **Useful + type a topic** narrows to matching people.
    A small 💡 marks useful rows while browsing. (`contacts.ts` list `select` now includes `usefulFor`.)
-5. **Recall (global search, `search.ts`)** — `usefulFor` indexed in the **people-notes** scope at weight 2
-   (a curated field outranks an incidental notes mention), with a "useful for" match-evidence label.
+5. **Recall (global search, `search.ts` + `search.tsx`)** — `usefulFor` has its **own dedicated scope**
+   (`useful`, chip "Useful for") so it can be searched in **isolation** ("who is useful for <topic>"), separate
+   from People — notes; weight 2. A contact query runs if any of the three people scopes is on (`anyPeople`).
+   Result cards **flag a useful-field hit** with an amber 💡 + "useful for:" label (`MatchEvidence`).
 
 Verified: a throwaway Prisma script confirmed write/read, the `useful=true` filter, the composed
 `AND(useful)+OR(search)` where clause, and exclusion of non-matching searches (script removed after).

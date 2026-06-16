@@ -684,6 +684,7 @@ export function ContactFormPage() {
             <CardDescription>Name, role, and classification</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
+
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="name">
                 Name <span className="text-destructive">*</span>
@@ -710,37 +711,6 @@ export function ContactFormPage() {
                     setForm((prev) => ({ ...prev, photoFile: val, photoUrl: '' }))
                   }
                 }}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={form.title}
-                onChange={(e) => set('title', e.target.value)}
-                placeholder="e.g. VP of Engineering"
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="roleDescription">Role Description</Label>
-              <Textarea
-                id="roleDescription"
-                value={form.roleDescription}
-                onChange={(e) => set('roleDescription', e.target.value)}
-                placeholder="Describe their responsibilities, team size, focus areas..."
-                rows={2}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Input
-                id="location"
-                value={form.location}
-                onChange={(e) => set('location', e.target.value)}
-                placeholder="City / Region"
               />
             </div>
 
@@ -862,6 +832,27 @@ export function ContactFormPage() {
               </div>
             )}
 
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={form.title}
+                onChange={(e) => set('title', e.target.value)}
+                placeholder="e.g. VP of Engineering"
+              />
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="roleDescription">Role Description</Label>
+              <Textarea
+                id="roleDescription"
+                value={form.roleDescription}
+                onChange={(e) => set('roleDescription', e.target.value)}
+                placeholder="Describe their responsibilities, team size, focus areas..."
+                rows={2}
+              />
+            </div>
+
             <div className="space-y-2 sm:col-span-2">
               <Label>Emails</Label>
               <div className="space-y-2">
@@ -908,6 +899,27 @@ export function ContactFormPage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                value={form.location}
+                onChange={(e) => set('location', e.target.value)}
+                placeholder="City / Region"
+              />
+            </div>
+
+          </CardContent>
+        </Card>
+
+
+        {/* Classification */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Classification</CardTitle>
+            <CardDescription>Ecosystem and Status</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
               <Label htmlFor="ecosystem">Ecosystem</Label>
               <Select value={form.ecosystem} onValueChange={(v) => set('ecosystem', v)}>
                 <SelectTrigger id="ecosystem" className="w-full">
@@ -938,10 +950,10 @@ export function ContactFormPage() {
                 </SelectContent>
               </Select>
             </div>
-
-
           </CardContent>
         </Card>
+
+
 
         {/* Contact Details — Progressive Disclosure */}
         <Collapsible open={contactDetailsOpen} onOpenChange={setContactDetailsOpen}>

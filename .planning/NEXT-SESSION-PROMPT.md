@@ -7,6 +7,7 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 
 1. **Sidebar Reordering:** Moved "Organizations" below "Actions" in the left-hand navigation panel (`app-sidebar.tsx`).
 2. **Global Column Sorting:** Fixed TanStack table column sorting on the Contacts page so that it sorts the entire database rather than just the currently loaded page of 50. Implemented by setting `manualSorting: true` in the table configuration and extending `/api/contacts` to support dynamic server-side `ORDER BY` for all sortable columns, maintaining performance ("not very slow" requirement). The other list pages (Organizations, Actions, Ideas) were audited and confirmed to already be sorting their full datasets seamlessly because they load their data non-paginated (fast and instant). Meetings already uses a server-backed dropdown sort.
+3. **Contact Edit Form Layout:** Reordered fields on the Contact Edit screen (`contact-form.tsx`): moved Companies & Past Roles below the Photo, moved Location below Emails, and extracted Ecosystem and Status into their own dedicated "Classification" card.
 3. **Card title + participant order + search.** `conversationDisplayName` precedence is now
    `title → first participant → contact → company → attendeesDescription` (first participant outranks the legacy
    anchor). "First participant" needed a real order: added **`ConversationParticipant.ordering`** (set from the
@@ -63,4 +64,4 @@ Both are runnable dual-mode scripts; the SQL was also provided inline in the con
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. Organizations was moved below Actions in the sidebar. Contacts column sorting was updated to correctly sort the entire list server-side. Plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9).
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. Organizations was moved below Actions in the sidebar. Contacts column sorting was updated to correctly sort the entire list server-side. The Contact Edit form layout was reorganized. Plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9).

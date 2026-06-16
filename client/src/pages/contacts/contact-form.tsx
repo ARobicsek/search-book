@@ -1230,26 +1230,33 @@ export function ContactFormPage() {
             return
           }
 
-          const uniqueByNorm = new Map<string, string>() // norm -> original casing
+          const uniqueByNorm = new Map<string, { name: string, isCurrent: boolean }>() // norm -> info
           for (const e of experience) {
             const norm = normalizeCompanyNameForDedupe(e.company)
-            if (norm && !uniqueByNorm.has(norm)) uniqueByNorm.set(norm, e.company)
+            if (norm) {
+              if (!uniqueByNorm.has(norm)) {
+                uniqueByNorm.set(norm, { name: e.company, isCurrent: !!e.isCurrent })
+              } else if (e.isCurrent) {
+                uniqueByNorm.get(norm)!.isCurrent = true
+              }
+            }
           }
 
           const idByNorm = new Map<string, number>()
           const newlyCreated: { id: number; name: string }[] = []
-          await Promise.all(Array.from(uniqueByNorm.entries()).map(async ([norm, originalName]) => {
+          await Promise.all(Array.from(uniqueByNorm.entries()).map(async ([norm, info]) => {
             const existing = companies.find(c => normalizeCompanyNameForDedupe(c.name) === norm)
             if (existing) {
               idByNorm.set(norm, existing.id)
               return
             }
             try {
-              const created = await api.post<Company>('/companies', { name: originalName.trim(), status: 'RESEARCHING' })
+              const status = info.isCurrent ? 'CONNECTED' : 'NONE'
+              const created = await api.post<Company>('/companies', { name: info.name.trim(), status })
               idByNorm.set(norm, created.id)
               newlyCreated.push({ id: created.id, name: created.name })
             } catch (err) {
-              console.error('[LinkedIn import] Failed to create company:', originalName, err)
+              console.error('[LinkedIn import] Failed to create company:', info.name, err)
             }
           }))
           if (newlyCreated.length > 0) {

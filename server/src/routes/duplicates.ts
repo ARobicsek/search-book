@@ -204,6 +204,20 @@ interface FieldSelections {
   flagged?: FieldSelection;
 }
 
+// Union two "Useful For" notes so a merge never drops a useful person, whichever
+// side had it. Keeps the kept contact's text first and appends the removed
+// contact's only when it adds something new (non-empty and not identical).
+// usefulFor is intentionally NOT a user-selectable merge field — carry-over is
+// automatic so the owner can't accidentally discard a "useful" flag.
+function unionUsefulFor(keepVal: string | null, removeVal: string | null): string | null {
+  const keepText = (keepVal ?? '').trim();
+  const removeText = (removeVal ?? '').trim();
+  if (!removeText) return keepVal ?? null;            // nothing to carry over
+  if (!keepText) return removeText;                   // only the removed side had it
+  if (keepText === removeText) return keepVal ?? null; // identical — no change
+  return `${keepText}\n\n${removeText}`;              // both differ → keep both
+}
+
 // POST /api/duplicates/merge — merge two contacts with field selection
 router.post('/merge', async (req: Request, res: Response) => {
   try {
@@ -289,6 +303,15 @@ router.post('/merge', async (req: Request, res: Response) => {
           });
         }
       }
+
+      // "Useful For" carries over regardless of the field selections: if the
+      // removed contact has useful notes the kept one lacks (or different ones),
+      // union them onto the kept contact so a useful person survives the merge.
+      const mergedUsefulFor = unionUsefulFor(keep.usefulFor, remove.usefulFor);
+      if (mergedUsefulFor !== (keep.usefulFor ?? null)) {
+        await tx.contact.update({ where: { id: keepId }, data: { usefulFor: mergedUsefulFor } });
+      }
+
       // Move conversations (anchor contact). Raw SQL on purpose: a merge is a
       // re-link, not a content edit, so it must NOT bump Conversation.updatedAt
       // (Prisma's @updatedAt would, sending old meetings to the top of the

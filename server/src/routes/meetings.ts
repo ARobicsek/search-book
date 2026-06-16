@@ -14,6 +14,7 @@ const meetingListInclude = {
   },
   orgs: { include: { company: { select: { id: true, name: true } } } },
   tags: { include: { tag: { select: { id: true, name: true } } } },
+  series: { select: { id: true, name: true } },
   prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
   attachments: true,
 };
@@ -82,19 +83,25 @@ function scoreMeeting(conv: any, termLower: string): number {
 // paginate the ranked array (same fetch-all-then-slice shape as series view).
 const RANK_FETCH_CAP = 300;
 
+// Sort whitelist for the default list path (the `q` ranking path keeps its own
+// score-then-date order). Maps the client's sortBy to a real column.
+const SORT_FIELDS = new Set(['date', 'updatedAt', 'createdAt']);
+
 // GET /api/meetings — paginated list of all conversations with filters.
-// Filters: title (series view: case-insensitive exact), companyId, tagId, type,
-// from/to (date range), q (weighted free text), id (single-meeting deep link).
-// Returns the standard pagination envelope.
+// Filters: seriesId (series view), title (contains, legacy), companyId, tagId,
+// type, from/to (date range), q (weighted free text), id (single-meeting deep
+// link). Sort: sortBy (date|updatedAt|createdAt) + sortDir (asc|desc), default
+// date desc. Returns the standard pagination envelope.
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { title, companyId, tagId, type, from, to, q, id, limit, offset } = req.query;
+    const { title, seriesId, companyId, tagId, type, from, to, q, id, sortBy, sortDir, limit, offset } = req.query;
 
     const take = Math.min(parseInt(limit as string) || 20, 100);
     const skip = parseInt(offset as string) || 0;
 
     const AND: Record<string, unknown>[] = [];
     if (id) AND.push({ id: parseInt(id as string) });
+    if (seriesId) AND.push({ seriesId: parseInt(seriesId as string) });
     if (type && type !== 'all') AND.push({ type });
     if (companyId) {
       // Match the anchor org OR any additional org on the meeting
@@ -108,31 +115,16 @@ router.get('/', async (req: Request, res: Response) => {
     const qTerm = typeof q === 'string' && q.trim() ? q.trim() : null;
     if (qTerm) AND.push({ OR: meetingMatchClauses(qTerm) });
 
-    // Series filter: SQLite `contains` is case-insensitive; narrow in the DB,
-    // then enforce exact (case-insensitive) match in JS. A single series is
-    // small, so JS pagination is fine on this path.
-    const seriesTitle = typeof title === 'string' && title.trim() ? title.trim() : null;
-    if (seriesTitle) AND.push({ title: { contains: seriesTitle } });
+    // Legacy `title` filter (kept for back-compat deep links): plain contains.
+    // The series view now uses the `seriesId` param above.
+    if (typeof title === 'string' && title.trim()) AND.push({ title: { contains: title.trim() } });
 
     const where = AND.length ? { AND } : {};
 
-    if (seriesTitle) {
-      const rows = await prisma.conversation.findMany({
-        where,
-        include: meetingListInclude,
-        orderBy: { date: 'desc' },
-      });
-      const exact = rows.filter(
-        (r) => (r.title || '').trim().toLowerCase() === seriesTitle.toLowerCase()
-      );
-      const total = exact.length;
-      const data = exact.slice(skip, skip + take);
-      res.json({
-        data,
-        pagination: { total, limit: take, offset: skip, hasMore: skip + data.length < total },
-      });
-      return;
-    }
+    // Resolve the sort order (default: meeting date, newest first).
+    const sortField = SORT_FIELDS.has(sortBy as string) ? (sortBy as string) : 'date';
+    const dir = sortDir === 'asc' ? 'asc' : 'desc';
+    const orderBy = { [sortField]: dir } as Record<string, 'asc' | 'desc'>;
 
     // Weighted free-text path: fetch a capped superset of the filtered set,
     // score each meeting, then sort by score desc, date desc and paginate.
@@ -162,7 +154,7 @@ router.get('/', async (req: Request, res: Response) => {
       prisma.conversation.findMany({
         where,
         include: meetingListInclude,
-        orderBy: { date: 'desc' },
+        orderBy,
         take,
         skip,
       }),

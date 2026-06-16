@@ -184,7 +184,10 @@ model Conversation {
   notes                String?
   nextSteps            String?
   photoFile            String?
+  seriesId             Int?
+  series               Series?  @relation(fields: [seriesId], references: [id], onDelete: SetNull)
   createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   actions            Action[]
   participants       ConversationParticipant[] @relation("ConversationParticipants")
@@ -194,6 +197,16 @@ model Conversation {
   tags               ConversationTag[]
   prepNotes          ConversationPrepNote[]
   attachments        ConversationAttachment[]
+}
+
+// A recurring meeting series (D4 revised): meetings opt into a series explicitly
+// and later meetings join it from a picker, instead of relying on byte-identical
+// titles. Replaces the old "series == title string" convention.
+model Series {
+  id            Int            @id @default(autoincrement())
+  name          String
+  createdAt     DateTime       @default(now())
+  conversations Conversation[]
 }
 
 // Prep notes attached to a specific meeting (incl. one logged in advance with a

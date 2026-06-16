@@ -19,6 +19,7 @@ const conversationIncludes = {
     include: { company: { select: { id: true, name: true } } },
   },
   tags: { include: { tag: { select: { id: true, name: true } } } },
+  series: { select: { id: true, name: true } },
   actions: { select: { id: true, title: true, completed: true, dueDate: true } },
   prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
   attachments: true,
@@ -141,6 +142,7 @@ router.post('/', async (req: Request, res: Response) => {
       contactId,
       title,
       companyId,
+      seriesId,
       attendeesDescription,
       date,
       datePrecision,
@@ -190,6 +192,7 @@ router.post('/', async (req: Request, res: Response) => {
           contactId: anchorContactId,
           title: title?.trim() || null,
           companyId: anchorCompanyId,
+          seriesId: seriesId ? Number(seriesId) : null,
           attendeesDescription: attendeesDescription?.trim() || null,
           date,
           datePrecision: datePrecision || 'DAY',
@@ -317,7 +320,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 // Task 18 pattern: explicit allow-list of client-writable Conversation columns.
 const CONVERSATION_WRITABLE_FIELDS = [
-  'contactId', 'title', 'companyId', 'attendeesDescription',
+  'contactId', 'title', 'companyId', 'seriesId', 'attendeesDescription',
   'date', 'datePrecision', 'type', 'summary', 'notes', 'nextSteps', 'photoFile',
 ] as const;
 
@@ -354,6 +357,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     if ('contactId' in data) data.contactId = data.contactId ? Number(data.contactId) : null;
     if ('companyId' in data) data.companyId = data.companyId ? Number(data.companyId) : null;
+    if ('seriesId' in data) data.seriesId = data.seriesId ? Number(data.seriesId) : null;
     if ('title' in data) data.title = (data.title as string | null)?.toString().trim() || null;
     if ('attendeesDescription' in data) {
       data.attendeesDescription = (data.attendeesDescription as string | null)?.toString().trim() || null;

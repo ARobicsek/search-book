@@ -5,7 +5,7 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 
 ### What Was Just Completed (Session 8)
 
-1. **LinkedIn Import Company Status Bugfix:** Modified `client/src/pages/contacts/contact-form.tsx` so that when a LinkedIn import creates a new company, it checks if the contact is currently working there (`isCurrent: true`). If they are, the new company's status defaults to `CONNECTED`; otherwise, it defaults to `NONE`. This fixes the bug where all newly imported companies defaulted to `RESEARCHING`.
+1. **LinkedIn Import Company Status Bugfix:** Modified `client/src/pages/contacts/contact-form.tsx` so that when a LinkedIn import creates a new company, it checks if the contact is currently working there (`isCurrent: true`) AND if the contact being imported is set to `CONNECTED`. If both are true, the new company's status defaults to `CONNECTED`; otherwise, it defaults to `NONE`. This fixes the bug where all newly imported companies defaulted to `RESEARCHING`.
 
 ### Previous Session (Session 7)
 1. **Company Status Sweep:** Created and executed a one-off script (`server/scripts/sweep-company-status.js`) to evaluate and update the Status of all Organizations. 

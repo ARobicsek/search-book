@@ -3,13 +3,12 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (Session 11) — Meetings page polish
+### What Was Just Completed (Session 11) — Meetings page polish — ✅ OWNER-CONFIRMED
 
 Owner-requested tweaks to the **Meetings** page (`client/src/pages/meetings.tsx`,
-`server/src/routes/meetings.ts`). All typecheck + full client build pass; **server
-behavior verified live** against the running dev API. Client UI compiled & HMR-live
-but **not yet visually verified** (chrome-devtools MCP couldn't attach — a browser
-held its automation profile). Owner should eyeball on localhost:5173 / prod.
+`server/src/routes/meetings.ts`, `server/src/routes/duplicates.ts`). All typecheck +
+full client build pass; server behavior verified live; **owner reviewed and confirmed
+"all looks good"** (incl. the collapsible cards). Shipped to `main`.
 
 1. **Search = the meeting's heading text.** The Meetings Search box matches
    `Conversation.title` (contains), and for **untitled** meetings also the name shown in
@@ -27,8 +26,8 @@ held its automation profile). Owner should eyeball on localhost:5173 / prod.
    (least-used). Order: Search, Series, Organization / Type, Tag, Date range.
 4. **Collapsible meeting cards.** Cards clamp to ~2in (`COLLAPSED_MAX_PX = 168`) with a
    fade + "Show more"/"Show less"; clicking a clamped card expands it (inner links/buttons
-   excluded). `MeetingCard` extracted; overflow measured via `ResizeObserver`. **This is
-   the one change to eyeball** (runtime measurement / click-to-expand).
+   excluded). `MeetingCard` extracted; overflow measured via `ResizeObserver`. The 168px
+   collapsed height is a one-line tweak if the owner wants it taller/shorter.
 5. **"Recently updated" — merge bug found & fixed.** Root cause of old meetings jumping to
    the top: **merging duplicate contacts** re-linked their meetings via
    `conversation.updateMany`, and Prisma `@updatedAt` bumped `updatedAt` to now. Fixed in
@@ -63,7 +62,10 @@ held its automation profile). Owner should eyeball on localhost:5173 / prod.
 
 ### What's Next
 1. **[OWNER, light]** Run the organization status sweep script against the production Turso DB (requires exporting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the environment, then running `node scripts/sweep-company-status.js` from the `server` directory).
-2. **[OWNER, light]** Confirm on prod that series create/join + the new sort/search behave as expected.
+2. **[OPTIONAL, owner sign-off needed]** The "Recently updated" merge-bump fix is forward-only —
+   meetings a *past* contact-merge already stamped stay near the top. If that bothers the owner, a
+   one-off could reset `updatedAt = createdAt` for chosen meetings, but it would also wipe genuine
+   edit timestamps — so confirm exact criteria with the owner before running anything.
 3. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 — don't push on
    those until the owner raises them.
 
@@ -71,11 +73,12 @@ held its automation profile). Owner should eyeball on localhost:5173 / prod.
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6).
 3. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
-4. **Possible polish (owner hasn't requested):** `Conversation.updatedAt` only bumps on edits to the meeting row
-   itself, not on isolated child-record edits (prep note / attachment). If "Recently updated" should float a
-   meeting on those too, bump `conversation.updatedAt` in the `conversation-prepnotes` / `conversation-attachments`
-   routes. Also: existing meetings' participant order was backfilled by rowid (insertion proxy) — re-saving a
-   meeting's participants fixes any that look wrong.
+4. **Possible polish (owner hasn't requested) — `updatedAt` *under*-bumping** (distinct from the Session 11
+   merge *over*-bump, which is fixed): `Conversation.updatedAt` only bumps on edits to the meeting row itself,
+   not on isolated child-record edits (prep note / attachment). If "Recently updated" should float a meeting on
+   those too, bump `conversation.updatedAt` in the `conversation-prepnotes` / `conversation-attachments` routes.
+   Also: existing meetings' participant order was backfilled by rowid (insertion proxy) — re-saving a meeting's
+   participants fixes any that look wrong.
 
 ### Open Bugs / Known Caveats
 - **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** Use the Turso web SQL console for DDL.
@@ -94,4 +97,4 @@ held its automation profile). Owner should eyeball on localhost:5173 / prod.
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. Last session polished the Meetings page (title-only search, widened org filter, reordered filters, collapsible cards). If the owner confirms those, plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9).
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. Session 11 polished the Meetings page (heading-text search, widened org filter, reordered filters, collapsible cards) and fixed the contact-merge `updatedAt` bump — all owner-confirmed & live. Plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't push on those until the owner raises them).

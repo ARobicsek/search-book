@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/collapsible'
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PhotoUpload } from '@/components/photo-upload'
+import { MarkdownTextarea } from '@/components/markdown-textarea'
 import { toast } from 'sonner'
 import { ArrowLeft, ChevronDown, Plus, Trash2, Loader2, RotateCcw, ExternalLink, Linkedin, Lightbulb } from 'lucide-react'
 import { useAutoSave } from '@/hooks/use-auto-save'
@@ -1012,11 +1013,11 @@ export function ContactFormPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <Textarea
+              <MarkdownTextarea
                 id="notes"
                 value={form.notes}
-                onChange={(e) => set('notes', e.target.value)}
-                placeholder="General personalized research notes"
+                onChange={(v) => set('notes', v)}
+                placeholder="General personalized research notes — paste or drag in screenshots; use the toolbar for headings, bold, lists"
                 rows={6}
               />
             </div>

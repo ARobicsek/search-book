@@ -31,6 +31,7 @@ import duplicatesRouter from './routes/duplicates';
 import searchRouter from './routes/search';
 import companyActivitiesRouter from './routes/company-activities';
 import linkedinRouter from './routes/linkedin';
+import undoRouter from './routes/undo';
 
 const app = express();
 
@@ -203,6 +204,7 @@ app.use('/api/duplicates', duplicatesRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/company-activities', companyActivitiesRouter);
 app.use('/api/linkedin', linkedinRouter);
+app.use('/api/undo', undoRouter);
 
 // Task 17: Sentry must capture errors after the routes are mounted. Most route
 // handlers catch their own errors, so this primarily reports uncaught throws.

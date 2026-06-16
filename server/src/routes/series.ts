@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -83,7 +84,12 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string);
-    await prisma.series.delete({ where: { id } });
+    const existing = await prisma.series.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Series not found' });
+      return;
+    }
+    await deleteWithSnapshot('series', id, `Series: ${existing.name}`);
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting series:', error);

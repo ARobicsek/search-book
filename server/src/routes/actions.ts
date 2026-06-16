@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
 
 const router = Router();
@@ -338,7 +339,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Action not found' });
       return;
     }
-    await prisma.action.delete({ where: { id } });
+    await deleteWithSnapshot('action', id, `Action: ${existing.title}`);
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting action:', error);

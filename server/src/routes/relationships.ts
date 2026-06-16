@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -121,7 +122,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Relationship not found' });
       return;
     }
-    await prisma.relationship.delete({ where: { id } });
+    await deleteWithSnapshot('relationship', id, 'Relationship');
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting relationship:', error);

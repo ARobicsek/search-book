@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -50,8 +51,9 @@ router.post('/', async (req: Request, res: Response) => {
     }
 });
 
-// DELETE /api/conversation-attachments/:id — removes the DB row. Blob/file
-// cleanup is best-effort and non-blocking (orphaned binaries are harmless).
+// DELETE /api/conversation-attachments/:id — removes the DB row. The underlying
+// binary is intentionally LEFT in Blob storage so the delete is undoable (orphaned
+// binaries are harmless and are already excluded from the DB backup).
 router.delete('/:id', async (req: Request, res: Response) => {
     try {
         const id = parseInt(req.params.id as string);
@@ -60,18 +62,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             res.status(404).json({ error: 'Attachment not found' });
             return;
         }
-        await prisma.conversationAttachment.delete({ where: { id } });
-
-        // Best-effort binary cleanup (Vercel Blob in prod)
-        if (process.env.BLOB_READ_WRITE_TOKEN && existing.url.startsWith('https://')) {
-            try {
-                const { del } = await import('@vercel/blob');
-                await del(existing.url);
-            } catch (err) {
-                console.warn('Blob cleanup failed (non-fatal):', err);
-            }
-        }
-
+        await deleteWithSnapshot('conversationAttachment', id, `Attachment: ${existing.name}`);
         res.status(204).send();
     } catch (error) {
         console.error('Error deleting attachment:', error);

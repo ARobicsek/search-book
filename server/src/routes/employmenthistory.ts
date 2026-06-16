@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -99,7 +100,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Employment history not found' });
       return;
     }
-    await prisma.employmentHistory.delete({ where: { id } });
+    await deleteWithSnapshot('employmentHistory', id, 'Employment entry');
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting employment history:', error);

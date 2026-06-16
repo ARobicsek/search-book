@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { captureDelete } from '../lib/undo';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
 import { promoteCompaniesToConnected } from '../company-status';
 
@@ -455,6 +456,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
     // {id,isCurrent} objects or legacy numbers; connectedCompanyIds with numbers)
     // have no FK and would be left dangling. Scrub them, then delete, atomically.
     await prisma.$transaction(async (tx) => {
+      // Capture the full delete impact (cascade rows, SetNull'd FKs, and the JSON-array
+      // scrubs below) BEFORE mutating anything, so the delete is undoable.
+      await captureDelete(tx, 'company', id, `Organization: ${existing.name}`);
+
       const referencing = await tx.contact.findMany({
         where: {
           OR: [
@@ -488,7 +493,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       }
 
       await tx.company.delete({ where: { id } });
-    });
+    }, { timeout: 15000 });
 
     res.status(204).send();
   } catch (error) {

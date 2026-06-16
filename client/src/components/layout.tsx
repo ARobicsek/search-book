@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { AppSidebar } from '@/components/app-sidebar'
 import { CommandPaletteProvider } from '@/components/command-palette'
 import { QuickLogProvider, useQuickLog } from '@/components/quick-log-dialog'
+import { UndoProvider, UndoButton } from '@/components/undo-provider'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
 import { Search, MessageSquarePlus } from 'lucide-react'
@@ -20,6 +21,8 @@ function LayoutContent() {
           <Separator orientation="vertical" className="mr-2 !h-4" />
           <span className="text-sm text-muted-foreground">SearchBook</span>
           <div className="ml-auto flex items-center gap-2">
+            {/* Persistent "Undo last delete" — only visible when a delete is undoable */}
+            <UndoButton />
             {/* Quick Log — a meeting is loggable from anywhere in two taps */}
             <Button
               variant="outline"
@@ -80,7 +83,9 @@ export function Layout() {
     <SidebarProvider>
       <QuickLogProvider>
         <CommandPaletteProvider>
-          <LayoutContent />
+          <UndoProvider>
+            <LayoutContent />
+          </UndoProvider>
         </CommandPaletteProvider>
       </QuickLogProvider>
     </SidebarProvider>

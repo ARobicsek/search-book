@@ -90,7 +90,13 @@ export const api = {
   delete(path: string): Promise<void> {
     return fetchWithTimeout(`${API_BASE}${path}`, {
       method: 'DELETE',
-    }).then(handleResponse<void>);
+    })
+      .then(handleResponse<void>)
+      .then(() => {
+        // Every delete is captured server-side for undo. Notify the UndoProvider so
+        // the persistent "Undo" affordance refreshes (see components/undo-provider.tsx).
+        window.dispatchEvent(new CustomEvent('searchbook:deleted'));
+      });
   },
   uploadFile(file: File): Promise<{ path: string }> {
     const formData = new FormData();

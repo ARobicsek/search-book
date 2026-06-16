@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -175,7 +176,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Prep note not found' });
       return;
     }
-    await prisma.prepNote.delete({ where: { id } });
+    await deleteWithSnapshot('prepNote', id, 'Prep note');
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting prep note:', error);

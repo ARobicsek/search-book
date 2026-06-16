@@ -14,6 +14,12 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 2. **Contact Cleanup:** Created and executed a one-off script (`server/scripts/delete-researching-recruiters.js`) that deletes all Contacts where Ecosystem = 'RECRUITER' AND Status is 'RESEARCHING' or 'NONE' (blank).
 
 ### What's Next
+0. **[OWNER, REQUIRED before pushing] Undo-last-delete feature is code-complete + locally
+   verified but UNPUSHED.** Plan: `.planning/UNDO-DELETE-PLAN.md`. It adds a `DeletedSnapshot`
+   table — **pushing before the table exists on Turso will 500 every delete in production.**
+   Deploy order: (a) run `CREATE TABLE DeletedSnapshot` on Turso via the web SQL console — DDL
+   is in `server/scripts/migrate-deleted-snapshot.js`; (b) `git push`. Then browser-test the
+   header **Undo** button + `Cmd/Ctrl+Z` (desktop + mobile 390px).
 1. **[OWNER, light]** Run the organization status sweep script against the production Turso DB (requires exporting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the environment, then running `node scripts/sweep-company-status.js` from the `server` directory).
 2. **[OWNER, light]** Confirm on prod that series create/join + the new sort/search behave as expected.
 3. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 — don't push on

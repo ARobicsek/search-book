@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -505,7 +506,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
-    await prisma.conversation.delete({ where: { id } });
+    await deleteWithSnapshot('conversation', id, `Meeting: ${existing.title || existing.date}`);
 
     // Update Contact.updatedAt on the anchor contact, if any
     if (existing.contactId) {

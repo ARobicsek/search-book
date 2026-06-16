@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -57,7 +58,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Link not found' });
       return;
     }
-    await prisma.link.delete({ where: { id } });
+    await deleteWithSnapshot('link', id, `Link: ${existing.title}`);
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting link:', error);

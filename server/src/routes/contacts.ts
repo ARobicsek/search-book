@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
 import { currentEmployerCompanyIds, promoteCompaniesToConnected } from '../company-status';
 
@@ -523,7 +524,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Contact not found' });
       return;
     }
-    await prisma.contact.delete({ where: { id } });
+    await deleteWithSnapshot('contact', id, `Contact: ${existing.name}`);
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting contact:', error);

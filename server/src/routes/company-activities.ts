@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { deleteWithSnapshot } from '../lib/undo';
 
 const router = Router();
 
@@ -91,7 +92,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             res.status(404).json({ error: 'Activity not found' });
             return;
         }
-        await prisma.companyActivity.delete({ where: { id } });
+        await deleteWithSnapshot('companyActivity', id, `Activity: ${existing.title}`);
         res.status(204).send();
     } catch (error) {
         console.error('Error deleting company activity:', error);

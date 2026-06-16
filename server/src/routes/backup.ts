@@ -440,6 +440,8 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.contact.updateMany({ data: { referredById: null } });
       await tx.contact.deleteMany();
       await tx.company.deleteMany();
+      // Undo snapshots reference rows that no longer exist after a wipe — clear them.
+      await tx.deletedSnapshot.deleteMany();
 
       // Insert in parent-first order (transformRecords handles date/boolean conversion)
       if (data.Company?.length) await tx.company.createMany({ data: transformRecords(data.Company) });

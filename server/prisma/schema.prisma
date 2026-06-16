@@ -447,3 +447,17 @@ model Relationship {
   type          String  // REFERRED_BY, WORKS_WITH, KNOWS, INTRODUCED_BY, REPORTS_TO
   notes         String?
 }
+
+// ─── Undo (snapshot-and-replay) ──────────────────────────────
+// One row per delete. `payload` is the JSON capture of everything the delete
+// destroyed/mutated (cascade rows to re-insert, SetNull'd FKs to restore, JSON-array
+// scrubs to re-add). Rows form a small stack — `POST /api/undo` pops the most recent
+// and replays it. Pruned to the last ~25 on each delete. See server/src/lib/undo.ts.
+model DeletedSnapshot {
+  id         Int      @id @default(autoincrement())
+  entityType String   // delegate name: 'contact' | 'company' | 'conversation' | 'action' | ...
+  entityId   Int      // original primary id (for the label / de-dupe)
+  label      String   // human description, e.g. "Meeting: Weekly VP sync"
+  payload    String   // JSON: { inserts, fkRestores, jsonRestores }
+  createdAt  DateTime @default(now())
+}

@@ -3,10 +3,12 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (Session 13) — owner-requested UI polish (5 items) — ✅ SHIPPED
+### What Was Just Completed (Session 13) — owner-requested UI polish + meetings-search follow-ups — ✅ SHIPPED
 
-All client-only (no schema changes, so no Turso DDL needed). `npm run prepush` (client+server typecheck)
-passes; verified end-to-end in the running app via chrome-devtools. Committed atomically + pushed to `main`.
+Seven asks, all **schema-free** (no Turso DDL needed; one touched the server route `meetings.ts`, the rest are
+client-only). `npm run prepush` (client+server typecheck) + full `vite build` pass; verified end-to-end in the
+running app via chrome-devtools (all throwaway test data + undo snapshots cleaned up). Committed atomically +
+pushed to `main` (remote head `3c12321`).
 
 1. **Contact card — paste images into the photo box** (`photo-upload.tsx`). A page-level `paste` listener
    uploads a clipboard image while the drop zone is showing (no photo set yet). It ignores pastes whose
@@ -71,9 +73,10 @@ passes; verified end-to-end in the running app via chrome-devtools. Committed at
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. Session 13 shipped five owner-requested UI polish items
-> (contact photo-paste + markdown Notes box; Quick Log prep bar opening on the tags/prep/attachments caret;
-> Search default-all scopes with click-to-isolate / double-click-to-invert + an "All" chip; a discoverable
-> "Manage series" dialog; new-org status defaults to blank) — all client-only, verified, pushed, live. Plan
-> of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9 — don't push on those until
-> the owner raises them).
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. Session 13 shipped owner-requested UI polish + two
+> meetings-search follow-ups (contact photo-paste + markdown Notes box; Quick Log prep bar opening on the
+> tags/prep/attachments caret; Search default-all scopes with click-to-isolate / double-click-to-invert + an
+> "All" chip; a discoverable "Manage series" dialog; new-org status defaults to blank; Meetings search now
+> matches title + participant + series name and highlights the hit in the heading / series chip / participant
+> badge) — all schema-free, verified, pushed, live. Plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md`
+> (Phase 3+, gated D5–D9 — don't push on those until the owner raises them).

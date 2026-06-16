@@ -289,11 +289,11 @@ router.post('/merge', async (req: Request, res: Response) => {
           });
         }
       }
-      // Move conversations
-      await tx.conversation.updateMany({
-        where: { contactId: removeId },
-        data: { contactId: keepId },
-      });
+      // Move conversations (anchor contact). Raw SQL on purpose: a merge is a
+      // re-link, not a content edit, so it must NOT bump Conversation.updatedAt
+      // (Prisma's @updatedAt would, sending old meetings to the top of the
+      // "Recently updated" sort — exactly the surprise the owner reported).
+      await tx.$executeRaw`UPDATE "Conversation" SET "contactId" = ${keepId} WHERE "contactId" = ${removeId}`;
 
       // Move actions
       await tx.action.updateMany({

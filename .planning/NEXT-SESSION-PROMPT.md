@@ -13,22 +13,30 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
    POST, rename PUT, delete). Existing titles shared by ≥2 meetings were auto-grouped into series by the migration.
 2. **Sort + `updatedAt`.** Added `Conversation.updatedAt` (`@updatedAt`). `/api/meetings` accepts
    `sortBy` (`date`|`updatedAt`|`createdAt`) + `sortDir`; a **Sort dropdown** on the Meetings page offers
-   Date (newest/oldest), Recently updated, Recently logged.
-3. **Card title + search.** `conversationDisplayName` precedence is now
+   Date (newest/oldest), Recently updated, Recently logged — **default is "Recently updated."**
+3. **Card title + participant order + search.** `conversationDisplayName` precedence is now
    `title → first participant → contact → company → attendeesDescription` (first participant outranks the legacy
-   anchor). The Meetings **Search** box (relabeled "Search title, people, notes…") already ranks title/participant
-   matches, so typing a person's name surfaces their untitled meeting (verified).
+   anchor). "First participant" needed a real order: added **`ConversationParticipant.ordering`** (set from the
+   submitted array index; `orderBy` in the includes) because participants were returned in `contactId` order, not
+   entry order. Legacy rows backfilled by per-conversation rowid. The Meetings **Search** box (relabeled "Search
+   title, people, notes…") ranks title/participant matches, so a person's name surfaces their untitled meeting.
 4. **Quick Log redesign ("promote the big 3").** Participants, Notes, and Follow-up actions are always visible;
    everything secondary is reorganized into 3 labeled disclosures: **Organizations & attendees** ·
    **Summary & next steps** · **Tags, prep notes & attachments**. The Title filter became a **Series** dropdown.
+5. **Series rename/delete.** Pencil + trash on the series-view header (`PUT`/`DELETE /api/series/:id`); deleting
+   keeps the meetings (`seriesId`→NULL) and returns to the full list.
 
 **Verification:** `npm run prepush` (tsc client+server) + full `vite build` green. Verified in-browser on
-desktop **and** 390px mobile: series create→join→chip→series view, sort, person-name search, first-participant
-title, and the redesigned dialog (autosave + actions + participant all persist). Test data cleaned up.
+desktop **and** 390px mobile: series create→join→chip→series view→rename/delete, default + manual sort,
+person-name search, first-participant title (scrambled-order test), and the redesigned dialog (autosave +
+actions + participant all persist). Test data cleaned up.
 
-**⚠ Turso DDL:** the `Conversation` schema changed, so production DDL **must be applied before the code deploys.**
-The owner ran it in the Turso web SQL console this session (SQL is in `server/scripts/migrate-conversation-series.js`
-as a runnable dual-mode script, and was provided inline). Local dev DB already migrated (225 rows backfilled).
+**⚠ Turso DDL (TWO migrations applied by the owner this session, before each push):**
+1. `server/scripts/migrate-conversation-series.js` — `Series` table + `Conversation.seriesId`/`updatedAt` (+ backfill + auto-group).
+2. `server/scripts/migrate-participant-ordering.js` — `ConversationParticipant.ordering` (+ rowid backfill).
+Both are runnable dual-mode scripts; the SQL was also provided inline in the console. Local dev DB already migrated.
+**Reminder for next schema change:** apply the Turso DDL via the web SQL console *before* pushing (committed
+`server/.env` rw token is stale/401).
 
 ### What's Next
 1. **[OWNER, light]** Confirm on prod that series create/join + the new sort/search behave as expected.
@@ -39,6 +47,11 @@ as a runnable dual-mode script, and was provided inline). Local dev DB already m
 1. **[USER ACTION]** Set `SENTRY_DSN` / `VITE_SENTRY_DSN` in Vercel (hardening Task 17).
 2. NCQA adaptation plan: Phase 3 (blocked D8/D9) / Phase 4 (D5/D6).
 3. Stray empty `server/dev.db` / `server/test.db` (gitignored) safe to delete.
+4. **Possible polish (owner hasn't requested):** `Conversation.updatedAt` only bumps on edits to the meeting row
+   itself, not on isolated child-record edits (prep note / attachment). If "Recently updated" should float a
+   meeting on those too, bump `conversation.updatedAt` in the `conversation-prepnotes` / `conversation-attachments`
+   routes. Also: existing meetings' participant order was backfilled by rowid (insertion proxy) — re-saving a
+   meeting's participants fixes any that look wrong.
 
 ### Open Bugs / Known Caveats
 - **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** Use the Turso web SQL console for DDL.
@@ -58,6 +71,7 @@ as a runnable dual-mode script, and was provided inline). Local dev DB already m
 ### Suggested kickoff prompt for the next session
 
 > Read `CLAUDE.md` / `AGENTS.md`, then this file. The Meetings area got a real Series entity (opt-in, picker +
-> chip + series view), `updatedAt`-based sorting, first-participant card titles, person-name search, and a
-> redesigned Quick Log (participants/notes/actions promoted; secondary fields in 3 labeled groups). Plan of
-> record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9).
+> chip + series view + rename/delete), default "recently updated" sorting, first-participant card titles (via a
+> new participant `ordering` column), person-name search, and a redesigned Quick Log (participants/notes/actions
+> promoted; secondary fields in 3 labeled groups). Plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md`
+> (Phase 3+, gated D5–D9).

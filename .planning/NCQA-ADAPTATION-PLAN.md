@@ -199,7 +199,7 @@ Display name resolves `title → contact name → company → attendees descript
 - Conversation cards show resolved display name + org chip + description.
 
 **Commit:** `feat(meetings): quick log dialog + full meeting editor`
-**STATUS:** ✅ Code complete 2026-06-12 (commit `b91376a`). Quick Log opens from a header button (all pages), the command palette, and the Meetings page; who-pickers sit behind a collapsed "Who was there" disclosure. New shared `TitleAutocomplete` component. Verified in-browser.
+**STATUS:** ✅ Code complete 2026-06-12 (commit `b91376a`). Quick Log opens from a header button (all pages), the command palette, and the Meetings page; who-pickers sit behind a collapsed "Who was there" disclosure. New shared `TitleAutocomplete` component. Verified in-browser. **Redesigned 2026-06-15 (`cb5d604`): "promote the big 3"** — Participants/Notes/Follow-up actions are always visible; secondary fields moved into 3 labeled disclosures (Organizations & attendees · Summary & next steps · Tags, prep notes & attachments). Added a **Series picker** (pick existing / create inline) wired into autosave.
 
 ## Task 2.3 — Global Meetings page, series view, search coverage
 
@@ -208,7 +208,7 @@ Display name resolves `title → contact name → company → attendees descript
 - Global search (`server/src/routes/search.ts` + `/search` page): include conversation titles in matching and render meeting hits.
 
 **Commit:** `feat(meetings): global meetings page + title series view + search coverage`
-**STATUS:** ✅ Code complete 2026-06-12 (commit `b507f0e`). Implemented as a dedicated `GET /api/meetings` route (pagination envelope; series title matched case-insensitively exact; extra `id` param for single-meeting deep links from search). Meetings nav item added to the sidebar. Verified in-browser incl. series view.
+**STATUS:** ✅ Code complete 2026-06-12 (commit `b507f0e`). Implemented as a dedicated `GET /api/meetings` route (pagination envelope; series title matched case-insensitively exact; extra `id` param for single-meeting deep links from search). Meetings nav item added to the sidebar. Verified in-browser incl. series view. **Reworked 2026-06-15 (`ccdafdf`/`cb5d604`/`7e6e8a0`):** series view now driven by the real `Series` entity (`?seriesId=`), Title filter → **Series** dropdown, **Sort** dropdown (default recently-updated), series **rename/delete** on the header, card title = first participant entered (new `ConversationParticipant.ordering`), person-name search.
 
 ## Task 2.4 — Contact takeaways + org meetings
 

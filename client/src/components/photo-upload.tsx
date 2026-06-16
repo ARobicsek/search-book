@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -80,6 +80,25 @@ export function PhotoUpload({
     [uploadFile]
   )
 
+  // Paste an image from the clipboard (Ctrl/Cmd+V) while the drop zone is showing
+  // (no photo set yet). A page-level listener means the user doesn't have to focus
+  // the box first; pastes aimed at a text field are ignored so it never hijacks
+  // typing into inputs/textareas (e.g. the notes editor).
+  useEffect(() => {
+    if (value || disabled) return
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return
+      const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'))
+      const file = item?.getAsFile()
+      if (!file) return
+      e.preventDefault()
+      void uploadFile(file)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [value, disabled, uploadFile])
+
   const handleUrlSubmit = () => {
     const url = urlInput.trim()
     if (!url) return
@@ -138,7 +157,7 @@ export function PhotoUpload({
             <>
               <ImageIcon className="h-8 w-8 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">
-                Drag & drop an image, or click to browse
+                Drag, drop, or paste an image — or click to browse
               </p>
             </>
           )}

@@ -1251,7 +1251,7 @@ export function ContactFormPage() {
               return
             }
             try {
-              const status = info.isCurrent ? 'CONNECTED' : 'NONE'
+              const status = (info.isCurrent && form.status === 'CONNECTED') ? 'CONNECTED' : 'NONE'
               const created = await api.post<Company>('/companies', { name: info.name.trim(), status })
               idByNorm.set(norm, created.id)
               newlyCreated.push({ id: created.id, name: created.name })

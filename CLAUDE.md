@@ -106,13 +106,6 @@ Historical: ROADMAP Phases 1–7 + 7.5 (security/backup hardening) + Production 
 
 ## Session Management
 
-The session protocol is **agent-agnostic** (Claude Code and Gemini/Antigravity both follow it; see root `AGENTS.md`).
-
-Session start, read in order:
-1. `.planning/NEXT-SESSION-PROMPT.md` — what was done last, what's next, open bugs
-2. `.planning/NCQA-ADAPTATION-PLAN.md` — active plan of record (the "How to use this document" section + the phase being worked)
-
-Session end: update the plan's per-task STATUS lines, rewrite `NEXT-SESSION-PROMPT.md`, record durable decisions in `.planning/STATE.md`, commit and push.
-
-For deeper context, `.planning/STATE.md` has active decisions and recent session history.
-Full historical session log is in `.planning/SESSION-HISTORY.md` (rarely needed).
+The session protocol is **single-sourced in root `AGENTS.md`** (agent-agnostic — Claude Code and
+Gemini/Antigravity both follow it). Read `AGENTS.md` at session start/end for the exact read order,
+end-of-session steps, and non-negotiables. `.planning/README.md` maps every planning doc.

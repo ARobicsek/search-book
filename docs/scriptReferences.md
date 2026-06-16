@@ -43,14 +43,28 @@ These scripts are specific to the Express backend.
 
 ## Utility Scripts (`/server/scripts/`)
 
-Additional scripts found in the `server/scripts` directory for specific tasks.
+Only **reusable verification / maintenance** tools live at the top of `server/scripts/`. Spent
+one-off migrations and already-applied cleanups are kept under **`server/scripts/archive/`** for
+historical reference (don't re-run them).
 
-| Script | Location | Description |
-| :--- | :--- | :--- |
-| `count-rows.js` | `server/scripts/count-rows.js` | Utility to count rows in database tables (likely for debugging/verification). |
-| `export-sql.js` | `server/scripts/export-sql.js` | Utility to export database content to SQL format. |
-| `migrate-to-turso.ts` | `server/scripts/migrate-to-turso.ts` | Script to handle data migration to Turso (production DB). |
-| `migrate_turso.js` | `server/scripts/migrate_turso.js` | JavaScript version or helper for the Turso migration. |
+### Reusable tools (top level)
+
+| Script | Description |
+| :--- | :--- |
+| `restore-test.mjs` | Restore a prod backup into a scratch Turso DB and verify table counts / relationships / binaries. Prod-safe (`--confirm`, `--forbid-url`). See `.planning/RESTORE-TEST-RUNBOOK.md`. |
+| `prod-count-diff.mjs` | Read-only `count(*)` diff between prod and a backup across all tables (backup-completeness proof). |
+| `app-smoke.mjs` | Restore a backup into local SQLite and boot the app against it. |
+| `count-rows.js` | Count rows per table (quick debugging/verification). |
+| `sweep-company-status.js` | Maintenance: promote a Company to `CONNECTED` when a `CONNECTED` contact currently works there (only from blank/`NONE`). Idempotent; re-runnable. |
+
+### `archive/` (applied — do not re-run)
+
+Already-applied schema migrations (`migrate-*.js` / `migrate-*.ts`, `migrate_turso.js`,
+`migrate-to-turso.ts`, `migrate-turso-phase2-touchups.js`), one-off data dumps/cleanups
+(`export-sql.js`, `delete-researching-recruiters.js`), and retired debug/data scripts
+(`debug_dashboard.ts`, `update_industries*.ts`, `verify_updates.ts`, `turso_migrate.js`). Each
+documents how a past schema/data change was made; the dual-mode libsql `file:` pattern in these is
+the template for future Turso migrations.
 
 ## Database Management Reference
 

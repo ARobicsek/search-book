@@ -1,16 +1,53 @@
-# Agent Instructions (all AI coding agents: Gemini/Antigravity, Claude Code, etc.)
+# Agent Instructions (all AI coding agents: Claude Code, Gemini/Antigravity, etc.)
 
-This project uses a shared, agent-agnostic session protocol.
+This is the **single source of truth** for SearchBook's session protocol. It is agent-agnostic —
+despite the `CLAUDE.md` filename, every AI agent follows the same flow. `CLAUDE.md` and the
+`.planning/Gemini_session_*.md` files point here.
 
-**Session start — read in order:**
-1. `CLAUDE.md` (project root) — tech stack, conventions, critical gotchas. Despite the filename, it applies to **all** agents.
-2. `.planning/NEXT-SESSION-PROMPT.md` — what happened last session, what's next.
-3. `.planning/NCQA-ADAPTATION-PLAN.md` — the active plan of record (read "How to use this document" + the phase being worked).
+## Session start — read in order
 
-**Session end:**
-1. Update STATUS lines for tasks you touched in the active plan.
-2. Update `.planning/NEXT-SESSION-PROMPT.md` (completed / next / open bugs).
-3. Record durable decisions in `.planning/STATE.md`.
-4. `npm run prepush`, then commit and push (pushing to `main` is authorized by the owner).
+1. **`CLAUDE.md`** (repo root) — tech stack, conventions, critical gotchas, current status.
+   Applies to **all** agents, not just Claude.
+2. **`.planning/NEXT-SESSION-PROMPT.md`** — what happened last session, what's next, open bugs.
+3. **`.planning/NCQA-ADAPTATION-PLAN.md`** — the active plan of record. Read its "How to use this
+   document" section + the phase being worked.
 
-**Non-negotiables** (details in CLAUDE.md): atomic commit per task; never use Prisma `_count` selects (hangs on Turso); schema changes need manual DDL against Turso before pushing code to `main` (procedure at the top of the adaptation plan); re-test mobile (390px) for UI changes.
+Only if you need deeper context: **`.planning/STATE.md`** (current decisions/blockers) and
+**`.planning/SESSION-HISTORY.md`** (full historical ledger). See `.planning/README.md` for a map
+of every doc.
+
+## Session end
+
+1. Update the **STATUS line** of every task you touched in `.planning/NCQA-ADAPTATION-PLAN.md`
+   (date, commit hash, any deviations).
+2. Update **`.planning/NEXT-SESSION-PROMPT.md`** — completed / next / open bugs.
+3. If you made a durable decision (schema shape, taxonomy, rejected alternative), add a row to the
+   decisions table in **`.planning/STATE.md`**, and add a one-line entry to the session log in
+   **`.planning/SESSION-HISTORY.md`**.
+4. `npm run prepush`, then **commit and push to `main`** (pushing is authorized by the owner;
+   auto-deploys to Vercel).
+
+## Non-negotiables (details in `CLAUDE.md`)
+
+- **One atomic commit per task** (GSD methodology).
+- **Never use Prisma `_count` selects** — they hang the libsql adapter on Turso. Use `.length`
+  client-side or raw SQL.
+- **Schema changes need manual Turso DDL before pushing schema-touching code to `main`** — follow
+  the procedure at the top of `.planning/NCQA-ADAPTATION-PLAN.md`. (The committed `server/.env` rw
+  token is stale — apply DDL via the Turso web SQL console.)
+- **Re-test mobile (390px)** for any UI change, plus desktop.
+- Run a full `vite build` / `tsc -b` (not just `npm run prepush`) before pushing — it catches
+  unused imports the typecheck misses.
+
+## Where things live (doc map)
+
+| Doc | Role |
+|-----|------|
+| `AGENTS.md` (this file) | The session protocol — start/end steps, non-negotiables. |
+| `CLAUDE.md` | Canonical technical reference: stack, conventions, gotchas, current status. |
+| `.planning/NCQA-ADAPTATION-PLAN.md` | Active plan of record (roadmap + per-task status). |
+| `.planning/NEXT-SESSION-PROMPT.md` | Rolling session-to-session handoff. |
+| `.planning/STATE.md` | Currently-in-force decisions + blockers. |
+| `.planning/SESSION-HISTORY.md` | Full historical decision ledger + session log. |
+| `.planning/README.md` | Index of everything in `.planning/` (incl. `archive/`). |
+| `server/scripts/` | Reusable verification/maintenance tools (spent migrations in `archive/`). |

@@ -224,7 +224,7 @@ Edit/delete affordances on `/meetings` (Quick Log dialog became the canonical cr
 **Commit:** `feat(meetings): edit/delete affordances + meeting prep notes, attachments, markdown speed toolbar`
 **STATUS:** ✅ DEPLOYED 2026-06-12 (commits `e099388`…`d718ffa`). Turso CREATE TABLEs run by the user in the console; verified locally in-browser; live deploy + health confirmed. (One Vercel build failure fixed in `d718ffa` — note the client **build** runs `tsc -b` with `noUnusedLocals`, stricter than the `typecheck` script.)
 
-> **Related new plan:** `.planning/SEARCH-UPGRADE-PLAN.md` (user-requested global search overhaul — scoped, full-coverage, sortable; precedes/complements Task 6.2 semantic search).
+> **Related new plan:** `.planning/archive/SEARCH-UPGRADE-PLAN.md` (user-requested global search overhaul — scoped, full-coverage, sortable; precedes/complements Task 6.2 semantic search).
 
 ---
 

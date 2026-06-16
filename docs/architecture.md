@@ -1,8 +1,14 @@
 # SearchBook Architecture
 
+> **`CLAUDE.md` (repo root) is the source of truth** for conventions, critical gotchas, and current
+> status. This file is a higher-level orientation; when the two disagree, trust `CLAUDE.md`.
+
 ## Overview
 
-SearchBook is a lightweight CRM designed for executive job search networking. It is a monorepo application consisting of a React frontend and an Express backend, designed to be deployed on Vercel.
+SearchBook is a single-user, browser-based personal CRM — a monorepo of a React frontend and an
+Express backend, deployed on Vercel with a Turso (libsql) cloud DB. Originally built for executive
+job-search networking, it is being adapted into an **executive stakeholder-management system** for
+the owner's NCQA CMO role (see `.planning/NCQA-ADAPTATION-PLAN.md`).
 
 ## Tech Stack
 
@@ -18,9 +24,16 @@ SearchBook is a lightweight CRM designed for executive job search networking. It
 ### Server (`/server`)
 - **Runtime:** Node.js
 - **Framework:** [Express](https://expressjs.com/)
-- **ORM:** [Prisma](https://www.prisma.io/)
-- **Database:** SQLite (local development) / LibSQL (production/edge)
+- **ORM:** [Prisma 7](https://www.prisma.io/) — **adapter-based** (no `url` in the schema
+  datasource). `PrismaLibSql` for Turso in production, `PrismaBetterSqlite3` for local SQLite.
+  Connection config lives in `prisma.config.ts` (CLI) and `src/db.ts` (runtime).
+- **Database:** SQLite (local development, `server/prisma/dev.db`) / Turso libsql (production).
 - **Language:** TypeScript
+
+> **Key DB gotchas** (full list in `CLAUDE.md`): never use Prisma `_count` selects (they hang the
+> libsql adapter on Turso); `db.ts` keeps one long-lived client and retries once on a connection
+> error; list endpoints use explicit `select` to exclude large text fields. Schema changes need
+> manual Turso DDL via the web SQL console before pushing schema-touching code.
 
 ## Project Structure
 
@@ -61,12 +74,22 @@ SearchBook/
 
 ## Key Data Models (`server/prisma/schema.prisma`)
 
-*   **Contact:** The core entity. Represents a person in the network.
-*   **Company:** Represents an organization. Contacts are linked to companies.
-*   **Action:** Represents a task or to-do item (e.g., "Email Sarah"). Can be linked to a Contact, Company, or Conversation.
-*   **Conversation:** Records an interaction (call, meeting, email) with a Contact.
-*   **Idea:** A scrapbook for thoughts or potential strategies.
-*   **PrepNote:** Notes specifically for preparing for interactions with a Contact.
+*   **Contact:** A person in the network. Multiple emails/companies per contact; `usefulFor` free
+    text marks "useful people". Favorites are a reserved `Favorite` tag (no dedicated column).
+*   **Company:** An organization (labelled "Organization" in the UI). Contacts link via employment.
+*   **Action:** A task/to-do. Multi-target via `ActionContact`/`ActionCompany` junctions; ownership
+    via `owedByMe` + `owerContactIds` (the `direction` enum is derived server-side).
+*   **Conversation:** A meeting (labelled "Meeting" in the UI). "Who" facets via
+    `ConversationParticipant` (attendees, with per-person notes) and `ConversationOrg` (orgs met
+    with), plus `ConversationContact`/`ConversationCompany` for people/orgs *discussed*. Optional
+    `Series` grouping (`seriesId`). Prep + files via `ConversationPrepNote` / `ConversationAttachment`.
+*   **Idea:** A scrapbook for thoughts/strategies; tags share the app-wide `Tag` vocab (`IdeaTag`);
+    soft-archivable.
+*   **DeletedSnapshot:** Backs the server-side undo-last-delete (snapshot-and-replay).
+*   **Status history:** `ContactStatusHistory` / `CompanyStatusHistory` for analytics transitions.
+
+The UI relabels `Conversation`→"Meeting" and `Company`→"Organization" as **display strings only** —
+the model names, `/conversations` + `/companies` API routes, and event names are unchanged.
 
 ## Development Workflow
 

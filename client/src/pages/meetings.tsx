@@ -445,6 +445,169 @@ function MeetingCard({
   )
 }
 
+// Manage all meeting series in one place: rename or delete. Reachable from the
+// "Manage" link by the Series filter — the per-series rename/delete buttons in the
+// series-view header are easy to miss, so this surfaces the same actions for every
+// series (and lets you tidy ones you're not currently viewing).
+function ManageSeriesDialog({
+  open,
+  onOpenChange,
+  onChanged,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onChanged: (deletedId?: number) => void
+}) {
+  type SeriesRow = { id: number; name: string; count: number; lastDate: string | null }
+  const [list, setList] = useState<SeriesRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get<SeriesRow[]>('/series')
+      .then(setList)
+      .catch(() => setList([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    setEditingId(null)
+    setConfirmDeleteId(null)
+    load()
+  }, [open, load])
+
+  async function saveRename(id: number) {
+    const name = editValue.trim()
+    if (!name) return
+    setBusy(true)
+    try {
+      await api.put(`/series/${id}`, { name })
+      toast.success('Series renamed')
+      setEditingId(null)
+      load()
+      onChanged()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to rename series')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doDelete(id: number) {
+    setBusy(true)
+    try {
+      await api.delete(`/series/${id}`)
+      toast.success('Series deleted — its meetings were kept')
+      setConfirmDeleteId(null)
+      load()
+      onChanged(id)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete series')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Manage series</DialogTitle>
+          <DialogDescription>
+            Rename or delete meeting series. Deleting a series keeps its meetings — they
+            just leave the series.
+          </DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : list.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No series yet. Create one from the Series field when logging a meeting.
+          </p>
+        ) : (
+          <div className="max-h-[60vh] space-y-1.5 overflow-y-auto">
+            {list.map((s) => (
+              <div key={s.id} className="flex items-center gap-2 rounded-md border p-2">
+                {editingId === s.id ? (
+                  <>
+                    <Input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveRename(s.id)
+                        if (e.key === 'Escape') setEditingId(null)
+                      }}
+                      autoFocus
+                      className="h-8"
+                    />
+                    <Button size="sm" onClick={() => saveRename(s.id)} disabled={busy || !editValue.trim()}>
+                      Save
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : confirmDeleteId === s.id ? (
+                  <>
+                    <span className="flex-1 truncate text-sm">
+                      Delete <span className="font-medium">{s.name}</span>?
+                    </span>
+                    <Button size="sm" variant="destructive" onClick={() => doDelete(s.id)} disabled={busy}>
+                      Delete
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteId(null)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Layers className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.count} meeting{s.count === 1 ? '' : 's'}
+                        {s.lastDate ? ` · last ${s.lastDate}` : ''}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      title="Rename series"
+                      onClick={() => { setEditingId(s.id); setEditValue(s.name); setConfirmDeleteId(null) }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      title="Delete series"
+                      onClick={() => { setConfirmDeleteId(s.id); setEditingId(null) }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function MeetingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const quickLog = useQuickLog()
@@ -479,6 +642,8 @@ export function MeetingsPage() {
   const [renaming, setRenaming] = useState(false)
   const [deleteSeriesOpen, setDeleteSeriesOpen] = useState(false)
   const [deletingSeries, setDeletingSeries] = useState(false)
+  // "Manage series" dialog — rename/delete any series (discoverable entry by the filter)
+  const [manageSeriesOpen, setManageSeriesOpen] = useState(false)
 
   // Free-text input is debounced before it hits the URL/server
   const [qInput, setQInput] = useState(qFilter)
@@ -763,7 +928,16 @@ export function MeetingsPage() {
           </div>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Series</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Series</Label>
+            <button
+              type="button"
+              onClick={() => setManageSeriesOpen(true)}
+              className="text-xs text-primary hover:underline"
+            >
+              Manage
+            </button>
+          </div>
           <Combobox
             options={seriesOptions}
             value={seriesFilter}
@@ -926,6 +1100,19 @@ export function MeetingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Manage series (rename / delete any series) */}
+      <ManageSeriesDialog
+        open={manageSeriesOpen}
+        onOpenChange={setManageSeriesOpen}
+        onChanged={(deletedId) => {
+          // If the series currently being viewed was deleted, drop the filter so the
+          // list doesn't sit empty on a now-missing series.
+          if (deletedId != null && String(deletedId) === seriesFilter) setParam('seriesId', '')
+          loadSeries()
+          loadMeetings()
+        }}
+      />
     </div>
   )
 }

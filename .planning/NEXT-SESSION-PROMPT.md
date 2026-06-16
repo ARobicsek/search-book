@@ -3,7 +3,38 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (Session 10)
+### What Was Just Completed (Session 11) — Meetings page polish
+
+Owner-requested tweaks to the **Meetings** page (`client/src/pages/meetings.tsx`,
+`server/src/routes/meetings.ts`). All typecheck + full client build pass; **server
+behavior verified live** against the running dev API. Client UI compiled & HMR-live
+but **not yet visually verified** (chrome-devtools MCP couldn't attach — a browser
+held its automation profile). Owner should eyeball on localhost:5173 / prod.
+
+1. **Search = title only.** The Meetings Search box now matches `Conversation.title`
+   (contains) only — no longer people/notes/summary/tags. Removed the JS relevance-rank
+   path; search now respects the chosen sort. Placeholder → "Search meeting titles…",
+   highlight only on the card heading. *(Reverses the earlier "rank title+participant"
+   behavior — a deliberate owner override. Global `/api/search` is unchanged, so people
+   are still findable there.)* Verified: `q=<participant-name>` now returns 0.
+2. **Org filter widened.** Organization filter now also pulls meetings where the anchor
+   contact / any participant **currently works** at that org (not just meetings with the
+   org in the org field). New `meetingOrgClauses()` in `meetings.ts`; reuses
+   `currentEmployerCompanyIds`. Verified: `companyId=4` now includes a meeting matched
+   only via a current employee. Fast at single-user scale (owner's 20s ceiling not a risk).
+3. **Filter row reordered.** Search is now top-left (most-used); Type is bottom-left
+   (least-used). Order: Search, Series, Organization / Type, Tag, Date range.
+4. **Collapsible meeting cards.** Cards clamp to ~2in (`COLLAPSED_MAX_PX = 168`) with a
+   fade + "Show more"/"Show less"; clicking a clamped card expands it (inner links/buttons
+   excluded). `MeetingCard` extracted; overflow measured via `ResizeObserver`. **This is
+   the one change to eyeball** (runtime measurement / click-to-expand).
+5. **"Recently updated" question — answered, no code change.** Old-dated meetings appearing
+   at the top of "Recently updated" is **expected, not the status-sweep scripts' fault**:
+   `updatedAt` = when the record was logged/last edited; the card shows the meeting `date`
+   (often back-dated). The sweep scripts only touch `Company`/`Contact` and can't bump
+   `Conversation.updatedAt` (confirmed: all conversations have `updatedAt == createdAt`).
+
+### What Was Completed (Session 10)
 
 **Undo last delete — shipped & owner-verified on prod.** Plan: `.planning/UNDO-DELETE-PLAN.md`.
 - Server-side **snapshot-and-replay**: new `DeletedSnapshot` table; each delete first captures
@@ -61,4 +92,4 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 
 ### Suggested kickoff prompt for the next session
 
-> Read `CLAUDE.md` / `AGENTS.md`, then this file. The LinkedIn import company status bug was fixed. Plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9).
+> Read `CLAUDE.md` / `AGENTS.md`, then this file. Last session polished the Meetings page (title-only search, widened org filter, reordered filters, collapsible cards). If the owner confirms those, plan of record returns to `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated D5–D9).

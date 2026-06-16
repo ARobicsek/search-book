@@ -30,10 +30,13 @@ Prisma `db push` only migrates **local SQLite**. Production Turso needs DDL run 
 
 ---
 
-## Decisions needed from the user (collect at next session start)
+## ⏳ Waiting on owner (blocks Phase 3+)
 
-| # | Decision | Proposal on the table | Needed for |
-|---|----------|----------------------|------------|
+These are the open items gated on info/decisions only the owner can provide — Phase 3 and later
+can't proceed without them. Raise them at session start; don't push on this work until then.
+
+| # | Waiting on | Proposal on the table | Needed for |
+|---|------------|----------------------|------------|
 | D5 | One real (sanitized) **MS Copilot meeting recap** pasted in, to tune the extraction prompt | — | Task 4.2 |
 | D6 | `ANTHROPIC_API_KEY` set in Vercel + `server/.env` **[USER ACTION]** | — | Task 4.1 |
 | D7 | Can NCQA's M365 publish an **ICS calendar link**? (Outlook → Settings → Calendar → Shared calendars → Publish) **[USER ACTION]** | If blocked, fall back to paste-an-agenda (Task 5.4) | Phase 5 |

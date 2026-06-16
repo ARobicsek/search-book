@@ -23,11 +23,15 @@ docs:
 - **Decisions ledger split:** the full ~90-row ledger + per-session log now live in
   `SESSION-HISTORY.md`; `STATE.md` keeps only the in-force subset.
 - **Front-door docs refreshed:** root `README.md`, `docs/architecture.md`, `docs/scriptReferences.md`.
+- **NCQA plan:** renamed the "Decisions needed" section to **"⏳ Waiting on owner (blocks Phase 3+)"**
+  so the D5–D9 blockers stand out on a quick scan.
 
 ### What's Next
 
-1. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on decisions
-   **D5–D9** — don't push on those until the owner raises them.
+1. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. First check the
+   **"⏳ Waiting on owner"** block near the top — Phase 3+ is gated on **D5–D9** (a real Copilot
+   recap sample, `ANTHROPIC_API_KEY`, ICS calendar link, auth choice, stance-notes policy OK).
+   Don't push on that work until the owner provides those.
 
 ### Carry-over items (lower priority)
 
@@ -62,8 +66,13 @@ docs:
 
 ### Suggested kickoff prompt for the next session
 
-> Read `AGENTS.md`, then `CLAUDE.md`, then this file. Last session was repo/doc housekeeping (scripts
-> + plans archived, session protocol single-sourced in `AGENTS.md`, decisions ledger split into
-> `STATE.md` (current) + `SESSION-HISTORY.md` (full), front-door docs refreshed) — no app changes.
-> Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on decisions D5–D9 — don't
-> push on those until the owner raises them).
+Durable version (works every session — it defers to the docs, which stay current):
+
+> Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
+> where we left off and what's next before doing anything.
+
+Context for *this* upcoming session specifically: last session was repo/doc housekeeping (scripts +
+plans archived, session protocol single-sourced in `AGENTS.md`, decisions ledger split into
+`STATE.md` (current) + `SESSION-HISTORY.md` (full), front-door docs refreshed) — no app changes. Plan
+of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
+D5–D9).

@@ -38,7 +38,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
-import { MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
+import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { TitleAutocomplete } from '@/components/title-autocomplete'
 import { MarkdownTextarea } from '@/components/markdown-textarea'
 import { SaveStatusIndicator } from '@/components/save-status'
@@ -299,9 +299,16 @@ function QuickLogDialog({
   const [participantNotes, setParticipantNotes] = useState<Record<string, string>>({})
   const [attendeesDescription, setAttendeesDescription] = useState('')
   const [tagIds, setTagIds] = useState<string[]>([])
-  const [showSummary, setShowSummary] = useState(false)
-  const [showWho, setShowWho] = useState(false)
-  const [showExtras, setShowExtras] = useState(false)
+  // Series this meeting belongs to ('' = none; numeric string = series id) +
+  // the picker's options. Selecting an existing series sets the id; typing a new
+  // name creates one immediately so the id is always numeric for autosave.
+  const [seriesId, setSeriesId] = useState('')
+  const [seriesOptions, setSeriesOptions] = useState<{ id: number; name: string }[]>([])
+  // Secondary disclosure groups (the big-3 — participants/notes/actions — are
+  // always visible; everything else is tucked into these labeled sections).
+  const [showContext, setShowContext] = useState(false)        // organizations & attendees
+  const [showSummaryNotes, setShowSummaryNotes] = useState(false) // summary & next steps
+  const [showTagsPrep, setShowTagsPrep] = useState(false)      // tags, prep notes & attachments
   const [saving, setSaving] = useState(false)
   const [loadingEdit, setLoadingEdit] = useState(false)
 
@@ -395,9 +402,10 @@ function QuickLogDialog({
     setParticipantNotes({})
     setAttendeesDescription('')
     setTagIds([])
-    setShowSummary(false)
-    setShowWho(false)
-    setShowExtras(false)
+    setSeriesId('')
+    setShowContext(false)
+    setShowSummaryNotes(false)
+    setShowTagsPrep(false)
     setPrepNotes([])
     setPendingPrepNotes([])
     setNewPrepContent('')
@@ -435,11 +443,11 @@ function QuickLogDialog({
         setContactOptions((prev) =>
           prev.some((o) => o.value === pid) ? prev : [{ value: pid, label: name }, ...prev]
         )
-        setShowWho(true)
       }
     }
 
     api.get<string[]>('/conversations/titles').then(setTitles).catch(() => { })
+    api.get<{ id: number; name: string }[]>('/series').then(setSeriesOptions).catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
     api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => { })
     if (!lookupsLoaded) {
@@ -479,17 +487,26 @@ function QuickLogDialog({
           setParticipantNotes(pNotes)
           setAttendeesDescription(conv.attendeesDescription || '')
           setTagIds(conv.tags?.map((t) => t.tag.id.toString()) || [])
+          setSeriesId(conv.seriesId ? conv.seriesId.toString() : '')
+          if (conv.series) {
+            setSeriesOptions((prev) =>
+              prev.some((s) => s.id === conv.series!.id) ? prev : [...prev, conv.series!]
+            )
+          }
           setPrepNotes(conv.prepNotes || [])
           setAttachments(conv.attachments || [])
           setExistingActions(conv.actions || [])
           // Expand sections that already have content. The 1:1 anchor field is
           // gone, but a legacy anchor (conv.companyId/contactId) still means
           // there's "who" context worth showing.
-          setShowSummary(!!conv.summary)
-          setShowWho(!!(conv.contactId || conv.companyId || conv.orgs?.length || conv.participants?.length || conv.attendeesDescription))
+          // Auto-expand secondary sections that already carry content. The big-3
+          // (participants/notes/actions) are always visible, so only the org/
+          // attendees, summary/next-steps, and tags/prep/attachments groups gate.
+          setShowContext(!!(conv.companyId || conv.orgs?.length || conv.attendeesDescription))
+          setShowSummaryNotes(!!(conv.summary || conv.nextSteps))
           // Prep notes live inside this section on mobile (no side panel), so
           // auto-expand it there when the meeting already has prep notes.
-          setShowExtras(!!(conv.nextSteps || conv.tags?.length || conv.actions?.length || conv.attachments?.length || (conv.prepNotes?.length && !isDesktop)))
+          setShowTagsPrep(!!(conv.tags?.length || conv.attachments?.length || (conv.prepNotes?.length && !isDesktop)))
           // Seed the autosave snapshot from the loaded record so opening an edit
           // doesn't trigger an immediate no-op PUT. Mirrors buildAutosaveBody().
           lastSnapshotRef.current = JSON.stringify({
@@ -500,6 +517,7 @@ function QuickLogDialog({
             notes: conv.notes?.trim() || null,
             nextSteps: conv.nextSteps?.trim() || null,
             attendeesDescription: conv.attendeesDescription?.trim() || null,
+            seriesId: conv.seriesId ?? null,
             companyId: orgIds[0] ?? null,
             orgIds: orgIds.slice(1),
             participants: (conv.participants || []).map((p) => ({ contactId: p.contact.id, note: p.note?.trim() || null })),
@@ -515,17 +533,15 @@ function QuickLogDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editId, lookupsLoaded])
 
-  // Fetch the previous meeting in the series once the title matches a known
-  // series (debounced — the title is free text while typing).
+  // Fetch the previous meeting in the same series (by seriesId) for the left
+  // panel's "Last meeting in series" context (debounced).
   useEffect(() => {
-    if (!open) return
-    const t = title.trim()
-    if (!t || !titles.some((k) => k.toLowerCase() === t.toLowerCase())) {
+    if (!open || !seriesId) {
       setSeriesContext(null)
       return
     }
     const timer = setTimeout(() => {
-      api.get<{ data: Conversation[] }>(`/meetings?title=${encodeURIComponent(t)}&limit=5`)
+      api.get<{ data: Conversation[] }>(`/meetings?seriesId=${seriesId}&limit=5`)
         .then((res) => {
           const previous = res.data.find(
             (m) => m.id !== editId && (!date || m.date <= date)
@@ -533,9 +549,9 @@ function QuickLogDialog({
           setSeriesContext(previous || null)
         })
         .catch(() => setSeriesContext(null))
-    }, 400)
+    }, 300)
     return () => clearTimeout(timer)
-  }, [title, titles, open, editId, date])
+  }, [seriesId, open, editId, date])
 
   // ── Autosave ──────────────────────────────────────────────
   // The autosave body carries only the scalar fields + the *numeric* (already
@@ -557,6 +573,7 @@ function QuickLogDialog({
       notes: notes.trim() || null,
       nextSteps: nextSteps.trim() || null,
       attendeesDescription: attendeesDescription.trim() || null,
+      seriesId: seriesId ? Number(seriesId) : null,
       companyId: numericOrgIds[0] ?? null,
       orgIds: numericOrgIds.slice(1),
       participants,
@@ -633,7 +650,7 @@ function QuickLogDialog({
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, loadingEdit, title, date, type, summary, notes, nextSteps,
-    attendeesDescription, orgValues, participantIds, participantNotes, tagIds])
+    attendeesDescription, seriesId, orgValues, participantIds, participantNotes, tagIds])
 
   useEffect(() => () => { if (savedFlashRef.current) clearTimeout(savedFlashRef.current) }, [])
   useEffect(() => () => { if (draftFlashRef.current) clearTimeout(draftFlashRef.current) }, [])
@@ -737,6 +754,7 @@ function QuickLogDialog({
           orgIds: resolvedOrgIds.slice(1),
           participants,
           attendeesDescription: attendeesDescription.trim() || null,
+          seriesId: seriesId ? Number(seriesId) : null,
           tagIds: resolvedTagIds,
           // Follow-up actions are no longer created here — they autosave as real
           // Actions as you type (see reconcileActions). Any rows still unsaved
@@ -1041,6 +1059,27 @@ function QuickLogDialog({
     }
   }
 
+  // ── Series picker ─────────────────────────────────────────
+  // '' clears; an existing id selects; a typed name (isNew) creates the series
+  // immediately so seriesId is always numeric and rides the normal autosave body.
+  async function handleSeriesChange(value: string, isNew: boolean) {
+    if (!value) {
+      setSeriesId('')
+      return
+    }
+    if (!isNew) {
+      setSeriesId(value)
+      return
+    }
+    try {
+      const created = await api.post<{ id: number; name: string }>('/series', { name: value })
+      setSeriesOptions((prev) => (prev.some((s) => s.id === created.id) ? prev : [...prev, created]))
+      setSeriesId(created.id.toString())
+    } catch {
+      toast.error('Failed to create series')
+    }
+  }
+
   const participantNameOf = (val: string) =>
     contactOptions.find((o) => o.value === val)?.label || val
 
@@ -1112,15 +1151,28 @@ function QuickLogDialog({
 
   const formBody = (
     <div className="grid gap-4">
-      <div className="space-y-2">
-        <Label htmlFor="ql-title">Title</Label>
-        <TitleAutocomplete
-          id="ql-title"
-          value={title}
-          onChange={setTitle}
-          titles={titles}
-          autoFocus={!isEdit}
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="ql-title">Title</Label>
+          <TitleAutocomplete
+            id="ql-title"
+            value={title}
+            onChange={setTitle}
+            titles={titles}
+            autoFocus={!isEdit}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="ql-series">Series</Label>
+          <Combobox
+            options={seriesOptions.map((s) => ({ value: s.id.toString(), label: s.name }))}
+            value={seriesId}
+            onChange={handleSeriesChange}
+            allowFreeText
+            placeholder="No series"
+            searchPlaceholder="Find or create a series…"
+          />
+        </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
@@ -1139,26 +1191,73 @@ function QuickLogDialog({
           </Select>
         </div>
       </div>
-      {/* Summary — collapsed by default; click the caret to reveal (rarely needed for a quick log) */}
+      {/* ── Participants — primary; always visible ── */}
       <div className="space-y-2">
-        <button
-          type="button"
-          className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
-          onClick={() => setShowSummary((v) => !v)}
-        >
-          {showSummary ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          Summary
-          {summary && <span className="text-xs text-primary">·</span>}
-        </button>
-        {showSummary && (
-          <Input
-            id="ql-summary"
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            placeholder="One-liner (optional)"
-          />
+        <Label>Participants</Label>
+        {quickAddFavorites.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {quickAddFavorites.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setParticipantIds((prev) => [...prev, f.id.toString()])}
+                className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                title="Add to participants"
+              >
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                {f.name}
+                <Plus className="h-3 w-3" />
+              </button>
+            ))}
+          </div>
         )}
+        <MultiCombobox
+          options={contactOptions}
+          values={participantIds}
+          onChange={setParticipantIds}
+          placeholder="Named people in the meeting..."
+          searchPlaceholder="Search or type new name..."
+          allowFreeText={true}
+        />
+        {participantIds.map((val) => {
+          const isExisting = /^\d+$/.test(val)
+          const isFav = isExisting && favorites.some((f) => f.id === Number(val))
+          return (
+            <div key={val} className="flex items-center gap-2">
+              {isExisting ? (
+                <button
+                  type="button"
+                  onClick={() => toggleFavorite(Number(val), participantNameOf(val))}
+                  className="shrink-0"
+                  title={isFav ? 'Remove from favorites' : 'Mark as favorite (quick-add in future meetings)'}
+                >
+                  <Star
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      isFav ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground hover:text-amber-400'
+                    )}
+                  />
+                </button>
+              ) : (
+                <span className="w-3.5 shrink-0" />
+              )}
+              <span className="w-28 shrink-0 truncate text-xs text-muted-foreground" title={participantNameOf(val)}>
+                {participantNameOf(val)}
+              </span>
+              <Input
+                value={participantNotes[val] || ''}
+                onChange={(e) =>
+                  setParticipantNotes((prev) => ({ ...prev, [val]: e.target.value }))
+                }
+                placeholder="Takeaway about this person (optional)"
+                className="h-8 text-sm"
+              />
+            </div>
+          )
+        })}
       </div>
+
+      {/* ── Notes — primary; always visible ── */}
       <div className="space-y-2">
         <Label htmlFor="ql-notes">Notes</Label>
         <MarkdownTextarea
@@ -1166,88 +1265,163 @@ function QuickLogDialog({
           value={notes}
           onChange={setNotes}
           placeholder="Optional — use ### headings for topics; paste screenshots directly"
-          rows={isEdit ? 6 : 3}
+          rows={isEdit ? 10 : 6}
         />
       </div>
 
-      {/* Who was there — collapsed by default to keep the fast path fast */}
+      {/* ── Actions — primary; always visible ──
+          Each composer row autosaves as a real Action once the meeting record
+          exists (POST then debounced PUT), with a per-row "who owns it" picker. */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="flex items-center gap-1">
+            <ListTodo className="h-3.5 w-3.5" /> Follow-up actions
+          </Label>
+          <div className="flex items-center gap-2">
+            <SaveStatusIndicator status={actionsSaveStatus} className="text-xs" />
+            <Button type="button" size="sm" onClick={addAction}>
+              <Plus className="mr-1 h-3 w-3" />
+              Add action
+            </Button>
+          </div>
+        </div>
+        {existingActions.map((a) => (
+          <div key={a.id} className="flex items-center gap-2 text-sm">
+            <span className={cn(
+              'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+              a.completed ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+            )}>
+              {a.completed && <Check className="h-2.5 w-2.5" />}
+            </span>
+            <Link
+              to={`/actions/${a.id}`}
+              className={cn('hover:underline', a.completed ? 'text-muted-foreground line-through' : 'text-primary')}
+              onClick={() => onOpenChange(false)}
+            >
+              {a.title}
+            </Link>
+            {a.dueDate && <span className="text-xs text-muted-foreground">{a.dueDate}</span>}
+          </div>
+        ))}
+        {newActions.map((a) => {
+          const quickAddOwers = favorites.filter((f) => !a.owerIds.includes(f.id.toString()))
+          return (
+          <div key={a.key} className="space-y-2 rounded-md border p-2">
+            <div className="flex items-center gap-2">
+              <Input
+                value={a.title}
+                onChange={(e) => updateAction(a.key, { title: e.target.value })}
+                placeholder="e.g. Send follow-up email"
+                className="h-8 text-sm"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => removeAction(a.key)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {a.title.trim() && (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  <Select value={a.type} onValueChange={(v) => updateAction(a.key, { type: v as ActionType })}>
+                    <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ACTION_TYPE_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="date"
+                    value={a.dueDate}
+                    onChange={(e) => updateAction(a.key, { dueDate: e.target.value })}
+                    className="h-8 text-xs"
+                  />
+                  <Select value={a.priority} onValueChange={(v) => updateAction(a.key, { priority: v as ActionPriority })}>
+                    <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ACTION_PRIORITY_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Who owns it — defaults to Me; remove Me and/or add people you're waiting on */}
+                <div className="space-y-1.5 rounded-md bg-muted/30 p-2">
+                  <span className="text-xs font-medium text-muted-foreground">Who owns it</span>
+                  <div className="flex flex-wrap gap-1">
+                    {a.owedByMe ? (
+                      <span className="flex items-center gap-1 rounded-full border bg-primary/10 px-2 py-0.5 text-xs text-foreground">
+                        Me
+                        <button
+                          type="button"
+                          onClick={() => updateAction(a.key, { owedByMe: false })}
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Remove me"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => updateAction(a.key, { owedByMe: true })}
+                        className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+                        title="Add me back"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Me
+                      </button>
+                    )}
+                    {quickAddOwers.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => updateAction(a.key, { owerIds: [...a.owerIds, f.id.toString()] })}
+                        className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                        title="Add to who owns it"
+                      >
+                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                        {f.name}
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    ))}
+                  </div>
+                  <MultiCombobox
+                    options={contactOptions}
+                    values={a.owerIds}
+                    onChange={(vals) => updateAction(a.key, { owerIds: vals })}
+                    placeholder="Add people who own it..."
+                    searchPlaceholder="Search contacts..."
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          )
+        })}
+      </div>
+
+      {/* ── Secondary, organized into labeled disclosures ── */}
+
+      {/* Organizations & attendees */}
       <button
         type="button"
         className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
-        onClick={() => setShowWho((v) => !v)}
+        onClick={() => setShowContext((v) => !v)}
       >
-        {showWho ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        Who was there
-        {(orgValues.length > 0 || participantIds.length > 0 || attendeesDescription) && (
+        {showContext ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        Organizations &amp; attendees
+        {(orgValues.length > 0 || attendeesDescription) && (
           <span className="text-xs text-primary">·</span>
         )}
       </button>
-      {showWho && (
+      {showContext && (
         <div className="grid gap-4 rounded-md border p-3">
-          <div className="space-y-2">
-            <Label>Participants</Label>
-            {quickAddFavorites.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {quickAddFavorites.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setParticipantIds((prev) => [...prev, f.id.toString()])}
-                    className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
-                    title="Add to participants"
-                  >
-                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    {f.name}
-                    <Plus className="h-3 w-3" />
-                  </button>
-                ))}
-              </div>
-            )}
-            <MultiCombobox
-              options={contactOptions}
-              values={participantIds}
-              onChange={setParticipantIds}
-              placeholder="Named people in the meeting..."
-              searchPlaceholder="Search or type new name..."
-              allowFreeText={true}
-            />
-            {participantIds.map((val) => {
-              const isExisting = /^\d+$/.test(val)
-              const isFav = isExisting && favorites.some((f) => f.id === Number(val))
-              return (
-                <div key={val} className="flex items-center gap-2">
-                  {isExisting ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleFavorite(Number(val), participantNameOf(val))}
-                      className="shrink-0"
-                      title={isFav ? 'Remove from favorites' : 'Mark as favorite (quick-add in future meetings)'}
-                    >
-                      <Star
-                        className={cn(
-                          'h-3.5 w-3.5',
-                          isFav ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground hover:text-amber-400'
-                        )}
-                      />
-                    </button>
-                  ) : (
-                    <span className="w-3.5 shrink-0" />
-                  )}
-                  <span className="w-28 shrink-0 truncate text-xs text-muted-foreground" title={participantNameOf(val)}>
-                    {participantNameOf(val)}
-                  </span>
-                  <Input
-                    value={participantNotes[val] || ''}
-                    onChange={(e) =>
-                      setParticipantNotes((prev) => ({ ...prev, [val]: e.target.value }))
-                    }
-                    placeholder="Takeaway about this person (optional)"
-                    className="h-8 text-sm"
-                  />
-                </div>
-              )
-            })}
-          </div>
           <div className="space-y-2">
             <Label>Organizations</Label>
             {quickAddCompanyFavorites.length > 0 && (
@@ -1313,22 +1487,29 @@ function QuickLogDialog({
         </div>
       )}
 
-      {/* Next steps / tags / actions / prep notes / attachments */}
+      {/* Summary & next steps */}
       <button
         type="button"
         className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
-        onClick={() => setShowExtras((v) => !v)}
+        onClick={() => setShowSummaryNotes((v) => !v)}
       >
-        {showExtras ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        Actions, prep, tags &amp; attachments
-        {(nextSteps || tagIds.length > 0 || prepNotes.length > 0 || pendingPrepNotes.length > 0 ||
-          existingActions.length > 0 || newActions.length > 0 ||
-          attachments.length > 0 || pendingAttachments.length > 0) && (
-            <span className="text-xs text-primary">·</span>
-          )}
+        {showSummaryNotes ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        Summary &amp; next steps
+        {(summary || nextSteps) && (
+          <span className="text-xs text-primary">·</span>
+        )}
       </button>
-      {showExtras && (
+      {showSummaryNotes && (
         <div className="grid gap-4 rounded-md border p-3">
+          <div className="space-y-2">
+            <Label htmlFor="ql-summary">Summary</Label>
+            <Input
+              id="ql-summary"
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              placeholder="One-liner (optional)"
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="ql-nextsteps">Next steps</Label>
             <MarkdownTextarea
@@ -1339,144 +1520,24 @@ function QuickLogDialog({
               rows={3}
             />
           </div>
+        </div>
+      )}
 
-          {/* Follow-up actions — each composer row autosaves as a real Action once
-              the meeting record exists (POST then debounced PUT), with a per-row
-              "who owns it" picker mirroring the Actions form. */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-1">
-                <ListTodo className="h-3.5 w-3.5" /> Follow-up actions
-              </Label>
-              <div className="flex items-center gap-2">
-                <SaveStatusIndicator status={actionsSaveStatus} className="text-xs" />
-                <Button type="button" size="sm" onClick={addAction}>
-                  <Plus className="mr-1 h-3 w-3" />
-                  Add action
-                </Button>
-              </div>
-            </div>
-            {existingActions.map((a) => (
-              <div key={a.id} className="flex items-center gap-2 text-sm">
-                <span className={cn(
-                  'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
-                  a.completed ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
-                )}>
-                  {a.completed && <Check className="h-2.5 w-2.5" />}
-                </span>
-                <Link
-                  to={`/actions/${a.id}`}
-                  className={cn('hover:underline', a.completed ? 'text-muted-foreground line-through' : 'text-primary')}
-                  onClick={() => onOpenChange(false)}
-                >
-                  {a.title}
-                </Link>
-                {a.dueDate && <span className="text-xs text-muted-foreground">{a.dueDate}</span>}
-              </div>
-            ))}
-            {newActions.map((a) => {
-              const quickAddOwers = favorites.filter((f) => !a.owerIds.includes(f.id.toString()))
-              return (
-              <div key={a.key} className="space-y-2 rounded-md border p-2">
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={a.title}
-                    onChange={(e) => updateAction(a.key, { title: e.target.value })}
-                    placeholder="e.g. Send follow-up email"
-                    className="h-8 text-sm"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    onClick={() => removeAction(a.key)}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                {a.title.trim() && (
-                  <>
-                    <div className="grid grid-cols-3 gap-2">
-                      <Select value={a.type} onValueChange={(v) => updateAction(a.key, { type: v as ActionType })}>
-                        <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ACTION_TYPE_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="date"
-                        value={a.dueDate}
-                        onChange={(e) => updateAction(a.key, { dueDate: e.target.value })}
-                        className="h-8 text-xs"
-                      />
-                      <Select value={a.priority} onValueChange={(v) => updateAction(a.key, { priority: v as ActionPriority })}>
-                        <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ACTION_PRIORITY_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {/* Who owns it — defaults to Me; remove Me and/or add people you're waiting on */}
-                    <div className="space-y-1.5 rounded-md bg-muted/30 p-2">
-                      <span className="text-xs font-medium text-muted-foreground">Who owns it</span>
-                      <div className="flex flex-wrap gap-1">
-                        {a.owedByMe ? (
-                          <span className="flex items-center gap-1 rounded-full border bg-primary/10 px-2 py-0.5 text-xs text-foreground">
-                            Me
-                            <button
-                              type="button"
-                              onClick={() => updateAction(a.key, { owedByMe: false })}
-                              className="text-muted-foreground hover:text-foreground"
-                              title="Remove me"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => updateAction(a.key, { owedByMe: true })}
-                            className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
-                            title="Add me back"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Me
-                          </button>
-                        )}
-                        {quickAddOwers.map((f) => (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => updateAction(a.key, { owerIds: [...a.owerIds, f.id.toString()] })}
-                            className="flex items-center gap-1 rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
-                            title="Add to who owns it"
-                          >
-                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                            {f.name}
-                            <Plus className="h-3 w-3" />
-                          </button>
-                        ))}
-                      </div>
-                      <MultiCombobox
-                        options={contactOptions}
-                        values={a.owerIds}
-                        onChange={(vals) => updateAction(a.key, { owerIds: vals })}
-                        placeholder="Add people who own it..."
-                        searchPlaceholder="Search contacts..."
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-              )
-            })}
-          </div>
-
+      {/* Tags, prep notes & attachments */}
+      <button
+        type="button"
+        className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => setShowTagsPrep((v) => !v)}
+      >
+        {showTagsPrep ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        Tags, prep notes &amp; attachments
+        {(tagIds.length > 0 || prepNotes.length > 0 || pendingPrepNotes.length > 0 ||
+          attachments.length > 0 || pendingAttachments.length > 0) && (
+            <span className="text-xs text-primary">·</span>
+          )}
+      </button>
+      {showTagsPrep && (
+        <div className="grid gap-4 rounded-md border p-3">
           <div className="space-y-2">
             <Label>Tags</Label>
             <MultiCombobox

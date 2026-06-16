@@ -30,7 +30,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { TitleAutocomplete } from '@/components/title-autocomplete'
 import { HighlightedText } from '@/components/highlighted-text'
 import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
@@ -218,8 +217,8 @@ export function MeetingsPage() {
   const quickLog = useQuickLog()
 
   // URL is the source of truth for filters, so series links
-  // (/meetings?title=…) and search deep links (?id=…) work everywhere.
-  const titleFilter = searchParams.get('title') || ''
+  // (/meetings?seriesId=…) and search deep links (?id=…) work everywhere.
+  const seriesFilter = searchParams.get('seriesId') || ''
   const companyFilter = searchParams.get('companyId') || ''
   const tagFilter = searchParams.get('tagId') || ''
   const typeFilter = searchParams.get('type') || 'all'
@@ -227,9 +226,11 @@ export function MeetingsPage() {
   const toFilter = searchParams.get('to') || ''
   const qFilter = searchParams.get('q') || ''
   const idFilter = searchParams.get('id') || ''
-  // Series view (titleFilter) is inherently a chronological list, so the
+  const sortBy = searchParams.get('sortBy') || 'date'
+  const sortDir = searchParams.get('sortDir') || 'desc'
+  // Series view (seriesFilter) is inherently a chronological list, so the
   // calendar toggle is hidden there and the view is forced back to list.
-  const view = !titleFilter && searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
+  const view = !seriesFilter && searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
 
   const [meetings, setMeetings] = useState<Conversation[]>([])
   const [total, setTotal] = useState(0)
@@ -244,19 +245,27 @@ export function MeetingsPage() {
   const debouncedQ = useDebounce(qInput, 300)
 
   // Lookup data for the filter row
-  const [knownTitles, setKnownTitles] = useState<string[]>([])
+  const [seriesOptions, setSeriesOptions] = useState<ComboboxOption[]>([])
   const [companyOptions, setCompanyOptions] = useState<ComboboxOption[]>([])
   const [tagOptions, setTagOptions] = useState<ComboboxOption[]>([])
 
+  // Series options refresh on every meeting save too, so a series created in the
+  // Quick Log dialog is immediately named in the filter + series-view heading.
+  const loadSeries = useCallback(() => {
+    api.get<{ id: number; name: string }[]>('/series')
+      .then((data) => setSeriesOptions(data.map((s) => ({ value: s.id.toString(), label: s.name }))))
+      .catch(() => { })
+  }, [])
+
   useEffect(() => {
-    api.get<string[]>('/conversations/titles').then(setKnownTitles).catch(() => { })
+    loadSeries()
     api.get<{ id: number; name: string }[]>('/companies/names')
       .then((data) => setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name }))))
       .catch(() => { })
     api.get<Tag[]>('/tags')
       .then((data) => setTagOptions(data.map((t) => ({ value: t.id.toString(), label: t.name }))))
       .catch(() => { })
-  }, [])
+  }, [loadSeries])
 
   function setParam(key: string, value: string) {
     setSearchParams((prev) => {
@@ -274,7 +283,7 @@ export function MeetingsPage() {
 
   const buildQuery = useCallback((offset: number) => {
     const params = new URLSearchParams()
-    if (titleFilter) params.set('title', titleFilter)
+    if (seriesFilter) params.set('seriesId', seriesFilter)
     if (companyFilter) params.set('companyId', companyFilter)
     if (tagFilter) params.set('tagId', tagFilter)
     if (typeFilter && typeFilter !== 'all') params.set('type', typeFilter)
@@ -282,10 +291,12 @@ export function MeetingsPage() {
     if (toFilter) params.set('to', toFilter)
     if (qFilter) params.set('q', qFilter)
     if (idFilter) params.set('id', idFilter)
+    params.set('sortBy', sortBy)
+    params.set('sortDir', sortDir)
     params.set('limit', PAGE_SIZE.toString())
     params.set('offset', offset.toString())
     return params.toString()
-  }, [titleFilter, companyFilter, tagFilter, typeFilter, fromFilter, toFilter, qFilter, idFilter])
+  }, [seriesFilter, companyFilter, tagFilter, typeFilter, fromFilter, toFilter, qFilter, idFilter, sortBy, sortDir])
 
   const loadMeetings = useCallback(async () => {
     setLoading(true)
@@ -309,12 +320,13 @@ export function MeetingsPage() {
     loadMeetings()
   }, [loadMeetings])
 
-  // Refresh when the Quick Log dialog saves a meeting
+  // Refresh when the Quick Log dialog saves a meeting (incl. any newly-created
+  // series, so the filter + series-view heading can name it).
   useEffect(() => {
-    const onLogged = () => loadMeetings()
+    const onLogged = () => { loadMeetings(); loadSeries() }
     window.addEventListener('searchbook:meeting-logged', onLogged)
     return () => window.removeEventListener('searchbook:meeting-logged', onLogged)
-  }, [loadMeetings])
+  }, [loadMeetings, loadSeries])
 
   async function loadMore() {
     setLoadingMore(true)
@@ -345,7 +357,21 @@ export function MeetingsPage() {
     }
   }
 
-  const hasFilters = !!(titleFilter || companyFilter || tagFilter || (typeFilter && typeFilter !== 'all') || fromFilter || toFilter || qFilter || idFilter)
+  const hasFilters = !!(seriesFilter || companyFilter || tagFilter || (typeFilter && typeFilter !== 'all') || fromFilter || toFilter || qFilter || idFilter)
+
+  const seriesName = seriesOptions.find((o) => o.value === seriesFilter)?.label || 'Series'
+
+  // Sort is encoded as "field:dir"; update both URL params in one write.
+  const sortValue = `${sortBy}:${sortDir}`
+  function setSort(value: string) {
+    const [field, dir] = value.split(':')
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('sortBy', field)
+      next.set('sortDir', dir)
+      return next
+    }, { replace: true })
+  }
 
   function clearFilters() {
     setQInput('')
@@ -364,16 +390,29 @@ export function MeetingsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {titleFilter ? titleFilter : 'Meetings'}
+            {seriesFilter ? seriesName : 'Meetings'}
           </h1>
-          {titleFilter && (
+          {seriesFilter && (
             <p className="text-sm text-muted-foreground">
               All meetings in this series, newest first
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {!titleFilter && (
+          {view === 'list' && (
+            <Select value={sortValue} onValueChange={setSort}>
+              <SelectTrigger className="h-8 w-[170px]" title="Sort meetings">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date:desc">Date (newest)</SelectItem>
+                <SelectItem value="date:asc">Date (oldest)</SelectItem>
+                <SelectItem value="updatedAt:desc">Recently updated</SelectItem>
+                <SelectItem value="createdAt:desc">Recently logged</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          {!seriesFilter && (
             <div className="inline-flex rounded-md border p-0.5">
               <Button
                 variant={view === 'list' ? 'secondary' : 'ghost'}
@@ -409,12 +448,13 @@ export function MeetingsPage() {
       {/* Filters */}
       <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1">
-          <Label className="text-xs">Title (series)</Label>
-          <TitleAutocomplete
-            value={titleFilter}
-            onChange={(v) => setParam('title', v)}
-            titles={knownTitles}
-            placeholder="Filter by meeting title..."
+          <Label className="text-xs">Series</Label>
+          <Combobox
+            options={seriesOptions}
+            value={seriesFilter}
+            onChange={(v) => setParam('seriesId', v)}
+            placeholder="Any series"
+            searchPlaceholder="Search series..."
           />
         </div>
         <div className="space-y-1">
@@ -458,12 +498,12 @@ export function MeetingsPage() {
           </div>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Search text</Label>
+          <Label className="text-xs">Search</Label>
           <div className="relative">
             <Input
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
-              placeholder="Search notes, names..."
+              placeholder="Search title, people, notes…"
               className={qInput ? 'pr-10' : undefined}
             />
             {qInput && (
@@ -536,10 +576,10 @@ export function MeetingsPage() {
                       </div>
                     </div>
                     {/* Heading opens the Edit dialog. Displayed text falls back:
-                        title → contact → company → first participant → description.
-                        For series titles, a small "series" chip still opens the
-                        grouped series view. Contact/company/participant remain
-                        reachable via the badge chips below. */}
+                        title → first participant → contact → company → description.
+                        A "series" chip appears only for meetings in a series and
+                        opens the grouped series view. Contact/company/participant
+                        remain reachable via the badge chips below. */}
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
@@ -547,17 +587,17 @@ export function MeetingsPage() {
                         onClick={() => quickLog.openEdit(conv.id)}
                         title="Edit meeting"
                       >
-                        {hl(conv.title || conv.contact?.name || conv.company?.name || conv.participants?.[0]?.contact.name || conv.attendeesDescription || 'Meeting')}
+                        {hl(conversationDisplayName(conv))}
                       </button>
-                      {conv.title && (
+                      {conv.series && (
                         <button
                           type="button"
-                          onClick={() => setParam('title', conv.title!)}
+                          onClick={() => setParam('seriesId', conv.series!.id.toString())}
                           className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-800 hover:bg-violet-100"
                           title="View all meetings in this series"
                         >
                           <Layers className="h-3 w-3" />
-                          series
+                          {conv.series.name}
                         </button>
                       )}
                     </div>

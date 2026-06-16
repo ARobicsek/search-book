@@ -203,7 +203,10 @@ export interface Conversation {
   notes: string | null;
   nextSteps: string | null;
   photoFile: string | null;
+  seriesId: number | null;
+  series?: { id: number; name: string } | null;
   createdAt: string;
+  updatedAt: string;
   participants?: { contact: { id: number; name: string }; note?: string | null }[];
   contactsDiscussed: { contact: { id: number; name: string } }[];
   companiesDiscussed: { company: { id: number; name: string } }[];
@@ -238,13 +241,15 @@ export interface ConversationAttachment {
   createdAt: string;
 }
 
-/** Display name precedence for a meeting: title → contact → company → first participant → attendees description. */
+/** Display name precedence for a meeting: title → first participant → contact → company → attendees description.
+ *  First participant outranks the legacy anchor contact/company so an untitled
+ *  meeting is identified by the first person entered (the owner's mental model). */
 export function conversationDisplayName(conv: Conversation): string {
   return (
     conv.title ||
+    conv.participants?.[0]?.contact.name ||
     conv.contact?.name ||
     conv.company?.name ||
-    conv.participants?.[0]?.contact.name ||
     conv.attendeesDescription ||
     'Meeting'
   );

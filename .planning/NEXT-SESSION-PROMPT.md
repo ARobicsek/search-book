@@ -35,7 +35,8 @@ passes; verified end-to-end in the running app via chrome-devtools. Committed at
    filter matches TITLE + any named PARTICIPANT + SERIES name for all meetings (the participant/series
    clauses were lifted out of the untitled-only gate); untitled meetings still also match anchor
    contact/org/attendees. Verified via API (a meeting surfaced by its series name when its title didn't
-   contain the query). Highlight stays heading-only.
+   contain the query). The meeting card highlights the matched term in the title/heading, the **series chip**,
+   and **participant badges** (shared `hl()` helper in `MeetingCard`) — verified live.
 
 ### What's Next
 1. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on decisions D5–D9 —

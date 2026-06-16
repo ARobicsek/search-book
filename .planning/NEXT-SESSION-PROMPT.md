@@ -6,6 +6,7 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 ### What Was Just Completed (Session 7)
 
 1. **Company Status Sweep:** Created and executed a one-off script (`server/scripts/sweep-company-status.js`) to evaluate and update the Status of all Organizations. The rule applied: if a Company is already 'CONNECTED' OR if there is a 'CONNECTED' Contact currently working there (via `companyId` or `additionalCompanyIds` with `isCurrent: true`), the Company becomes 'CONNECTED'; otherwise it becomes 'NONE' (blank/dash). This was run successfully against the local SQLite db (updated 370 companies). **To run it on production**, the owner needs to execute it with their fresh Turso credentials.
+2. **Contact Cleanup:** Created and executed a one-off script (`server/scripts/delete-researching-recruiters.js`) that deletes all Contacts where Ecosystem = 'RECRUITER' AND Status is 'RESEARCHING' or 'NONE' (blank). This was run successfully against the local SQLite db (deleted 107 contacts). **To run it on production**, the owner needs to execute it with their fresh Turso credentials.
 
 ### Previous Session (Session 6)
 - **LinkedIn Import Bugfix**
@@ -19,7 +20,7 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 **Verification:** `npm run prepush` (tsc client+server) passed for the new script.
 
 ### What's Next
-1. **[OWNER, light]** Run the new sweep script `server/scripts/sweep-company-status.js` against the production Turso DB (requires setting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the environment, then running `node server/scripts/sweep-company-status.js`).
+1. **[OWNER, light]** Run the new data cleanup scripts against the production Turso DB (requires exporting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the environment, then running `node server/scripts/sweep-company-status.js` and `node server/scripts/delete-researching-recruiters.js`).
 2. **[OWNER, light]** Confirm on prod that series create/join + the new sort/search behave as expected.
 3. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 — don't push on
    those until the owner raises them.

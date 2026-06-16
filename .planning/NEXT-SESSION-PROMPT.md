@@ -3,16 +3,18 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (Session 8)
+### What Was Just Completed (Session 8 / 9)
 
 1. **LinkedIn Import Company Status Bugfix:** Modified `client/src/pages/contacts/contact-form.tsx` so that when a LinkedIn import creates a new company, it checks if the contact is currently working there (`isCurrent: true`) AND if the contact being imported is set to `CONNECTED`. If both are true, the new company's status defaults to `CONNECTED`; otherwise, it defaults to `NONE`. This fixes the bug where all newly imported companies defaulted to `RESEARCHING`.
+2. **Organization Contacts Inline Edit:** Made the ecosystem and status badges for contacts listed on an Organization's detail page (`company-detail.tsx`) interactive, allowing inline updates via dropdowns without leaving the page.
+3. **Company Status Sweep Safety:** Updated `server/scripts/sweep-company-status.js` to strictly convert `NONE` (blank) statuses to `CONNECTED` when an employed contact is connected, protecting other existing statuses (like `RESEARCHING` or `ENGAGED`) from being accidentally wiped out.
 
 ### Previous Session (Session 7)
 1. **Company Status Sweep:** Created and executed a one-off script (`server/scripts/sweep-company-status.js`) to evaluate and update the Status of all Organizations. 
 2. **Contact Cleanup:** Created and executed a one-off script (`server/scripts/delete-researching-recruiters.js`) that deletes all Contacts where Ecosystem = 'RECRUITER' AND Status is 'RESEARCHING' or 'NONE' (blank).
 
 ### What's Next
-1. **[OWNER, light]** Run the new data cleanup scripts against the production Turso DB (requires exporting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the environment, then running `node server/scripts/sweep-company-status.js` and `node server/scripts/delete-researching-recruiters.js`).
+1. **[OWNER, light]** Run the organization status sweep script against the production Turso DB (requires exporting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the environment, then running `node scripts/sweep-company-status.js` from the `server` directory).
 2. **[OWNER, light]** Confirm on prod that series create/join + the new sort/search behave as expected.
 3. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 — don't push on
    those until the owner raises them.

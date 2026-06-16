@@ -137,6 +137,60 @@ type CompanyWithRelations = Company & {
   pastContacts?: PastContact[];
 }
 
+function ContactBadges({ contact, onUpdate }: { contact: Contact | PastContact, onUpdate: (id: number, field: 'ecosystem' | 'status', value: string) => void }) {
+  return (
+    <div className="flex gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger className="focus:outline-none">
+          <Badge variant="outline" className={`${ecosystemColors[contact.ecosystem]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+            {getLabel(contact.ecosystem, ECOSYSTEM_OPTIONS)}
+          </Badge>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Change Ecosystem</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup 
+            value={contact.ecosystem} 
+            onValueChange={(val) => onUpdate(contact.id, 'ecosystem', val)}
+          >
+            {ECOSYSTEM_OPTIONS.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value}>
+                <Badge variant="outline" className={`mr-2 ${ecosystemColors[option.value]}`}>
+                  {option.label}
+                </Badge>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger className="focus:outline-none">
+          <Badge variant="outline" className={`${contactStatusColors[contact.status]} hover:bg-opacity-80 cursor-pointer transition-colors`}>
+            {getLabel(contact.status, CONTACT_STATUS_OPTIONS)}
+          </Badge>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup 
+            value={contact.status} 
+            onValueChange={(val) => onUpdate(contact.id, 'status', val)}
+          >
+            {CONTACT_STATUS_OPTIONS.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value}>
+                <Badge variant="outline" className={`mr-2 ${contactStatusColors[option.value]}`}>
+                  {option.label}
+                </Badge>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
 export function CompanyDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -325,6 +379,17 @@ export function CompanyDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to link contact');
     } finally {
       setLinkingContact(false);
+    }
+  }
+
+  async function handleUpdateContact(contactId: number, field: 'ecosystem' | 'status', value: string) {
+    try {
+      await api.put(`/contacts/${contactId}`, { [field]: value })
+      toast.success('Updated contact')
+      loadCompany() // Refresh to get the latest company relations
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update contact'
+      toast.error(message)
     }
   }
 
@@ -774,14 +839,7 @@ export function CompanyDetailPage() {
                             <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
                           )}
                         </div>
-                        <div className="flex gap-2">
-                          <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
-                            {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
-                          </Badge>
-                          <Badge variant="outline" className={contactStatusColors[c.status]}>
-                            {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
-                          </Badge>
-                        </div>
+                        <ContactBadges contact={c} onUpdate={handleUpdateContact} />
                       </div>
                     ))}
                   </div>
@@ -810,14 +868,7 @@ export function CompanyDetailPage() {
                             <span className="ml-2 text-sm text-muted-foreground">{c.title}</span>
                           )}
                         </div>
-                        <div className="flex gap-2">
-                          <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
-                            {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
-                          </Badge>
-                          <Badge variant="outline" className={contactStatusColors[c.status]}>
-                            {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
-                          </Badge>
-                        </div>
+                        <ContactBadges contact={c} onUpdate={handleUpdateContact} />
                       </div>
                     ))}
                   </div>
@@ -846,14 +897,7 @@ export function CompanyDetailPage() {
                               <span className="ml-2 text-sm text-muted-foreground">{c.pastTitle}</span>
                             )}
                           </div>
-                          <div className="flex gap-2">
-                            <Badge variant="outline" className={ecosystemColors[c.ecosystem]}>
-                              {getLabel(c.ecosystem, ECOSYSTEM_OPTIONS)}
-                            </Badge>
-                            <Badge variant="outline" className={contactStatusColors[c.status]}>
-                              {getLabel(c.status, CONTACT_STATUS_OPTIONS)}
-                            </Badge>
-                          </div>
+                          <ContactBadges contact={c} onUpdate={handleUpdateContact} />
                         </div>
                       ))}
                     </div>

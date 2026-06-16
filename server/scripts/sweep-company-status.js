@@ -43,15 +43,10 @@ async function main() {
       const id = Number(company.id);
       const currentStatus = String(company.status);
       
-      let newStatus = 'NONE';
-      if (currentStatus === 'CONNECTED' || connectedCompanyIds.has(id)) {
-        newStatus = 'CONNECTED';
-      }
-
-      if (currentStatus !== newStatus) {
+      if (currentStatus === 'NONE' && connectedCompanyIds.has(id)) {
         updates.push({
           sql: 'UPDATE "Company" SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-          args: [newStatus, id]
+          args: ['CONNECTED', id]
         });
       }
     }

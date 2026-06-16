@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -11,6 +12,14 @@ import { Search, MessageSquarePlus } from 'lucide-react'
 function LayoutContent() {
   const navigate = useNavigate()
   const quickLog = useQuickLog()
+  // After an undo restores data, remount the routed content so the active page refetches
+  // and the restored item appears without a manual refresh (UndoProvider fires this event).
+  const [contentKey, setContentKey] = useState(0)
+  useEffect(() => {
+    const onUndone = () => setContentKey((k) => k + 1)
+    window.addEventListener('searchbook:undone', onUndone)
+    return () => window.removeEventListener('searchbook:undone', onUndone)
+  }, [])
 
   return (
     <>
@@ -70,7 +79,7 @@ function LayoutContent() {
             </Button>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-3 sm:p-6">
+        <main className="flex-1 overflow-auto p-3 sm:p-6" key={contentKey}>
           <Outlet />
         </main>
       </SidebarInset>

@@ -1,8 +1,8 @@
 # Undo Last Delete — Implementation Plan
 
-**Status: CODE COMPLETE + locally verified (2026-06-16). NOT pushed — blocked on the
-Turso DDL (see "Deploy checklist"). Pushing before the table exists would 500 every
-delete in production.**
+**Status: SHIPPED & owner-verified on prod (2026-06-16).** Turso DDL applied, pushed to
+`main` (commit `dd405b7`), and the refresh-on-undo polish (content remount) added after.
+Owner confirmed restore works for contacts, meetings, actions, organizations, ideas.
 
 Goal: a **persistent** "undo last delete" command that reverses the most recent delete
 (contact, organization, meeting, action, prep note, link, relationship, idea, etc.) and
@@ -58,7 +58,9 @@ cascade/SetNull graph is encoded explicitly in `server/src/lib/undo.ts` (small, 
 - [x] `npm run prepush` (client+server typecheck) + full `vite build` + server `tsc` — all green.
 - [x] Smoke-tested on :3001 (17/17 assertions): recursive cascade restore (contact→meeting→prep),
       `action.contactId` SetNull restore, company JSON-array scrub + re-add, empty-stack 404.
-- [ ] **OWNER:** browser test on :5173 incl. mobile 390px (header Undo button + Cmd/Ctrl+Z).
+- [x] **OWNER:** verified on prod — contacts, meetings, actions, organizations, ideas all restore.
+- [x] Refresh-on-undo: `layout.tsx` remounts the routed content (`key` on `<main>`, bumped by the
+      `searchbook:undone` event) so the restored item appears without a manual page refresh.
 
 ## Deploy checklist
 

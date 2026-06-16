@@ -3,7 +3,22 @@
 This file is the handoff document for the next AI session (Claude Code **or** Gemini/Antigravity — the
 protocol is agent-agnostic). It summarizes what was just accomplished, what to work on next, and open items.
 
-### What Was Just Completed (Session 8 / 9)
+### What Was Just Completed (Session 10)
+
+**Undo last delete — shipped & owner-verified on prod.** Plan: `.planning/UNDO-DELETE-PLAN.md`.
+- Server-side **snapshot-and-replay**: new `DeletedSnapshot` table; each delete first captures
+  everything it will destroy/mutate (recursive cascade rows, SetNull'd FKs, company JSON-array
+  scrubs) atomically with the delete. Engine in `server/src/lib/undo.ts`; `GET/POST /api/undo`.
+  Wired into all 14 top-level delete routes.
+- **Persistent** client command: header **Undo** button + **Cmd/Ctrl+Z** (suppressed while
+  typing), backed by the server so it survives navigation/reload (`client/src/components/undo-provider.tsx`).
+  After undo, the routed content area remounts (key on `<main>` in `layout.tsx`) so the restored
+  item reappears without a manual refresh.
+- Attachment deletes no longer destroy the Vercel Blob (so they're restorable); backup wipe clears
+  `DeletedSnapshot`. `DeletedSnapshot` table was created on Turso (owner ran the DDL).
+- Owner tested contacts, meetings, actions, organizations, ideas — all restore correctly.
+
+### Earlier (Session 8 / 9)
 
 1. **LinkedIn Import Company Status Bugfix:** Modified `client/src/pages/contacts/contact-form.tsx` so that when a LinkedIn import creates a new company, it checks if the contact is currently working there (`isCurrent: true`) AND if the contact being imported is set to `CONNECTED`. If both are true, the new company's status defaults to `CONNECTED`; otherwise, it defaults to `NONE`. This fixes the bug where all newly imported companies defaulted to `RESEARCHING`.
 2. **Organization Contacts Inline Edit:** Made the ecosystem and status badges for contacts listed on an Organization's detail page (`company-detail.tsx`) interactive, allowing inline updates via dropdowns without leaving the page.
@@ -14,12 +29,6 @@ protocol is agent-agnostic). It summarizes what was just accomplished, what to w
 2. **Contact Cleanup:** Created and executed a one-off script (`server/scripts/delete-researching-recruiters.js`) that deletes all Contacts where Ecosystem = 'RECRUITER' AND Status is 'RESEARCHING' or 'NONE' (blank).
 
 ### What's Next
-0. **[OWNER, REQUIRED before pushing] Undo-last-delete feature is code-complete + locally
-   verified but UNPUSHED.** Plan: `.planning/UNDO-DELETE-PLAN.md`. It adds a `DeletedSnapshot`
-   table — **pushing before the table exists on Turso will 500 every delete in production.**
-   Deploy order: (a) run `CREATE TABLE DeletedSnapshot` on Turso via the web SQL console — DDL
-   is in `server/scripts/migrate-deleted-snapshot.js`; (b) `git push`. Then browser-test the
-   header **Undo** button + `Cmd/Ctrl+Z` (desktop + mobile 390px).
 1. **[OWNER, light]** Run the organization status sweep script against the production Turso DB (requires exporting `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the environment, then running `node scripts/sweep-company-status.js` from the `server` directory).
 2. **[OWNER, light]** Confirm on prod that series create/join + the new sort/search behave as expected.
 3. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**, gated on D5–D9 — don't push on

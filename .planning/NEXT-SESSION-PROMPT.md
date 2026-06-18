@@ -5,59 +5,35 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Enhancements session (2026-06-18)
+### What Was Just Completed — Enhancements session (2026-06-18) — ALL SHIPPED ✅
 
-Four enhancement requests. **Three are pushed/live** (schema-free); the **fourth (@-mentions) is
-committed locally but NOT pushed** — it adds a table and needs the Turso DDL applied first (see
-"⚠ MUST DO before pushing" below).
+Four enhancement requests, all pushed/live. The Turso DDL for the new table was applied by the owner
+mid-session, so @-mentions are live too.
 
-1. **LinkedIn import — prefer current job title over headline** (`6923f4f`, pushed). The contact's
-   Title was being filled from the LinkedIn *headline* ("Healthcare Strategy and Process Redesign
-   Leader"). Now it prefers the current Experience role's title ("AVP analysis and evaluation"),
-   keeping the headline only as a backup. Server post-processing in `routes/linkedin.ts`; preview
-   shows a "Headline (backup)" line.
-2. **Participant hover tooltips** (`aa7a8e5`, pushed). Hovering a participant on a meeting card or in
-   the meeting editor shows their title + current employer (and, on cards, the per-meeting note). New
-   `PersonTooltip`; `/meetings` + `/contacts/names` carry `title` + primary `company.name`. Verified
-   desktop + 390px.
-3. **Doc: marked `OUTLOOK_CALENDAR_ICS_URL` done** (`b1826f9`, pushed) — owner set it in Vercel.
-4. **@-mentions in meeting notes + review surfaces** (`e006895`, **LOCAL ONLY — DO NOT PUSH until
-   Turso DDL is applied**). Type `@` in notes/next-steps to flag a third person (existing contact or
-   a "loose" name not yet a contact); review on a new `/mentions` page and a "Mentioned in Meetings"
-   card on each contact. New `ConversationMention` table; mentions derived from note tokens on every
-   conversation save; loose mentions get a one-click "Create contact". Backup/restore both paths
-   updated (export version 6). Verified end-to-end via chrome-devtools; test data cleaned from local
-   dev DB. **Design decisions in `STATE.md`.**
-
-### ⚠ MUST DO before pushing the @-mention commit (`e006895`)
-
-Run this DDL against **Turso (prod)** via the web SQL console (the committed rw token is stale), then
-`git push`:
-
-```sql
-CREATE TABLE "ConversationMention" (
-    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "conversationId" INTEGER NOT NULL,
-    "contactId" INTEGER,
-    "mentionedName" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ConversationMention_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "ConversationMention_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "Contact" ("id") ON DELETE SET NULL ON UPDATE CASCADE
-);
-CREATE INDEX "ConversationMention_conversationId_idx" ON "ConversationMention"("conversationId");
-CREATE INDEX "ConversationMention_contactId_idx" ON "ConversationMention"("contactId");
-```
-Pushing before the table exists will 500 every meeting save (the save re-syncs mentions).
+1. **LinkedIn import — prefer current job title over headline** (`6923f4f`). Title now uses the
+   current Experience role ("AVP analysis and evaluation") instead of the LinkedIn *headline*
+   ("Healthcare Strategy and Process Redesign Leader"); headline kept as backup (`parsed.headline`,
+   shown as "Headline (backup)" in the preview). Server post-processing in `routes/linkedin.ts`.
+2. **Participant hover tooltips** (`aa7a8e5` + `99f052a`). Hovering a participant shows title +
+   current employer — on meeting-card badges, the editor's participant rows, AND the editor's
+   Participants combobox pills (`99f052a` added the last via `MultiCombobox` `optionMeta`). New shared
+   `PersonTooltip`; `/meetings` + `/contacts/names` carry `title` + primary `company.name`.
+3. **Doc: marked `OUTLOOK_CALENDAR_ICS_URL` done** (`b1826f9`) — owner set it in Vercel.
+4. **@-mentions in meeting notes + review surfaces** (`e006895`, **SHIPPED — Turso DDL applied
+   2026-06-18**). Type `@` in notes/next-steps to flag a third person (existing contact or a "loose"
+   name not yet a contact); review on the new `/mentions` page and a "Mentioned in Meetings" card on
+   each contact; loose mentions get a one-click "Create contact". New `ConversationMention` table,
+   derived from the note tokens on every conversation save. Backup both paths + export version 6.
+   Verified end-to-end via chrome-devtools; test data cleaned from local dev DB. **Design in `STATE.md`.**
 
 ### What's Next
 
-1. **Apply the DDL above, then push `e006895`** (+ this docs commit) to ship @-mentions.
-2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
+1. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
    AI ingest) on D5/D6. Don't push on those until the owner raises them.
-3. **Option B (when wanted):** attendee auto-fill via Microsoft Graph or Power Automate — implement a
+2. **Option B (when wanted):** attendee auto-fill via Microsoft Graph or Power Automate — implement a
    second `CalendarProvider`; nothing downstream changes.
-4. **@-mention follow-ups (optional):** enable @ in meeting *prep notes* too (currently only
+3. **@-mention follow-ups (optional):** enable `@` in meeting *prep notes* too (currently only
    notes + next-steps sync); add a command-palette entry for the Mentions page.
 
 ### Carry-over items (lower priority)
@@ -87,9 +63,9 @@ Pushing before the table exists will 500 every meeting save (the save re-syncs m
 
 ### Working branch
 
-`main` — commits `6923f4f`, `aa7a8e5`, `b1826f9` pushed/live. **`e006895` (@-mentions) + the
-session-end docs commit are committed locally but UNPUSHED**, gated on the Turso DDL above. Apply the
-DDL, then `git push`.
+`main` — all pushed/live (tip `99f052a`). This session: `6923f4f`, `aa7a8e5`, `b1826f9`, `e006895`,
+`58a5d1b`, `99f052a`. The `ConversationMention` Turso DDL was applied 2026-06-18, so @-mentions are
+live in prod.
 
 ---
 
@@ -100,8 +76,8 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped three enhancements (LinkedIn
-title preference, participant hover tooltips, Outlook-env doc) and built a fourth — **@-mentions in
-meeting notes** — which is committed locally (`e006895`) but **unpushed pending the Turso DDL** (see
-"⚠ MUST DO before pushing"). The very first task: apply that DDL, then push. Plan of record is
-`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).
+Context for *this* upcoming session specifically: last session shipped four enhancements — LinkedIn
+title preference, participant hover tooltips (incl. combobox pills), the Outlook-env doc, and
+**@-mentions in meeting notes** (new `/mentions` page + per-contact card; Turso DDL applied, live).
+Nothing is left pending from it. Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+,
+gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).

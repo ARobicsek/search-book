@@ -189,4 +189,5 @@
   border-radius: 0.375rem;
   border: 1px solid var(--border);
   margin: 0.25rem 0;
+  cursor: zoom-in;
 }

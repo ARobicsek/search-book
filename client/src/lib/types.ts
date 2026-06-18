@@ -128,6 +128,8 @@ export interface Action {
   direction: ActionDirection; // derived mirror of owedByMe/owerContactIds — still read by dashboard/list/detail
   owedByMe: boolean; // Task 3: the removable "me" chip
   owerContactIds: string | null; // Task 3: JSON array of contact ids who owe it
+  owers?: { id: number; name: string }[]; // server-resolved owerContactIds → people you're waiting on
+
   recurring: boolean;
   recurringIntervalDays: number | null;
   recurringEndDate: string | null;
@@ -135,6 +137,19 @@ export interface Action {
   updatedAt: string;
   actionContacts?: { contact: { id: number; name: string; company?: { name: string } | null; companyName?: string | null } }[];
   actionCompanies?: { company: { id: number; name: string } }[];
+}
+
+// Which people to surface on a compact action card: the person(s) you're waiting on
+// (owers) when the action is owned by someone else, otherwise the related contact(s).
+// `waiting` lets callers add a "waiting on" cue so an ower doesn't read as a related contact.
+export function actionDisplayPeople(action: Action): { people: { id: number; name: string }[]; waiting: boolean } {
+  if (action.owers?.length) {
+    return { people: action.owers, waiting: true };
+  }
+  const people = action.actionContacts?.length
+    ? action.actionContacts.map((ac) => ac.contact)
+    : action.contact ? [action.contact] : [];
+  return { people, waiting: false };
 }
 
 export const ACTION_TYPE_OPTIONS: { value: ActionType; label: string }[] = [

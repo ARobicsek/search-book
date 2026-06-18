@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Trash2, Check, Circle, Loader2, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Check, Circle, Loader2, ExternalLink, Hourglass } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
 const typeColors: Record<string, string> = {
@@ -291,6 +291,22 @@ export function ActionDetailPage() {
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-2">
+            <Field label="Waiting on">
+              {action.owers && action.owers.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1">
+                  <Hourglass className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" />
+                  {action.owers.map((o, i) => (
+                    <Link
+                      key={o.id}
+                      to={`/contacts/${o.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {o.name}{i < action.owers!.length - 1 ? ',' : ''}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </Field>
             <Field label={action.actionContacts && action.actionContacts.length > 1 ? 'Contacts' : 'Contact'}>
               {(() => {
                 const contacts = action.actionContacts?.length

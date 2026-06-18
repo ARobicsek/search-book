@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Action, ActionType, ActionPriority } from '@/lib/types'
-import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
+import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, actionDisplayPeople } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -79,15 +79,15 @@ function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
             {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
           </Badge>
           {(() => {
-            const contacts = action.actionContacts?.length
-              ? action.actionContacts.map((ac) => ac.contact)
-              : action.contact ? [action.contact] : []
-            return contacts.map((c) => (
+            const { people, waiting } = actionDisplayPeople(action)
+            return people.map((c, i) => (
               <Link
                 key={c.id}
                 to={`/contacts/${c.id}`}
-                className="text-xs text-muted-foreground hover:underline"
+                className="flex items-center gap-0.5 text-xs text-muted-foreground hover:underline"
+                title={waiting ? `Waiting on ${c.name}` : undefined}
               >
+                {waiting && i === 0 && <Hourglass className="h-3 w-3 text-fuchsia-600" />}
                 {c.name}
               </Link>
             ))

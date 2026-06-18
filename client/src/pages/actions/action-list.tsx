@@ -11,13 +11,13 @@ import {
   type VisibilityState,
   flexRender,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Plus, Check, Search, List, CalendarDays } from 'lucide-react'
+import { ArrowUpDown, Plus, Check, Search, List, CalendarDays, Hourglass } from 'lucide-react'
 import { ActionDateSelect } from '@/components/action-date-select'
 import { ActionsCalendar } from '@/pages/calendar'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api } from '@/lib/api'
 import type { Action, ActionType, ActionPriority } from '@/lib/types'
-import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
+import { ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, actionDisplayPeople } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -72,6 +72,8 @@ const globalFilterFn: FilterFn<Action> = (row, _columnId, filterValue: string) =
   // Search across title, description, contact names, company names, and contact's companies
   const contactNames = action.actionContacts?.map((ac) => ac.contact.name) ?? []
   if (action.contact?.name) contactNames.push(action.contact.name)
+  // Also match the people you're waiting on (owers) — they're what shows on the card.
+  for (const o of action.owers ?? []) contactNames.push(o.name)
   const companyNames = action.actionCompanies?.map((ac) => ac.company.name) ?? []
   if (action.company?.name) companyNames.push(action.company.name)
 
@@ -287,11 +289,7 @@ export function ActionListPage() {
     },
     {
       id: 'contact',
-      accessorFn: (row) => {
-        const names = row.actionContacts?.map((ac) => ac.contact.name) ?? []
-        if (!names.length && row.contact?.name) names.push(row.contact.name)
-        return names.join(', ')
-      },
+      accessorFn: (row) => actionDisplayPeople(row).people.map((p) => p.name).join(', '),
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -303,20 +301,22 @@ export function ActionListPage() {
         </Button>
       ),
       cell: ({ row }) => {
-        const contacts = row.original.actionContacts?.length
-          ? row.original.actionContacts.map((ac) => ac.contact)
-          : row.original.contact ? [row.original.contact] : []
-        if (!contacts.length) return <span className="text-muted-foreground">—</span>
+        const { people, waiting } = actionDisplayPeople(row.original)
+        if (!people.length) return <span className="text-muted-foreground">—</span>
         return (
-          <div className="flex flex-wrap gap-x-1">
-            {contacts.map((c, i) => (
+          <div className="flex flex-wrap items-center gap-x-1">
+            {waiting && (
+              <Hourglass className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" aria-label="Waiting on" />
+            )}
+            {people.map((c, i) => (
               <Link
                 key={c.id}
                 to={`/contacts/${c.id}`}
                 className="hover:underline"
                 onClick={(e) => e.stopPropagation()}
+                title={waiting ? `Waiting on ${c.name}` : undefined}
               >
-                {c.name}{i < contacts.length - 1 ? ',' : ''}
+                {c.name}{i < people.length - 1 ? ',' : ''}
               </Link>
             ))}
           </div>

@@ -71,6 +71,35 @@ function resolveOwers(body: Record<string, unknown>): { owedByMe: boolean; owerC
   return { owedByMe, owerContactIds: owerIds.length ? JSON.stringify(owerIds) : null, direction };
 }
 
+// Parse an action's owerContactIds JSON ("[3,7]") → number[]. Tolerant of nulls/garbage.
+function parseOwerIds(json: string | null): number[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.map((x) => parseInt(String(x))).filter((n) => !Number.isNaN(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
+// `owerContactIds` is a JSON column, not a relation, so Prisma can't `include` the people.
+// Resolve them to `{id, name}` here — in ONE batched query across the whole result set
+// (no N+1, no `_count`) — so the UI can show who you're waiting on without re-fetching
+// /contacts/names per surface. Unknown ids degrade to "#id". Returns the same objects with
+// an added `owers` array (empty when none).
+async function attachOwers<T extends { owerContactIds: string | null }>(actions: T[]): Promise<(T & { owers: { id: number; name: string }[] })[]> {
+  const idsPerAction = actions.map((a) => parseOwerIds(a.owerContactIds));
+  const allIds = [...new Set(idsPerAction.flat())];
+  const contacts = allIds.length
+    ? await prisma.contact.findMany({ where: { id: { in: allIds } }, select: { id: true, name: true } })
+    : [];
+  const nameById = new Map(contacts.map((c) => [c.id, c.name]));
+  return actions.map((a, i) => ({
+    ...a,
+    owers: idsPerAction[i].map((id) => ({ id, name: nameById.get(id) ?? `#${id}` })),
+  }));
+}
+
 // GET /api/actions — list all actions with optional filters
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -137,11 +166,11 @@ router.get('/', async (req: Request, res: Response) => {
     if (sortBy !== 'completedDate') {
       const withDate = actions.filter(a => a.dueDate !== null);
       const withoutDate = actions.filter(a => a.dueDate === null);
-      res.json([...withDate, ...withoutDate]);
+      res.json(await attachOwers([...withDate, ...withoutDate]));
       return;
     }
 
-    res.json(actions);
+    res.json(await attachOwers(actions));
   } catch (error) {
     console.error('Error fetching actions:', error);
     res.status(500).json({ error: 'Failed to fetch actions' });
@@ -159,7 +188,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Action not found' });
       return;
     }
-    res.json(action);
+    res.json((await attachOwers([action]))[0]);
   } catch (error) {
     console.error('Error fetching action:', error);
     res.status(500).json({ error: 'Failed to fetch action' });
@@ -189,7 +218,7 @@ router.post('/', async (req: Request, res: Response) => {
       },
       include: actionIncludes,
     });
-    res.status(201).json(action);
+    res.status(201).json((await attachOwers([action]))[0]);
   } catch (error) {
     console.error('Error creating action:', error);
     res.status(500).json({ error: 'Failed to create action' });
@@ -251,7 +280,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         include: actionIncludes,
       });
     });
-    res.json(action);
+    res.json((await attachOwers([action]))[0]);
   } catch (error) {
     if (error instanceof StaleWriteError) {
       res.status(409).json({ error: CONFLICT_MESSAGE });
@@ -323,7 +352,10 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
       }
     }
 
-    res.json({ action, nextAction });
+    const [actionWithOwers, nextWithOwers] = await attachOwers(
+      nextAction ? [action, nextAction] : [action]
+    );
+    res.json({ action: actionWithOwers, nextAction: nextAction ? nextWithOwers : null });
   } catch (error) {
     console.error('Error toggling action completion:', error);
     res.status(500).json({ error: 'Failed to toggle action completion' });

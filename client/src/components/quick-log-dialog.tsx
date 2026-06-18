@@ -1242,6 +1242,7 @@ function QuickLogDialog({
           options={contactOptions}
           values={participantIds}
           onChange={setParticipantIds}
+          optionMeta={contactMeta}
           placeholder="Named people in the meeting..."
           searchPlaceholder="Search or type new name..."
           allowFreeText={true}

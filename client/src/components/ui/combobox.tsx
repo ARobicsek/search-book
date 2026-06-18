@@ -16,6 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { PersonTooltip } from '@/components/person-tooltip';
 
 export interface ComboboxOption {
   value: string;
@@ -150,6 +151,9 @@ interface MultiComboboxProps {
   allowFreeText?: boolean;
   disabled?: boolean;
   className?: string;
+  // Optional per-value metadata (keyed by option value) → a hover tooltip on the
+  // selected pills showing e.g. a person's title + current employer.
+  optionMeta?: Map<string, { title?: string | null; employer?: string | null }>;
 }
 
 export function MultiCombobox({
@@ -162,6 +166,7 @@ export function MultiCombobox({
   allowFreeText = false,
   disabled = false,
   className,
+  optionMeta,
 }: MultiComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -208,9 +213,12 @@ export function MultiCombobox({
               values.map((val) => {
                 const opt = options.find((o) => o.value === val);
                 const label = opt?.label || val;
+                const meta = optionMeta?.get(val);
                 return (
                   <Badge key={val} variant="secondary" className="gap-1 pr-1 text-xs">
-                    {label}
+                    <PersonTooltip title={meta?.title} employer={meta?.employer}>
+                      <span>{label}</span>
+                    </PersonTooltip>
                     <span
                       role="button"
                       tabIndex={-1}

@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { HighlightedText } from '@/components/highlighted-text'
+import { PersonTooltip } from '@/components/person-tooltip'
 import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
@@ -415,11 +416,18 @@ function MeetingCard({
                 </Link>
               ))}
               {conv.participants?.map((p) => (
-                <Link key={p.contact.id} to={`/contacts/${p.contact.id}`}>
-                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100" title={p.note || undefined}>
-                    {hl(p.contact.name)}
-                  </Badge>
-                </Link>
+                <PersonTooltip
+                  key={p.contact.id}
+                  title={p.contact.title}
+                  employer={p.contact.company?.name}
+                  note={p.note}
+                >
+                  <Link to={`/contacts/${p.contact.id}`}>
+                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100">
+                      {hl(p.contact.name)}
+                    </Badge>
+                  </Link>
+                </PersonTooltip>
               ))}
               {conv.tags?.map((t) => (
                 <button key={t.tag.id} type="button" onClick={() => onTagClick(t.tag.id)}>

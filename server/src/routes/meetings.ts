@@ -11,7 +11,12 @@ const meetingListInclude = {
   contact: { select: { id: true, name: true } },
   company: { select: { id: true, name: true } },
   participants: {
-    include: { contact: { select: { id: true, name: true } } },
+    // title + primary employer power the hover tooltip on participant chips.
+    include: {
+      contact: {
+        select: { id: true, name: true, title: true, company: { select: { name: true } } },
+      },
+    },
     orderBy: { ordering: 'asc' as const },
   },
   orgs: { include: { company: { select: { id: true, name: true } } } },

@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/resizable'
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { TitleAutocomplete } from '@/components/title-autocomplete'
+import { PersonTooltip } from '@/components/person-tooltip'
 import { MarkdownTextarea } from '@/components/markdown-textarea'
 import { SaveStatusIndicator } from '@/components/save-status'
 import type { SaveStatus } from '@/hooks/use-auto-save'
@@ -382,6 +383,8 @@ function QuickLogDialog({
   // Lookup data, fetched lazily on first open
   const [titles, setTitles] = useState<string[]>([])
   const [contactOptions, setContactOptions] = useState<ComboboxOption[]>([])
+  // Per-contact title + employer for the participant-chip hover tooltip, keyed by id string.
+  const [contactMeta, setContactMeta] = useState<Map<string, { title?: string | null; employer?: string | null }>>(new Map())
   const [companyOptions, setCompanyOptions] = useState<ComboboxOption[]>([])
   const [tagOptions, setTagOptions] = useState<ComboboxOption[]>([])
   const [lookupsLoaded, setLookupsLoaded] = useState(false)
@@ -453,8 +456,11 @@ function QuickLogDialog({
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
     api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => { })
     if (!lookupsLoaded) {
-      api.get<{ id: number; name: string }[]>('/contacts/names')
-        .then((data) => setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name }))))
+      api.get<{ id: number; name: string; title?: string | null; company?: { name: string } | null }[]>('/contacts/names')
+        .then((data) => {
+          setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
+          setContactMeta(new Map(data.map((c) => [c.id.toString(), { title: c.title, employer: c.company?.name }])))
+        })
         .catch(() => { })
       api.get<{ id: number; name: string }[]>('/companies/names')
         .then((data) => setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name }))))
@@ -1259,9 +1265,15 @@ function QuickLogDialog({
               ) : (
                 <span className="w-3.5 shrink-0" />
               )}
-              <span className="w-28 shrink-0 truncate text-xs text-muted-foreground" title={participantNameOf(val)}>
-                {participantNameOf(val)}
-              </span>
+              <PersonTooltip
+                name={participantNameOf(val)}
+                title={contactMeta.get(val)?.title}
+                employer={contactMeta.get(val)?.employer}
+              >
+                <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">
+                  {participantNameOf(val)}
+                </span>
+              </PersonTooltip>
               <Input
                 value={participantNotes[val] || ''}
                 onChange={(e) =>

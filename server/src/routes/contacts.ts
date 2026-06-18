@@ -162,11 +162,13 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/contacts/names — lightweight list of just id/name for comboboxes
+// GET /api/contacts/names — lightweight list for comboboxes. Also carries title +
+// primary employer so meeting dialogs can show a hover tooltip on participant chips
+// (extra fields are ignored by the plain {value,label} combobox consumers).
 router.get('/names', async (_req: Request, res: Response) => {
   try {
     const contacts = await prisma.contact.findMany({
-      select: { id: true, name: true },
+      select: { id: true, name: true, title: true, company: { select: { name: true } } },
       orderBy: { name: 'asc' },
     });
     res.json(contacts);

@@ -5,26 +5,39 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Enhancements session (2026-06-18) — ALL SHIPPED ✅
+### What Was Just Completed — @-mentions enhancements session (2026-06-18 PM)
 
-Four enhancement requests, all pushed/live. The Turso DDL for the new table was applied by the owner
-mid-session, so @-mentions are live too.
+Four follow-up enhancements (all to the @-mentions / notes feature family). **Tasks 1, 2, 4 are
+pushed/live** (`d6e39a6`, `2b8d0b8`, `7b7dcad`). **Task 3 (org mentions) is committed locally
+(`cd2bfdc`) but NOT pushed — it adds columns and is gated on the Turso DDL below.**
 
-1. **LinkedIn import — prefer current job title over headline** (`6923f4f`). Title now uses the
-   current Experience role ("AVP analysis and evaluation") instead of the LinkedIn *headline*
-   ("Healthcare Strategy and Process Redesign Leader"); headline kept as backup (`parsed.headline`,
-   shown as "Headline (backup)" in the preview). Server post-processing in `routes/linkedin.ts`.
-2. **Participant hover tooltips** (`aa7a8e5` + `99f052a`). Hovering a participant shows title +
-   current employer — on meeting-card badges, the editor's participant rows, AND the editor's
-   Participants combobox pills (`99f052a` added the last via `MultiCombobox` `optionMeta`). New shared
-   `PersonTooltip`; `/meetings` + `/contacts/names` carry `title` + primary `company.name`.
-3. **Doc: marked `OUTLOOK_CALENDAR_ICS_URL` done** (`b1826f9`) — owner set it in Vercel.
-4. **@-mentions in meeting notes + review surfaces** (`e006895`, **SHIPPED — Turso DDL applied
-   2026-06-18**). Type `@` in notes/next-steps to flag a third person (existing contact or a "loose"
-   name not yet a contact); review on the new `/mentions` page and a "Mentioned in Meetings" card on
-   each contact; loose mentions get a one-click "Create contact". New `ConversationMention` table,
-   derived from the note tokens on every conversation save. Backup both paths + export version 6.
-   Verified end-to-end via chrome-devtools; test data cleaned from local dev DB. **Design in `STATE.md`.**
+1. **Surrounding-context snippets** (`d6e39a6`, live). The `/mentions` page and the per-contact
+   "Mentioned in Meetings" card now show the text *around* the @-mention (`mentionSnippet`, ±140 chars
+   snapped to word/token boundaries, chip preserved), not the whole note from the top.
+2. **@-mentions in prep notes** (`2b8d0b8`, live). Prep-note editors open the `@` picker, prep notes
+   render chips, and prep-note text feeds the index via new `resyncConversationMentions` (aggregates
+   notes+next-steps+all prep notes; prep-note CRUD re-syncs; `create-contact` rewrites prep tokens).
+3. **@-mentions for Organizations — full parity** (`cd2bfdc`, **committed, NOT pushed — needs DDL**).
+   `@` picker offers orgs (building icon) + a "new organization" loose option; violet chips link to
+   `/companies/:id`; `/mentions` shows org badges + one-click "Create organization"; new
+   "Mentioned in Meetings" card on each org page. Schema: `ConversationMention` gains `companyId`
+   (FK→Company SetNull) + index + `kind` ('CONTACT'|'COMPANY'). Also merged the Mentions-page
+   snippets per field (clustered mentions → one block). **Verified end-to-end via chrome-devtools on
+   local dev (DB migrated locally); test data cleaned up.**
+4. **Click-to-zoom note images** (`7b7dcad`, live). One app-root `NoteImageLightbox` opens any
+   `.prep-note-markdown img` full-screen (fit↔actual-size toggle, Esc/backdrop close) — fixes
+   unreadable small pasted screenshots. Covers all note render sites; images get a `zoom-in` cursor.
+
+### ⚠️ IMMEDIATE — finish Task 3 (org mentions)
+
+**Run this Turso DDL via the web SQL console (committed rw token is stale), then push `cd2bfdc`:**
+```sql
+ALTER TABLE "ConversationMention" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'CONTACT';
+ALTER TABLE "ConversationMention" ADD COLUMN "companyId" INTEGER REFERENCES "Company"("id") ON DELETE SET NULL;
+CREATE INDEX "ConversationMention_companyId_idx" ON "ConversationMention"("companyId");
+```
+Take a backup first. All three are safe additive statements. After it's applied:
+`git push origin main` (pushes `cd2bfdc` + the session-doc commit). Do NOT push before the DDL.
 
 ### What's Next
 
@@ -33,8 +46,8 @@ mid-session, so @-mentions are live too.
    AI ingest) on D5/D6. Don't push on those until the owner raises them.
 2. **Option B (when wanted):** attendee auto-fill via Microsoft Graph or Power Automate — implement a
    second `CalendarProvider`; nothing downstream changes.
-3. **@-mention follow-ups (optional):** enable `@` in meeting *prep notes* too (currently only
-   notes + next-steps sync); add a command-palette entry for the Mentions page.
+3. **@-mention follow-up (optional):** add a command-palette entry for the Mentions page. (Prep-note
+   `@` and org `@` are now done.)
 
 ### Carry-over items (lower priority)
 
@@ -63,9 +76,9 @@ mid-session, so @-mentions are live too.
 
 ### Working branch
 
-`main` — all pushed/live (tip `99f052a`). This session: `6923f4f`, `aa7a8e5`, `b1826f9`, `e006895`,
-`58a5d1b`, `99f052a`. The `ConversationMention` Turso DDL was applied 2026-06-18, so @-mentions are
-live in prod.
+`main` — remote tip is `7b7dcad` (Tasks 1/2/4 live). **Local is ahead by `cd2bfdc` (Task 3, org
+mentions) — held until the Turso DDL above is applied, then push.** This session: `d6e39a6`,
+`2b8d0b8`, `7b7dcad` (pushed); `cd2bfdc` + the session-doc commit (pending push).
 
 ---
 

@@ -21,7 +21,7 @@ function bigintReplacer(_key: string, value: unknown): unknown {
   return typeof value === 'bigint' ? Number(value) : value;
 }
 
-// Build the full 27-table export object. Shared by /export and /cron.
+// Build the full 28-table export object. Shared by /export and /cron.
 async function buildExport() {
   const [
     contacts, companies, employmentHistory, tags, contactTags, companyTags,
@@ -31,6 +31,7 @@ async function buildExport() {
     contactStatusHistory, companyStatusHistory, companyActivities,
     companyPrepNotes, conversationParticipants, conversationTags,
     conversationPrepNotes, conversationAttachments, conversationOrgs,
+    conversationMentions,
   ] = await Promise.all([
     prisma.contact.findMany(),
     prisma.company.findMany(),
@@ -59,10 +60,11 @@ async function buildExport() {
     prisma.conversationPrepNote.findMany(),
     prisma.conversationAttachment.findMany(),
     prisma.conversationOrg.findMany(),
+    prisma.conversationMention.findMany(),
   ]);
 
   return {
-    _meta: { exportedAt: new Date().toISOString(), version: 5 },
+    _meta: { exportedAt: new Date().toISOString(), version: 6 },
     Contact: contacts,
     Company: companies,
     EmploymentHistory: employmentHistory,
@@ -94,6 +96,8 @@ async function buildExport() {
     ConversationAttachment: conversationAttachments,
     // Multi-org meetings: orgs the meeting was with (beyond the anchor companyId)
     ConversationOrg: conversationOrgs,
+    // @-mentions of people inside meeting notes (derived index over the note text)
+    ConversationMention: conversationMentions,
   };
 }
 
@@ -422,6 +426,7 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.conversationPrepNote.deleteMany();
       await tx.conversationAttachment.deleteMany();
       await tx.conversationOrg.deleteMany();
+      await tx.conversationMention.deleteMany();
       await tx.contactTag.deleteMany();
       await tx.companyTag.deleteMany();
       await tx.ideaContact.deleteMany();
@@ -487,6 +492,8 @@ router.post('/import', async (req: Request, res: Response) => {
       if (data.ConversationAttachment?.length) await tx.conversationAttachment.createMany({ data: transformRecords(data.ConversationAttachment) });
       // Multi-org meetings (parents Conversation + Company already inserted)
       if (data.ConversationOrg?.length) await tx.conversationOrg.createMany({ data: transformRecords(data.ConversationOrg) });
+      // @-mentions (parents Conversation + Contact already inserted)
+      if (data.ConversationMention?.length) await tx.conversationMention.createMany({ data: transformRecords(data.ConversationMention) });
     });
 
     res.json({ message: 'Import completed successfully' });

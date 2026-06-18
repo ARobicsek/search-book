@@ -12,6 +12,7 @@ import type {
   Tag,
   DatePrecision,
   RelationshipType,
+  MentionMeeting,
 } from '@/lib/types'
 import {
   ECOSYSTEM_OPTIONS,
@@ -21,7 +22,9 @@ import {
   CONVERSATION_TYPE_OPTIONS,
   RELATIONSHIP_TYPE_OPTIONS,
   parseContactEmails,
+  conversationDisplayName,
 } from '@/lib/types'
+import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ActionDateSelect } from '@/components/action-date-select'
@@ -808,6 +811,9 @@ export function ContactDetailPage() {
           {/* Meeting takeaways — per-participant notes from every meeting they attended (NCQA 2.4) */}
           <MeetingTakeawaysCard contactId={contact.id} conversations={conversations} />
 
+          {/* @-mentions — meetings where this person was mentioned in the notes */}
+          <MentionedInMeetingsCard contactId={contact.id} />
+
           {(contact.whereFound) && (
           <Card>
             <CardHeader>
@@ -1160,6 +1166,52 @@ function MeetingTakeawaysCard({
                   </Link>
                 )}
               </p>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Mentioned-in-meetings card (@-mentions) ────────────────
+// Meetings whose notes @-mention this contact, newest first — the inverse of the
+// Mentions page, scoped to one person. Self-fetches from /mentions?contactId=.
+function MentionedInMeetingsCard({ contactId }: { contactId: number }) {
+  const [meetings, setMeetings] = useState<MentionMeeting[]>([])
+
+  useEffect(() => {
+    let active = true
+    api
+      .get<{ data: MentionMeeting[] }>(`/mentions?contactId=${contactId}&limit=50`)
+      .then((res) => { if (active) setMeetings(res.data) })
+      .catch(() => { /* non-critical secondary panel */ })
+    return () => { active = false }
+  }, [contactId])
+
+  if (meetings.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Mentioned in Meetings</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {meetings.map((m) => (
+            <li key={m.id} className="text-sm">
+              <p className="text-xs text-muted-foreground">
+                {formatConversationDate(m.date, m.datePrecision as DatePrecision)}
+                {' — '}
+                <Link to={`/meetings?id=${m.id}`} className="text-primary hover:underline">
+                  {conversationDisplayName(m)}
+                </Link>
+              </p>
+              {m.notes && (
+                <div className="prep-note-markdown mt-0.5 line-clamp-4 text-muted-foreground">
+                  <MentionableMarkdown>{m.notes}</MentionableMarkdown>
+                </div>
+              )}
             </li>
           ))}
         </ul>

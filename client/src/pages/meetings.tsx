@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { HighlightedText } from '@/components/highlighted-text'
+import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { PersonTooltip } from '@/components/person-tooltip'
 import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
@@ -353,7 +354,7 @@ function MeetingCard({
             )}
             {conv.notes && (
               <div className="prep-note-markdown text-sm text-muted-foreground">
-                <ReactMarkdown>{conv.notes}</ReactMarkdown>
+                <MentionableMarkdown>{conv.notes}</MentionableMarkdown>
               </div>
             )}
             {conv.attachments && conv.attachments.length > 0 && (
@@ -387,7 +388,7 @@ function MeetingCard({
               <div className="text-sm text-muted-foreground">
                 <span className="text-xs font-medium">Next steps:</span>
                 <div className="prep-note-markdown">
-                  <ReactMarkdown>{conv.nextSteps}</ReactMarkdown>
+                  <MentionableMarkdown>{conv.nextSteps}</MentionableMarkdown>
                 </div>
               </div>
             )}

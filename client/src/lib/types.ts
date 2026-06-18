@@ -261,10 +261,46 @@ export interface ConversationAttachment {
   createdAt: string;
 }
 
+/** A person @-mentioned inside a meeting's notes. `contactId`/`contact` are null
+ *  for a "loose" mention (a name not yet in the CRM). */
+export interface ConversationMention {
+  id: number;
+  mentionedName: string;
+  contactId: number | null;
+  contact: { id: number; name: string } | null;
+}
+
+/** A meeting row as returned by the Mentions endpoints (lighter than Conversation;
+ *  carries just what the review surfaces render). */
+export interface MentionMeeting {
+  id: number;
+  title: string | null;
+  date: string;
+  datePrecision: DatePrecision;
+  type: ConversationType;
+  notes: string | null;
+  nextSteps: string | null;
+  attendeesDescription: string | null;
+  updatedAt: string;
+  contact: { id: number; name: string } | null;
+  company: { id: number; name: string } | null;
+  participants: { contact: { id: number; name: string } }[];
+  mentions: ConversationMention[];
+}
+
+/** The minimal shape needed to resolve a meeting's display name. */
+type DisplayNameMeeting = {
+  title: string | null;
+  participants?: { contact: { name: string } }[];
+  contact: { name: string } | null;
+  company: { name: string } | null;
+  attendeesDescription: string | null;
+};
+
 /** Display name precedence for a meeting: title → first participant → contact → company → attendees description.
  *  First participant outranks the legacy anchor contact/company so an untitled
  *  meeting is identified by the first person entered (the owner's mental model). */
-export function conversationDisplayName(conv: Conversation): string {
+export function conversationDisplayName(conv: DisplayNameMeeting): string {
   return (
     conv.title ||
     conv.participants?.[0]?.contact.name ||

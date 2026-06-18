@@ -53,6 +53,7 @@ model Contact {
   relationshipsTo          Relationship[] @relation("RelTo")
   participantInConversations ConversationParticipant[] @relation("ParticipantInConversations")
   discussedInConversations ConversationContact[] @relation("DiscussedInConversations")
+  mentionedInConversations ConversationMention[] @relation("MentionedInConversations")
   ideaContacts             IdeaContact[]
   actionContacts           ActionContact[] @relation("ActionContacts")
 }
@@ -200,8 +201,28 @@ model Conversation {
   tags               ConversationTag[]
   prepNotes          ConversationPrepNote[]
   attachments        ConversationAttachment[]
+  mentions           ConversationMention[]
 
   @@index([calendarUid])
+}
+
+// People @-mentioned inside a meeting's notes — captured inline while typing
+// ("someone you met mentioned a third person"), reviewed later. `contactId` is
+// null for a "loose" mention (a name that isn't a contact yet); `mentionedName`
+// is always the typed display name. These rows are DERIVED from the note text on
+// every conversation save (parse the @[Name](…) tokens → delete-all + re-create
+// for that meeting), so the note text stays the source of truth.
+model ConversationMention {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contactId      Int?
+  contact        Contact?     @relation("MentionedInConversations", fields: [contactId], references: [id], onDelete: SetNull)
+  mentionedName  String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([contactId])
 }
 
 // A recurring meeting series (D4 revised): meetings opt into a series explicitly

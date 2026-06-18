@@ -1,6 +1,13 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { deleteWithSnapshot } from '../lib/undo';
+import { syncConversationMentions } from '../lib/mentions';
+
+// The note text we scan for @-mentions: notes + next steps (both live on the
+// Conversation row and save together).
+function mentionText(notes: unknown, nextSteps: unknown): string {
+  return [notes, nextSteps].filter((v) => typeof v === 'string' && v).join('\n\n');
+}
 
 const router = Router();
 
@@ -273,6 +280,9 @@ router.post('/', async (req: Request, res: Response) => {
         });
       }
 
+      // Index @-mentions found in the notes / next steps.
+      await syncConversationMentions(tx, created.id, mentionText(notes, nextSteps));
+
       if (anchorContactId) {
         // Auto-update contact status to CONNECTED if currently blank
         const relatedContact = await tx.contact.findUnique({
@@ -336,6 +346,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     const existing = await prisma.conversation.findUnique({
       where: { id },
       include: { participants: { select: { contactId: true } } },
+      // notes/nextSteps needed to re-derive @-mentions when a partial PUT omits them.
+      // (findUnique includes all scalar columns by default, so notes/nextSteps are present.)
     });
     if (!existing) {
       res.status(404).json({ error: 'Conversation not found' });
@@ -448,6 +460,12 @@ router.put('/:id', async (req: Request, res: Response) => {
             : undefined,
         },
       });
+
+      // Re-index @-mentions from the post-update notes / next steps. A partial PUT
+      // may omit either field, so fall back to the stored value.
+      const finalNotes = 'notes' in data ? data.notes : existing.notes;
+      const finalNextSteps = 'nextSteps' in data ? data.nextSteps : existing.nextSteps;
+      await syncConversationMentions(tx, id, mentionText(finalNotes, finalNextSteps));
 
       // Create follow-up actions if provided
       const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];

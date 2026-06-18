@@ -385,6 +385,8 @@ function QuickLogDialog({
   const [contactOptions, setContactOptions] = useState<ComboboxOption[]>([])
   // Per-contact title + employer for the participant-chip hover tooltip, keyed by id string.
   const [contactMeta, setContactMeta] = useState<Map<string, { title?: string | null; employer?: string | null }>>(new Map())
+  // Flat contact list powering the notes "@mention" autocomplete.
+  const [mentionContacts, setMentionContacts] = useState<{ id: number; name: string; title?: string | null }[]>([])
   const [companyOptions, setCompanyOptions] = useState<ComboboxOption[]>([])
   const [tagOptions, setTagOptions] = useState<ComboboxOption[]>([])
   const [lookupsLoaded, setLookupsLoaded] = useState(false)
@@ -460,6 +462,7 @@ function QuickLogDialog({
         .then((data) => {
           setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
           setContactMeta(new Map(data.map((c) => [c.id.toString(), { title: c.title, employer: c.company?.name }])))
+          setMentionContacts(data.map((c) => ({ id: c.id, name: c.name, title: c.title })))
         })
         .catch(() => { })
       api.get<{ id: number; name: string }[]>('/companies/names')
@@ -1294,8 +1297,9 @@ function QuickLogDialog({
           id="ql-notes"
           value={notes}
           onChange={setNotes}
-          placeholder="Optional — use ### headings for topics; paste screenshots directly"
+          placeholder="Optional — use ### headings for topics; @ to mention a person; paste screenshots directly"
           rows={isEdit ? 10 : 6}
+          mentionContacts={mentionContacts}
         />
       </div>
 
@@ -1546,8 +1550,9 @@ function QuickLogDialog({
               id="ql-nextsteps"
               value={nextSteps}
               onChange={setNextSteps}
-              placeholder="What happens next — use ### headings, bold, lists…"
+              placeholder="What happens next — use ### headings, bold, lists; @ to mention a person…"
               rows={3}
+              mentionContacts={mentionContacts}
             />
           </div>
         </div>

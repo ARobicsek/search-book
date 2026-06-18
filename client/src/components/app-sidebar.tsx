@@ -1,4 +1,4 @@
-import { BookUser, Building2, LayoutDashboard, ListTodo, Lightbulb, BarChart3, Settings, Users, MessageSquare } from 'lucide-react'
+import { BookUser, Building2, LayoutDashboard, ListTodo, Lightbulb, BarChart3, Settings, Users, MessageSquare, AtSign } from 'lucide-react'
 import { useLocation, Link } from 'react-router-dom'
 import {
   Sidebar,
@@ -16,6 +16,7 @@ const mainNav = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard, exact: true },
   { title: 'Contacts', url: '/contacts', icon: BookUser },
   { title: 'Meetings', url: '/meetings', icon: MessageSquare },
+  { title: 'Mentions', url: '/mentions', icon: AtSign },
   { title: 'Actions', url: '/actions', icon: ListTodo },
   { title: 'Organizations', url: '/companies', icon: Building2 },
   { title: 'Ideas', url: '/ideas', icon: Lightbulb },

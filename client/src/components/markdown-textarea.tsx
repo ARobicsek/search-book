@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { Bold, Heading3, Italic, List, ListOrdered } from 'lucide-react'
+import { Bold, Heading3, Italic, List, ListOrdered, UserPlus } from 'lucide-react'
+import { detectMentionQuery, looseMentionToken, resolvedMentionToken } from '@/lib/mentions'
 
 // Markdown-aware textarea for fast meeting-note typing:
 // - toolbar: H3 / bold / italic / bullets / numbered list
@@ -10,6 +11,14 @@ import { Bold, Heading3, Italic, List, ListOrdered } from 'lucide-react'
 //   Ctrl+Alt+1/2/3 (# / ## / ### on the current line) — Google-Docs-style
 // - Enter continues a bullet/numbered list; Enter on an empty item ends it
 // - pasting OR dragging in an image uploads it and inserts ![…](url) (rendered by ReactMarkdown)
+// - optional @-mentions: type "@" to flag a person inline (existing contact or a
+//   "loose" name not yet in the CRM); reviewable later on the Mentions page
+
+interface MentionContact {
+  id: number
+  name: string
+  title?: string | null
+}
 
 interface MarkdownTextareaProps {
   id?: string
@@ -20,9 +29,53 @@ interface MarkdownTextareaProps {
   className?: string
   autoFocus?: boolean
   onBlur?: () => void
+  // When provided, typing "@" opens a person picker over this list.
+  mentionContacts?: MentionContact[]
 }
 
 const LIST_PREFIX = /^(\s*)(- |\* |(\d+)\. )(.*)$/
+
+// CSS properties copied into the mirror div used to locate the caret pixel
+// position for anchoring the @-mention dropdown.
+const MIRROR_PROPS = [
+  'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+  'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+  'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize', 'fontFamily',
+  'lineHeight', 'letterSpacing', 'textTransform', 'wordSpacing', 'textIndent', 'tabSize',
+] as const
+
+// Pixel position of the caret within a textarea (mirror-div technique), relative
+// to the textarea's box, with the current scroll applied.
+function getCaretCoordinates(el: HTMLTextAreaElement, position: number) {
+  const div = document.createElement('div')
+  const computed = getComputedStyle(el)
+  const style = div.style
+  style.position = 'absolute'
+  style.visibility = 'hidden'
+  style.whiteSpace = 'pre-wrap'
+  style.wordWrap = 'break-word'
+  style.overflow = 'hidden'
+  for (const prop of MIRROR_PROPS) {
+    style[prop as any] = computed[prop as any]
+  }
+  div.textContent = el.value.slice(0, position)
+  const span = document.createElement('span')
+  span.textContent = el.value.slice(position) || '.'
+  div.appendChild(span)
+  document.body.appendChild(div)
+  const top = span.offsetTop - el.scrollTop
+  const left = span.offsetLeft - el.scrollLeft
+  const height = parseInt(computed.lineHeight) || parseInt(computed.fontSize) || 16
+  document.body.removeChild(div)
+  return { top, left, height }
+}
+
+type MentionState = {
+  start: number       // index of the triggering "@"
+  query: string
+  top: number
+  left: number
+}
 
 export function MarkdownTextarea({
   id,
@@ -33,9 +86,15 @@ export function MarkdownTextarea({
   className,
   autoFocus,
   onBlur,
+  mentionContacts,
 }: MarkdownTextareaProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const [uploading, setUploading] = useState(false)
+
+  // ── @-mention autocomplete state ──
+  const [mention, setMention] = useState<MentionState | null>(null)
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const mentionsEnabled = !!mentionContacts
 
   // Apply a new value and restore the cursor after React re-renders
   const apply = useCallback(
@@ -49,6 +108,51 @@ export function MarkdownTextarea({
       })
     },
     [onChange]
+  )
+
+  // Recompute the active mention from the live caret position.
+  const refreshMention = useCallback(() => {
+    if (!mentionsEnabled) return
+    const el = ref.current
+    if (!el) { setMention(null); return }
+    const caret = el.selectionStart
+    const found = detectMentionQuery(el.value, caret)
+    if (!found) { setMention(null); return }
+    const { top, left, height } = getCaretCoordinates(el, found.start)
+    setMention({ start: found.start, query: found.query, top: top + height, left })
+    setMentionIndex(0)
+  }, [mentionsEnabled])
+
+  // The suggestion list for the current query: matching contacts + a "loose"
+  // option (flag a name that isn't a contact yet).
+  const mentionItems = (() => {
+    if (!mention || !mentionContacts) return [] as { type: 'contact' | 'loose'; name: string; id?: number; title?: string | null }[]
+    const q = mention.query.trim().toLowerCase()
+    const matches = (q
+      ? mentionContacts.filter((c) => c.name.toLowerCase().includes(q))
+      : mentionContacts
+    ).slice(0, 6).map((c) => ({ type: 'contact' as const, name: c.name, id: c.id, title: c.title }))
+    const items: { type: 'contact' | 'loose'; name: string; id?: number; title?: string | null }[] = [...matches]
+    const exact = mentionContacts.some((c) => c.name.toLowerCase() === q)
+    if (q && !exact) items.push({ type: 'loose', name: mention.query.trim() })
+    return items
+  })()
+
+  // Insert the chosen mention token in place of the "@query" the user typed.
+  const insertMention = useCallback(
+    (item: { type: 'contact' | 'loose'; name: string; id?: number }) => {
+      const el = ref.current
+      if (!el || !mention) return
+      const caret = el.selectionStart
+      const token = item.type === 'contact' && item.id
+        ? resolvedMentionToken(item.name, item.id)
+        : looseMentionToken(item.name)
+      const insert = token + ' '
+      const next = value.slice(0, mention.start) + insert + value.slice(caret)
+      setMention(null)
+      apply(next, mention.start + insert.length)
+    },
+    [mention, value, apply]
   )
 
   // Wrap the selection (or insert markers around the caret) with e.g. **…**
@@ -147,6 +251,30 @@ export function MarkdownTextarea({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // While the @-mention dropdown is open, it owns the arrows / Enter / Tab / Esc.
+      if (mention && mentionItems.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setMentionIndex((i) => (i + 1) % mentionItems.length)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setMentionIndex((i) => (i - 1 + mentionItems.length) % mentionItems.length)
+          return
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault()
+          insertMention(mentionItems[mentionIndex])
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setMention(null)
+          return
+        }
+      }
+
       if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
         handleEnter(e)
         return
@@ -178,7 +306,7 @@ export function MarkdownTextarea({
         wrapSelection('*')
       }
     },
-    [handleEnter, insertHeading, insertBullets, insertNumbered, wrapSelection]
+    [mention, mentionItems, mentionIndex, insertMention, handleEnter, insertHeading, insertBullets, insertNumbered, wrapSelection]
   )
 
   // Upload one or more image files and insert their markdown at the caret.
@@ -243,6 +371,16 @@ export function MarkdownTextarea({
     [insertImages]
   )
 
+  // Keep the mention dropdown in sync as the caret moves (clicks / arrows).
+  useEffect(() => {
+    if (!mention) return
+    const el = ref.current
+    if (!el) return
+    const onSel = () => refreshMention()
+    document.addEventListener('selectionchange', onSel)
+    return () => document.removeEventListener('selectionchange', onSel)
+  }, [mention, refreshMention])
+
   const tools: { icon: React.ReactNode; title: string; onClick: () => void }[] = [
     { icon: <Heading3 className="h-3.5 w-3.5" />, title: 'Heading (Ctrl+Alt+3)', onClick: () => insertHeading(3) },
     { icon: <Bold className="h-3.5 w-3.5" />, title: 'Bold (Ctrl+B)', onClick: () => wrapSelection('**') },
@@ -272,21 +410,56 @@ export function MarkdownTextarea({
         ))}
         {uploading && <span className="ml-2 text-xs text-muted-foreground">Uploading image…</span>}
       </div>
-      <Textarea
-        ref={ref}
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        rows={rows}
-        className={className}
-        autoFocus={autoFocus}
-      />
+      <div className="relative">
+        <Textarea
+          ref={ref}
+          id={id}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+            if (mentionsEnabled) requestAnimationFrame(refreshMention)
+          }}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onBlur={() => { setTimeout(() => setMention(null), 150); onBlur?.() }}
+          placeholder={placeholder}
+          rows={rows}
+          className={className}
+          autoFocus={autoFocus}
+        />
+        {mention && mentionItems.length > 0 && (
+          <ul
+            className="absolute z-50 max-h-56 w-72 overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md"
+            style={{ top: mention.top, left: Math.min(mention.left, 220) }}
+          >
+            {mentionItems.map((item, i) => (
+              <li key={`${item.type}-${item.id ?? item.name}`}>
+                <button
+                  type="button"
+                  // onMouseDown (not onClick) so it fires before the textarea blur closes the list
+                  onMouseDown={(e) => { e.preventDefault(); insertMention(item) }}
+                  onMouseEnter={() => setMentionIndex(i)}
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-accent text-accent-foreground' : ''}`}
+                >
+                  {item.type === 'loose' ? (
+                    <>
+                      <UserPlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span>Mention “{item.name}” <span className="text-muted-foreground">— not a contact yet</span></span>
+                    </>
+                  ) : (
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{item.name}</div>
+                      {item.title && <div className="truncate text-xs text-muted-foreground">{item.title}</div>}
+                    </div>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

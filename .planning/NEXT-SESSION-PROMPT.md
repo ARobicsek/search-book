@@ -5,38 +5,60 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Action cards show who you're waiting on ✅ SHIPPED
+### What Was Just Completed — Enhancements session (2026-06-18)
 
-Bugfix (commit `b1f6bc5`, pushed/live, **schema-free → no Turso DDL**). When an action is owned by
-someone else (`WAITING_ON_THEM`), the compact action displays were showing the "Related To" contact
-instead of the **ower** — e.g. an action related to Kara but owed by Scott showed "Kara". Now they
-show the ower, with a fuchsia "waiting on" hourglass cue. Root cause: the API returned only ower
-**ids**, never names, so the UI had nothing to render.
+Four enhancement requests. **Three are pushed/live** (schema-free); the **fourth (@-mentions) is
+committed locally but NOT pushed** — it adds a table and needs the Turso DDL applied first (see
+"⚠ MUST DO before pushing" below).
 
-- **Server** (`server/src/routes/actions.ts`): `attachOwers()` resolves `owerContactIds` (a JSON
-  column, not a relation) → `[{id,name}]` in one batched query (no N+1, no `_count`), attached as
-  `owers` on every action read/write response.
-- **Client**: shared `actionDisplayPeople()` (`client/src/lib/types.ts`) picks owers when present,
-  else related contact(s) — wired into the dashboard `ActionRow`, the Actions list "Contact" column
-  (incl. sort + global search). The calendar already handled owers. Detail page now also surfaces a
-  "Waiting on" field beside "Related To".
-- Verified all surfaces + the owed-by-me inverse via chrome-devtools (desktop + 390px); test action +
-  its undo snapshot cleared from the local dev DB; `prepush` + full `vite build` green.
+1. **LinkedIn import — prefer current job title over headline** (`6923f4f`, pushed). The contact's
+   Title was being filled from the LinkedIn *headline* ("Healthcare Strategy and Process Redesign
+   Leader"). Now it prefers the current Experience role's title ("AVP analysis and evaluation"),
+   keeping the headline only as a backup. Server post-processing in `routes/linkedin.ts`; preview
+   shows a "Headline (backup)" line.
+2. **Participant hover tooltips** (`aa7a8e5`, pushed). Hovering a participant on a meeting card or in
+   the meeting editor shows their title + current employer (and, on cards, the per-meeting note). New
+   `PersonTooltip`; `/meetings` + `/contacts/names` carry `title` + primary `company.name`. Verified
+   desktop + 390px.
+3. **Doc: marked `OUTLOOK_CALENDAR_ICS_URL` done** (`b1826f9`, pushed) — owner set it in Vercel.
+4. **@-mentions in meeting notes + review surfaces** (`e006895`, **LOCAL ONLY — DO NOT PUSH until
+   Turso DDL is applied**). Type `@` in notes/next-steps to flag a third person (existing contact or
+   a "loose" name not yet a contact); review on a new `/mentions` page and a "Mentioned in Meetings"
+   card on each contact. New `ConversationMention` table; mentions derived from note tokens on every
+   conversation save; loose mentions get a one-click "Create contact". Backup/restore both paths
+   updated (export version 6). Verified end-to-end via chrome-devtools; test data cleaned from local
+   dev DB. **Design decisions in `STATE.md`.**
 
-**Outlook → SearchBook meeting import (`bb49185`) is now fully wired:** the owner set
-`OUTLOOK_CALENDAR_ICS_URL` in Vercel (Production) on 2026-06-18, so the import is live. Full detail
-in `SESSION-HISTORY.md`.
+### ⚠ MUST DO before pushing the @-mention commit (`e006895`)
+
+Run this DDL against **Turso (prod)** via the web SQL console (the committed rw token is stale), then
+`git push`:
+
+```sql
+CREATE TABLE "ConversationMention" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "conversationId" INTEGER NOT NULL,
+    "contactId" INTEGER,
+    "mentionedName" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ConversationMention_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "ConversationMention_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "Contact" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+CREATE INDEX "ConversationMention_conversationId_idx" ON "ConversationMention"("conversationId");
+CREATE INDEX "ConversationMention_contactId_idx" ON "ConversationMention"("contactId");
+```
+Pushing before the table exists will 500 every meeting save (the save re-syncs mentions).
 
 ### What's Next
 
-1. ✅ **DONE (2026-06-18):** `OUTLOOK_CALENDAR_ICS_URL` is set in Vercel (Production), so the Outlook
-   import works live. Optional `APP_TIMEZONE` still defaults to `America/New_York` if unset.
+1. **Apply the DDL above, then push `e006895`** (+ this docs commit) to ship @-mentions.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
-   owner"** block — now **D5/D6/D8/D9** (D7 resolved this session). Phase 3 (stakeholder intel) is
-   gated on D8/D9; Phase 4 (Copilot AI ingest) on D5/D6. Don't push on those until the owner raises them.
+   owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
+   AI ingest) on D5/D6. Don't push on those until the owner raises them.
 3. **Option B (when wanted):** attendee auto-fill via Microsoft Graph or Power Automate — implement a
-   second `CalendarProvider`; nothing downstream changes. Power Automate may avoid the Azure
-   app-registration/admin-consent friction (worth a feasibility check first).
+   second `CalendarProvider`; nothing downstream changes.
+4. **@-mention follow-ups (optional):** enable @ in meeting *prep notes* too (currently only
+   notes + next-steps sync); add a command-palette entry for the Mentions page.
 
 ### Carry-over items (lower priority)
 
@@ -65,7 +87,9 @@ in `SESSION-HISTORY.md`.
 
 ### Working branch
 
-`main` — pushed and live.
+`main` — commits `6923f4f`, `aa7a8e5`, `b1826f9` pushed/live. **`e006895` (@-mentions) + the
+session-end docs commit are committed locally but UNPUSHED**, gated on the Turso DDL above. Apply the
+DDL, then `git push`.
 
 ---
 
@@ -76,9 +100,8 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session was a small schema-free **Actions
-bugfix** — compact action cards now show the person you're waiting on (the ower), not the "Related
-To" contact (`b1f6bc5`). The Outlook import is now fully live (`OUTLOOK_CALENDAR_ICS_URL` set in
-Vercel 2026-06-18). Plan of
-record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
-now D5/D6/D8/D9).
+Context for *this* upcoming session specifically: last session shipped three enhancements (LinkedIn
+title preference, participant hover tooltips, Outlook-env doc) and built a fourth — **@-mentions in
+meeting notes** — which is committed locally (`e006895`) but **unpushed pending the Turso DDL** (see
+"⚠ MUST DO before pushing"). The very first task: apply that DDL, then push. Plan of record is
+`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).

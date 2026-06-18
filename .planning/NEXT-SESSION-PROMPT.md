@@ -23,6 +23,9 @@ attendee auto-fill) open behind a `CalendarProvider` interface.
   Quick Log.
 - Verified end-to-end vs. the live feed via chrome-devtools; test data + undo snapshots cleaned from
   the local dev DB; `prepush` + full `vite build` green.
+- **Owner UI follow-ups (2026-06-18):** added a **"Tomorrow"** range preset; fixed an iOS-Safari
+  "doubled button" ghost by giving the count button a stable `min-w-[7.5rem]` (left edge no longer
+  moves as the label changes).
 
 ### What's Next
 

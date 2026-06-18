@@ -26,7 +26,7 @@ type EventRow = {
   alreadyImported: boolean
 }
 
-type Preset = 'today' | 'week' | 'next7' | 'custom'
+type Preset = 'today' | 'tomorrow' | 'week' | 'next7' | 'custom'
 
 const RANGE_KEY = 'outlook_import_range'
 const keyOf = (e: { uid: string; date: string }) => `${e.uid}|${e.date}`
@@ -47,6 +47,11 @@ function presetRange(preset: Exclude<Preset, 'custom'>): { from: string; to: str
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   if (preset === 'today') return { from: ymd(today), to: ymd(today) }
+  if (preset === 'tomorrow') {
+    const t = new Date(today)
+    t.setDate(today.getDate() + 1)
+    return { from: ymd(t), to: ymd(t) }
+  }
   if (preset === 'week') {
     const dow = (today.getDay() + 6) % 7 // 0 = Monday
     const mon = new Date(today)
@@ -208,6 +213,7 @@ export function ImportOutlookDialog({
         <div className="flex flex-wrap items-center gap-1.5 border-b p-3">
           {([
             ['today', 'Today'],
+            ['tomorrow', 'Tomorrow'],
             ['week', 'This week'],
             ['next7', 'Next 7 days'],
           ] as const).map(([p, label]) => (
@@ -321,7 +327,10 @@ export function ImportOutlookDialog({
             )}
             {timezone && <span className="hidden sm:inline">Times in {timezone}</span>}
           </div>
-          <Button onClick={doImport} disabled={importing || selectedCount === 0}>
+          {/* Stable min-width (fits up to "Import 188") so the right-anchored button's left edge
+              never jumps as the count label changes — that edge movement leaves a ghost/"doubled"
+              paint on iOS Safari (the artifact the owner hit after select/select-none). */}
+          <Button onClick={doImport} disabled={importing || selectedCount === 0} className="min-w-[7.5rem]">
             {importing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
             Import{selectedCount > 0 ? ` ${selectedCount}` : ''}
           </Button>

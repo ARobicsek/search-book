@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
+import { mentionSnippet } from '@/lib/mentions'
 import { toast } from 'sonner'
 import { AtSign, Loader2, Pencil, UserPlus } from 'lucide-react'
 
@@ -34,6 +35,22 @@ function typeLabel(value: string) {
 // link out; loose names get a one-click "Create contact"), plus the note context.
 function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; onChanged: () => void }) {
   const [creatingId, setCreatingId] = useState<number | null>(null)
+
+  // The note context shown is the text *surrounding* each @-mention (notes or
+  // next steps), not the whole note — deduped when two mentions share a window.
+  const snippets = (() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const m of meeting.mentions) {
+      const matcher = m.contactId != null ? { contactId: m.contactId } : { name: m.mentionedName }
+      const snippet = mentionSnippet(meeting.notes, matcher) ?? mentionSnippet(meeting.nextSteps, matcher)
+      if (snippet && !seen.has(snippet)) {
+        seen.add(snippet)
+        out.push(snippet)
+      }
+    }
+    return out
+  })()
 
   async function createContact(mentionId: number) {
     setCreatingId(mentionId)
@@ -113,12 +130,12 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
           )}
         </div>
 
-        {/* Note context */}
-        {meeting.notes && (
-          <div className="prep-note-markdown line-clamp-6 text-sm text-muted-foreground">
-            <MentionableMarkdown>{meeting.notes}</MentionableMarkdown>
+        {/* Note context — the text surrounding each @-mention */}
+        {snippets.map((snippet, i) => (
+          <div key={i} className="prep-note-markdown line-clamp-6 border-l-2 border-muted pl-3 text-sm text-muted-foreground">
+            <MentionableMarkdown>{snippet}</MentionableMarkdown>
           </div>
-        )}
+        ))}
       </CardContent>
     </Card>
   )

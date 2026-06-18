@@ -25,6 +25,7 @@ import {
   conversationDisplayName,
 } from '@/lib/types'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
+import { mentionSnippet } from '@/lib/mentions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ActionDateSelect } from '@/components/action-date-select'
@@ -1198,22 +1199,26 @@ function MentionedInMeetingsCard({ contactId }: { contactId: number }) {
       </CardHeader>
       <CardContent>
         <ul className="space-y-3">
-          {meetings.map((m) => (
-            <li key={m.id} className="text-sm">
-              <p className="text-xs text-muted-foreground">
-                {formatConversationDate(m.date, m.datePrecision as DatePrecision)}
-                {' — '}
-                <Link to={`/meetings?id=${m.id}`} className="text-primary hover:underline">
-                  {conversationDisplayName(m)}
-                </Link>
-              </p>
-              {m.notes && (
-                <div className="prep-note-markdown mt-0.5 line-clamp-4 text-muted-foreground">
-                  <MentionableMarkdown>{m.notes}</MentionableMarkdown>
-                </div>
-              )}
-            </li>
-          ))}
+          {meetings.map((m) => {
+            // Show the note text surrounding where THIS contact was @-mentioned.
+            const snippet = mentionSnippet(m.notes, { contactId }) ?? mentionSnippet(m.nextSteps, { contactId })
+            return (
+              <li key={m.id} className="text-sm">
+                <p className="text-xs text-muted-foreground">
+                  {formatConversationDate(m.date, m.datePrecision as DatePrecision)}
+                  {' — '}
+                  <Link to={`/meetings?id=${m.id}`} className="text-primary hover:underline">
+                    {conversationDisplayName(m)}
+                  </Link>
+                </p>
+                {snippet && (
+                  <div className="prep-note-markdown mt-0.5 line-clamp-4 text-muted-foreground">
+                    <MentionableMarkdown>{snippet}</MentionableMarkdown>
+                  </div>
+                )}
+              </li>
+            )
+          })}
         </ul>
       </CardContent>
     </Card>

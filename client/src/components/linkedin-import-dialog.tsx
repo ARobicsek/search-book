@@ -31,6 +31,9 @@ export type LinkedInExperienceEntry = {
 export type LinkedInParsedData = {
   name?: string
   title?: string
+  /** LinkedIn headline (the tagline under the name). `title` prefers the current
+   *  job title; this is kept as a backup and shown for transparency in the preview. */
+  headline?: string
   company?: string
   location?: string
   about?: string
@@ -300,8 +303,14 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
               )}
               {parsed.title && (
                 <div>
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Title / Headline</span>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</span>
                   <p className="text-sm mt-0.5">{parsed.title}</p>
+                </div>
+              )}
+              {parsed.headline && parsed.headline !== parsed.title && (
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Headline (backup)</span>
+                  <p className="text-sm mt-0.5 text-muted-foreground">{parsed.headline}</p>
                 </div>
               )}
               {parsed.company && (

@@ -129,8 +129,17 @@ General rules:
       return;
     }
 
+    // The model puts the LinkedIn *headline* (the tagline under the name, e.g.
+    // "Healthcare Strategy and Process Redesign Leader") into `title`. We prefer the
+    // person's actual CURRENT job title from the Experience section ("AVP analysis and
+    // evaluation") when we can find one, and keep the headline only as a backup. The
+    // headline is preserved separately as `headline` so the client can show/explain it.
+    const headline = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+    if (headline) parsed.headline = headline;
+
     // Sanitize experience[] — keep only well-formed entries with non-empty company + title.
-    // Then derive the top-level `company` field (back-compat) from the first current entry.
+    // Then derive the top-level `company` field (back-compat) and the preferred `title`
+    // from the first current entry (LinkedIn order = most recent first).
     if (Array.isArray(parsed.experience)) {
       parsed.experience = parsed.experience
         .filter((e: any) => e && typeof e.company === 'string' && typeof e.title === 'string' && e.company.trim() && e.title.trim())
@@ -140,8 +149,11 @@ General rules:
           isCurrent: e.isCurrent === true,
         }));
       const firstCurrent = parsed.experience.find((e: any) => e.isCurrent);
-      if (firstCurrent && !parsed.company) {
-        parsed.company = firstCurrent.company;
+      if (firstCurrent) {
+        if (!parsed.company) parsed.company = firstCurrent.company;
+        // Prefer the current role title over the headline for the contact's Title.
+        // (If there's no current role, parsed.title stays the headline as a backup.)
+        parsed.title = firstCurrent.title;
       }
     } else {
       parsed.experience = [];

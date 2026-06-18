@@ -5,27 +5,26 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Outlook → SearchBook meeting import ✅ SHIPPED
+### What Was Just Completed — Action cards show who you're waiting on ✅ SHIPPED
 
-NCQA Phase 5 Task 5.0 (commit `bb49185`, pushed/live; Turso DDL applied by owner first). Fail-fast
-proved the owner's NCQA M365 **can** publish an ICS feed (subject/date/time/recurrence intact) but
-**Microsoft strips attendees** — so per owner decision we built **Option A** (import the calendar
-*skeleton* as future-dated meetings; attendees added manually), keeping Option B (Graph/Power-Automate
-attendee auto-fill) open behind a `CalendarProvider` interface.
+Bugfix (commit `b1f6bc5`, pushed/live, **schema-free → no Turso DDL**). When an action is owned by
+someone else (`WAITING_ON_THEM`), the compact action displays were showing the "Related To" contact
+instead of the **ower** — e.g. an action related to Kara but owed by Scott showed "Kara". Now they
+show the ower, with a fuchsia "waiting on" hourglass cue. Root cause: the API returned only ower
+**ids**, never names, so the UI had nothing to render.
 
-- **Schema (additive):** `Conversation.calendarUid` + `startTime` (+ `calendarUid` index).
-- **Server:** `server/src/lib/ics.ts` (`IcsCalendarProvider` — fetch + 15-min cache + `ical-expander`
-  recurrence expansion + Windows-TZID→`APP_TIMEZONE`), `server/src/routes/calendar.ts`
-  (`GET /events` w/ `alreadyImported`, **skip-only idempotent** `POST /import` keyed `calendarUid`+`date`,
-  env-gated on `OUTLOOK_CALENDAR_ICS_URL`). Diagnostic: `server/scripts/probe-ics.mjs`.
-- **Client:** polished "Import from Outlook" dialog on `/meetings` (range presets, day-grouped,
-  pre-selects not-yet-imported, remembers last range); `startTime` on meeting cards + editable in
-  Quick Log.
-- Verified end-to-end vs. the live feed via chrome-devtools; test data + undo snapshots cleaned from
-  the local dev DB; `prepush` + full `vite build` green.
-- **Owner UI follow-ups (2026-06-18):** added a **"Tomorrow"** range preset; fixed an iOS-Safari
-  "doubled button" ghost by giving the count button a stable `min-w-[7.5rem]` (left edge no longer
-  moves as the label changes).
+- **Server** (`server/src/routes/actions.ts`): `attachOwers()` resolves `owerContactIds` (a JSON
+  column, not a relation) → `[{id,name}]` in one batched query (no N+1, no `_count`), attached as
+  `owers` on every action read/write response.
+- **Client**: shared `actionDisplayPeople()` (`client/src/lib/types.ts`) picks owers when present,
+  else related contact(s) — wired into the dashboard `ActionRow`, the Actions list "Contact" column
+  (incl. sort + global search). The calendar already handled owers. Detail page now also surfaces a
+  "Waiting on" field beside "Related To".
+- Verified all surfaces + the owed-by-me inverse via chrome-devtools (desktop + 390px); test action +
+  its undo snapshot cleared from the local dev DB; `prepush` + full `vite build` green.
+
+**Prior session (Outlook → SearchBook meeting import, `bb49185`) still has one open [USER ACTION]:**
+set `OUTLOOK_CALENDAR_ICS_URL` in Vercel (see What's Next #1). Full detail in `SESSION-HISTORY.md`.
 
 ### What's Next
 
@@ -77,8 +76,9 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped the **Outlook → SearchBook
-meeting import** (Phase 5 Task 5.0 — ICS skeleton import; D7 resolved, attendees stripped so deferred
-to Option B). The only loose end is **[USER ACTION] set `OUTLOOK_CALENDAR_ICS_URL` in Vercel** for prod.
-Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner"
-block, now D5/D6/D8/D9).
+Context for *this* upcoming session specifically: last session was a small schema-free **Actions
+bugfix** — compact action cards now show the person you're waiting on (the ower), not the "Related
+To" contact (`b1f6bc5`). The standing loose end is still **[USER ACTION] set
+`OUTLOOK_CALENDAR_ICS_URL` in Vercel** for the Outlook import to work live (What's Next #1). Plan of
+record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
+now D5/D6/D8/D9).

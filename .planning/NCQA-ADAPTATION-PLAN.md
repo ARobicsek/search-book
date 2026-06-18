@@ -39,11 +39,11 @@ can't proceed without them. Raise them at session start; don't push on this work
 |---|------------|----------------------|------------|
 | D5 | One real (sanitized) **MS Copilot meeting recap** pasted in, to tune the extraction prompt | — | Task 4.2 |
 | D6 | `ANTHROPIC_API_KEY` set in Vercel + `server/.env` **[USER ACTION]** | — | Task 4.1 |
-| D7 | Can NCQA's M365 publish an **ICS calendar link**? (Outlook → Settings → Calendar → Shared calendars → Publish) **[USER ACTION]** | If blocked, fall back to paste-an-agenda (Task 5.4) | Phase 5 |
 | D8 | Auth upgrade choice: Cloudflare Access in front of the domain vs. high-entropy rotating token | Recommend Cloudflare Access (free tier) | Task 3.1 |
 | D9 | Comfort/policy check: candid stance notes about named industry figures will live in this personal app — confirm that's acceptable under NCQA policy **[USER ACTION]** | — | Phase 3 |
 
 **Already decided (2026-06-12):**
+- **D7 (RESOLVED 2026-06-17):** NCQA M365 **can** publish an ICS calendar feed, and it's rich (subject/date/time/recurrence) — **but Microsoft strips attendees** from published ICS (0 of 847 events carried any). So the **ICS "skeleton" import shipped** (Phase 5, below); attendee auto-fill is deferred to **Option B** (Microsoft Graph / Power Automate) behind a `CalendarProvider` interface — not urgent per the owner. The paste-an-agenda fallback (Task 5.4) is unneeded for transport.
 - Keep SearchBook (vs. switching to a commercial CRM); adapt in place, same database. **No archiving** of job-search-era contacts.
 - Note-taker is **MS Copilot** (Teams recaps will be pasted in); calendar is **Outlook**.
 - **D1 (ecosystems):** adopt the new list (Task 1.1) **plus keep `RECRUITER`**; bulk-remap `ROLODEX`→`NETWORK`, `TARGET`→`NETWORK`; eliminate all other legacy values (`INFLUENCER`, `INTRO_SOURCE` also remapped to `NETWORK` — implementer's interpretation of "eliminate remaining legacy categories"; user may spot-reclassify e.g. influencers into `POLICY`/`MEDIA` afterward).
@@ -299,16 +299,18 @@ New `server/src/routes/ai.ts` per the design (Anthropic SDK, tool-forced JSON ou
 
 *Goal: open the app in the morning and see today's meetings, each with who's in the room, their stance, last conversation, and prep notes.*
 
-### Design
+## Task 5.0 — Outlook ICS import (✅ SHIPPED 2026-06-17, commit `bb49185`)
+The owner's first-priority slice of Phase 5: **pre-load meetings from the published ICS feed as future-dated records** so metadata (subject/date/time/recurrence) is never re-typed and they jump straight to notes. "Import from Outlook" dialog on `/meetings` (range presets, day-grouped, pre-selects not-yet-imported, **skip-only idempotent** re-import keyed on `calendarUid`+`date`). New `server/src/lib/ics.ts` (`IcsCalendarProvider` — fetch + 15-min cache + `ical-expander` recurrence expansion + Windows-TZID→`APP_TIMEZONE`) behind a `CalendarProvider` interface; `GET /api/calendar/events` + `POST /api/calendar/import` (`server/src/routes/calendar.ts`); additive `Conversation.calendarUid` + `startTime` (Turso DDL applied 2026-06-17). Attendees are **not** auto-filled (published ICS strips them — see D7); `startTime` shows on cards + is editable in Quick Log. **[USER ACTION]** set `OUTLOOK_CALENDAR_ICS_URL` in Vercel for prod. Diagnostic: `server/scripts/probe-ics.mjs`. Option B (Graph/Power-Automate attendee auto-fill) drops in behind the same interface when wanted.
+
+### Design (daily-briefing tasks below remain for later)
 
 - **v1 transport: published ICS feed** (Outlook → Settings → Calendar → Shared calendars → Publish). No OAuth, no app registration — the most likely thing to survive NCQA IT (D7). `ICS_FEED_URL` is a **server-side env secret** (it grants read access to the whole calendar; never ship it to the client).
 - **Known limitation:** Microsoft refreshes published ICS feeds lazily (can lag hours). Acceptable for a *daily* briefing; if it proves too stale, the escalation path is Microsoft Graph delegated auth (heavier; admin consent likely required) — decide then, not now.
 - **Fallback if publishing is blocked (D7):** Task 5.4 paste-an-agenda — copy the day's schedule text from Outlook, AI-parse it into briefing entries. Worse, but works under any IT regime.
 
 ## Task 5.1 — Server: ICS fetch + parse
-`GET /api/calendar/day?date=YYYY-MM-DD` → fetch `ICS_FEED_URL`, parse (`node-ical`), expand recurrences for that date, return `{ start, end, subject, attendees: [{name, email}] }[]`. Cache in-memory for ~15 min (serverless = best-effort cache; fine). Match attendee emails against `Contact.email` + `additionalEmails` → attach `contactId`s.
-**Commit:** `feat(calendar): Outlook ICS feed endpoint with contact matching`
-**STATUS:** Not started. Blocked on D7.
+`GET /api/calendar/day?date=YYYY-MM-DD` → fetch the feed, parse, expand recurrences for that date, return `{ start, end, subject, attendees: [{name, email}] }[]`. Cache in-memory for ~15 min (serverless = best-effort cache; fine). Match attendee emails against `Contact.email` + `additionalEmails` → attach `contactId`s.
+**STATUS:** ✅ Largely delivered by **Task 5.0** — `server/src/lib/ics.ts` does the fetch/cache/expand/TZID work and `GET /api/calendar/events?from=&to=` returns events for a range (env var is `OUTLOOK_CALENDAR_ICS_URL`, not `ICS_FEED_URL`). **Attendee email→contact matching is NOT done** (published ICS has no attendees — D7); revisit under Option B (Graph). A per-day `/day` shape can wrap the range endpoint if the briefing (5.2) wants it.
 
 ## Task 5.2 — Daily Briefing view
 New `/briefing` (and make it the natural morning landing alongside the dashboard): each meeting → matched attendees (photo, title, org, influence/stance chips), last meeting summary + takeaway note, open questions, prep notes due today (reuse `PrepNote` by date — already exists), open Waiting-For items per attendee. Buttons per meeting: **Prep** (jump to prep notes) and **Log** (pre-filled Quick Log / Ingest with **title = event subject**, date, attendees — this is what makes D4's "name the conversation after the calendar event" zero-effort).

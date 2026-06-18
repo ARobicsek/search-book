@@ -5,33 +5,36 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — repo cleanup & session-doc reorg
+### What Was Just Completed — Outlook → SearchBook meeting import ✅ SHIPPED
 
-Housekeeping session (no app/schema changes). Tidied the tree and re-organized the planning/session
-docs:
+NCQA Phase 5 Task 5.0 (commit `bb49185`, pushed/live; Turso DDL applied by owner first). Fail-fast
+proved the owner's NCQA M365 **can** publish an ICS feed (subject/date/time/recurrence intact) but
+**Microsoft strips attendees** — so per owner decision we built **Option A** (import the calendar
+*skeleton* as future-dated meetings; attendees added manually), keeping Option B (Graph/Power-Automate
+attendee auto-fill) open behind a `CalendarProvider` interface.
 
-- **Orphaned files removed/relocated:** deleted `server/repro_output.json`; moved the orphaned
-  server-root one-offs (`debug_dashboard.ts`, `update_industries*.ts`, `verify_updates.ts`,
-  `turso_migrate.js`) and ~13 already-applied migration/cleanup scripts into
-  **`server/scripts/archive/`**. Top-level `server/scripts/` now holds only the reusable tools
-  (`restore-test.mjs`, `prod-count-diff.mjs`, `app-smoke.mjs`, `count-rows.js`,
-  `sweep-company-status.js`).
-- **`.planning/` archived** the ~10 shipped/superseded `*-PLAN.md` docs into `.planning/archive/`;
-  added `.planning/README.md` (doc index).
-- **Session protocol single-sourced in `AGENTS.md`** — `CLAUDE.md`'s Session Management section and
-  the two `Gemini_session_*.md` files are now thin pointers to it.
-- **Decisions ledger split:** the full ~90-row ledger + per-session log now live in
-  `SESSION-HISTORY.md`; `STATE.md` keeps only the in-force subset.
-- **Front-door docs refreshed:** root `README.md`, `docs/architecture.md`, `docs/scriptReferences.md`.
-- **NCQA plan:** renamed the "Decisions needed" section to **"⏳ Waiting on owner (blocks Phase 3+)"**
-  so the D5–D9 blockers stand out on a quick scan.
+- **Schema (additive):** `Conversation.calendarUid` + `startTime` (+ `calendarUid` index).
+- **Server:** `server/src/lib/ics.ts` (`IcsCalendarProvider` — fetch + 15-min cache + `ical-expander`
+  recurrence expansion + Windows-TZID→`APP_TIMEZONE`), `server/src/routes/calendar.ts`
+  (`GET /events` w/ `alreadyImported`, **skip-only idempotent** `POST /import` keyed `calendarUid`+`date`,
+  env-gated on `OUTLOOK_CALENDAR_ICS_URL`). Diagnostic: `server/scripts/probe-ics.mjs`.
+- **Client:** polished "Import from Outlook" dialog on `/meetings` (range presets, day-grouped,
+  pre-selects not-yet-imported, remembers last range); `startTime` on meeting cards + editable in
+  Quick Log.
+- Verified end-to-end vs. the live feed via chrome-devtools; test data + undo snapshots cleaned from
+  the local dev DB; `prepush` + full `vite build` green.
 
 ### What's Next
 
-1. Plan of record returns to **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. First check the
-   **"⏳ Waiting on owner"** block near the top — Phase 3+ is gated on **D5–D9** (a real Copilot
-   recap sample, `ANTHROPIC_API_KEY`, ICS calendar link, auth choice, stance-notes policy OK).
-   Don't push on that work until the owner provides those.
+1. **[USER ACTION] finish prod wiring for the import:** set **`OUTLOOK_CALENDAR_ICS_URL`** in Vercel
+   (Production env) so the import works live (until then the dialog shows "Outlook calendar not
+   connected"). Optional `APP_TIMEZONE` (defaults `America/New_York`).
+2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
+   owner"** block — now **D5/D6/D8/D9** (D7 resolved this session). Phase 3 (stakeholder intel) is
+   gated on D8/D9; Phase 4 (Copilot AI ingest) on D5/D6. Don't push on those until the owner raises them.
+3. **Option B (when wanted):** attendee auto-fill via Microsoft Graph or Power Automate — implement a
+   second `CalendarProvider`; nothing downstream changes. Power Automate may avoid the Azure
+   app-registration/admin-consent friction (worth a feasibility check first).
 
 ### Carry-over items (lower priority)
 
@@ -71,8 +74,8 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session was repo/doc housekeeping (scripts +
-plans archived, session protocol single-sourced in `AGENTS.md`, decisions ledger split into
-`STATE.md` (current) + `SESSION-HISTORY.md` (full), front-door docs refreshed) — no app changes. Plan
-of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
-D5–D9).
+Context for *this* upcoming session specifically: last session shipped the **Outlook → SearchBook
+meeting import** (Phase 5 Task 5.0 — ICS skeleton import; D7 resolved, attendees stripped so deferred
+to Option B). The only loose end is **[USER ACTION] set `OUTLOOK_CALENDAR_ICS_URL` in Vercel** for prod.
+Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner"
+block, now D5/D6/D8/D9).

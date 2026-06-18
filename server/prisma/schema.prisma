@@ -185,6 +185,8 @@ model Conversation {
   notes                String?
   nextSteps            String?
   photoFile            String?
+  startTime            String?  // Local HH:MM start time (meetings are otherwise date-only); set by Outlook import, editable in Quick Log
+  calendarUid          String?  // Outlook ICS UID for idempotent re-import. Dedup key = calendarUid + date (recurring occurrences share one UID)
   seriesId             Int?
   series               Series?  @relation(fields: [seriesId], references: [id], onDelete: SetNull)
   createdAt            DateTime @default(now())
@@ -198,6 +200,8 @@ model Conversation {
   tags               ConversationTag[]
   prepNotes          ConversationPrepNote[]
   attachments        ConversationAttachment[]
+
+  @@index([calendarUid])
 }
 
 // A recurring meeting series (D4 revised): meetings opt into a series explicitly

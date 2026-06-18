@@ -35,9 +35,11 @@ import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import {
-  Building2, CalendarDays, ChevronDown, ChevronUp, FileText, Layers, List, Loader2,
+  Building2, CalendarClock, CalendarDays, ChevronDown, ChevronUp, FileText, Layers, List, Loader2,
   MessageSquarePlus, Paperclip, Pencil, Tag as TagIcon, Trash2, X,
 } from 'lucide-react'
+import { formatStartTime } from '@/lib/utils'
+import { ImportOutlookDialog } from '@/components/import-outlook-dialog'
 
 const conversationTypeColors: Record<string, string> = {
   CALL: 'bg-green-100 text-green-800',
@@ -283,6 +285,7 @@ function MeetingCard({
               </Badge>
               <span className="text-sm text-muted-foreground">
                 {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
+                {conv.startTime && ` · ${formatStartTime(conv.startTime)}`}
               </span>
               <div className="ml-auto flex items-center gap-1">
                 <Button
@@ -646,6 +649,8 @@ export function MeetingsPage() {
   const [deletingSeries, setDeletingSeries] = useState(false)
   // "Manage series" dialog — rename/delete any series (discoverable entry by the filter)
   const [manageSeriesOpen, setManageSeriesOpen] = useState(false)
+  // "Import from Outlook" dialog — pre-load meetings from the published ICS calendar
+  const [importOpen, setImportOpen] = useState(false)
 
   // Free-text input is debounced before it hits the URL/server
   const [qInput, setQInput] = useState(qFilter)
@@ -895,6 +900,10 @@ export function MeetingsPage() {
               </Button>
             </div>
           )}
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <CalendarClock className="mr-1 h-4 w-4" />
+            <span className="hidden sm:inline">Import from </span>Outlook
+          </Button>
           <Button onClick={() => quickLog.open()}>
             <MessageSquarePlus className="mr-1 h-4 w-4" />
             Log Meeting
@@ -1115,6 +1124,9 @@ export function MeetingsPage() {
           loadMeetings()
         }}
       />
+
+      {/* Import meetings from the published Outlook ICS calendar */}
+      <ImportOutlookDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   )
 }

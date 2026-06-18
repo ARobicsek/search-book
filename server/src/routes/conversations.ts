@@ -147,6 +147,7 @@ router.post('/', async (req: Request, res: Response) => {
       seriesId,
       attendeesDescription,
       date,
+      startTime,
       datePrecision,
       type,
       summary,
@@ -197,6 +198,7 @@ router.post('/', async (req: Request, res: Response) => {
           seriesId: seriesId ? Number(seriesId) : null,
           attendeesDescription: attendeesDescription?.trim() || null,
           date,
+          startTime: startTime?.toString().trim() || null,
           datePrecision: datePrecision || 'DAY',
           type: type || 'OTHER',
           summary: summary || null,
@@ -324,7 +326,7 @@ router.post('/', async (req: Request, res: Response) => {
 // Task 18 pattern: explicit allow-list of client-writable Conversation columns.
 const CONVERSATION_WRITABLE_FIELDS = [
   'contactId', 'title', 'companyId', 'seriesId', 'attendeesDescription',
-  'date', 'datePrecision', 'type', 'summary', 'notes', 'nextSteps', 'photoFile',
+  'date', 'startTime', 'datePrecision', 'type', 'summary', 'notes', 'nextSteps', 'photoFile',
 ] as const;
 
 // PUT /api/conversations/:id — update

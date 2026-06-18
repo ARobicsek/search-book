@@ -198,6 +198,10 @@ export interface Conversation {
   company: { id: number; name: string } | null;
   attendeesDescription: string | null;
   date: string;
+  /** Local HH:MM start time (date-only meetings leave this null). Set by Outlook import; editable in Quick Log. */
+  startTime?: string | null;
+  /** Outlook ICS UID for meetings imported from the calendar (idempotent re-import). */
+  calendarUid?: string | null;
   datePrecision: DatePrecision;
   type: ConversationType;
   summary: string | null;

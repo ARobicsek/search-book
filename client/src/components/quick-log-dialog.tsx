@@ -288,6 +288,7 @@ function QuickLogDialog({
 }) {
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
+  const [startTime, setStartTime] = useState('') // optional HH:MM (set by Outlook import; editable here)
   const [type, setType] = useState<ConversationType>('MEETING')
   const [summary, setSummary] = useState('')
   const [notes, setNotes] = useState('')
@@ -393,6 +394,7 @@ function QuickLogDialog({
     // Reset to a fresh minimal log each time (S4: title + date + save in <30s)
     setTitle('')
     setDate(new Date().toLocaleDateString('en-CA'))
+    setStartTime('')
     setType('MEETING')
     setSummary('')
     setNotes('')
@@ -470,6 +472,7 @@ function QuickLogDialog({
         .then((conv) => {
           setTitle(conv.title || '')
           setDate(conv.date)
+          setStartTime(conv.startTime || '')
           setType(conv.type as ConversationType)
           setSummary(conv.summary || '')
           setNotes(conv.notes || '')
@@ -512,6 +515,7 @@ function QuickLogDialog({
           lastSnapshotRef.current = JSON.stringify({
             title: conv.title?.trim() || null,
             date: conv.date,
+            startTime: conv.startTime?.trim() || null,
             type: conv.type,
             summary: conv.summary?.trim() || null,
             notes: conv.notes?.trim() || null,
@@ -568,6 +572,7 @@ function QuickLogDialog({
     return {
       title: title.trim() || null,
       date,
+      startTime: startTime.trim() || null,
       type,
       summary: summary.trim() || null,
       notes: notes.trim() || null,
@@ -1179,8 +1184,18 @@ function QuickLogDialog({
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="ql-date">Date</Label>
-          <Input id="ql-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Label htmlFor="ql-date">Date &amp; time</Label>
+          <div className="flex gap-2">
+            <Input id="ql-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="flex-1" />
+            <Input
+              aria-label="Start time"
+              title="Start time (optional)"
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-[7.5rem]"
+            />
+          </div>
         </div>
         <div className="space-y-2">
           <Label>Type</Label>

@@ -23,14 +23,14 @@ show the ower, with a fuchsia "waiting on" hourglass cue. Root cause: the API re
 - Verified all surfaces + the owed-by-me inverse via chrome-devtools (desktop + 390px); test action +
   its undo snapshot cleared from the local dev DB; `prepush` + full `vite build` green.
 
-**Prior session (Outlook → SearchBook meeting import, `bb49185`) still has one open [USER ACTION]:**
-set `OUTLOOK_CALENDAR_ICS_URL` in Vercel (see What's Next #1). Full detail in `SESSION-HISTORY.md`.
+**Outlook → SearchBook meeting import (`bb49185`) is now fully wired:** the owner set
+`OUTLOOK_CALENDAR_ICS_URL` in Vercel (Production) on 2026-06-18, so the import is live. Full detail
+in `SESSION-HISTORY.md`.
 
 ### What's Next
 
-1. **[USER ACTION] finish prod wiring for the import:** set **`OUTLOOK_CALENDAR_ICS_URL`** in Vercel
-   (Production env) so the import works live (until then the dialog shows "Outlook calendar not
-   connected"). Optional `APP_TIMEZONE` (defaults `America/New_York`).
+1. ✅ **DONE (2026-06-18):** `OUTLOOK_CALENDAR_ICS_URL` is set in Vercel (Production), so the Outlook
+   import works live. Optional `APP_TIMEZONE` still defaults to `America/New_York` if unset.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — now **D5/D6/D8/D9** (D7 resolved this session). Phase 3 (stakeholder intel) is
    gated on D8/D9; Phase 4 (Copilot AI ingest) on D5/D6. Don't push on those until the owner raises them.
@@ -78,7 +78,7 @@ Durable version (works every session — it defers to the docs, which stay curre
 
 Context for *this* upcoming session specifically: last session was a small schema-free **Actions
 bugfix** — compact action cards now show the person you're waiting on (the ower), not the "Related
-To" contact (`b1f6bc5`). The standing loose end is still **[USER ACTION] set
-`OUTLOOK_CALENDAR_ICS_URL` in Vercel** for the Outlook import to work live (What's Next #1). Plan of
+To" contact (`b1f6bc5`). The Outlook import is now fully live (`OUTLOOK_CALENDAR_ICS_URL` set in
+Vercel 2026-06-18). Plan of
 record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
 now D5/D6/D8/D9).

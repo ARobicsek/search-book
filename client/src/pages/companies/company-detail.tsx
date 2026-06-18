@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company, Contact, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType, Conversation } from '@/lib/types'
-import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, COMPANY_ACTIVITY_TYPE_OPTIONS } from '@/lib/types'
+import type { Company, Contact, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType, Conversation, MentionMeeting, DatePrecision } from '@/lib/types'
+import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, COMPANY_ACTIVITY_TYPE_OPTIONS, conversationDisplayName } from '@/lib/types'
+import { MentionableMarkdown } from '@/components/mentionable-markdown'
+import { mentionSnippet } from '@/lib/mentions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ActionDateSelect } from '@/components/action-date-select'
@@ -118,6 +120,66 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
       <dd className="text-sm">{children}</dd>
     </div>
+  )
+}
+
+function formatMentionDate(dateStr: string, precision: DatePrecision) {
+  const d = new Date(dateStr + 'T00:00:00')
+  if (precision === 'YEAR') return d.getFullYear().toString()
+  if (precision === 'MONTH') return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  if (precision === 'QUARTER') return `Q${Math.ceil((d.getMonth() + 1) / 3)} ${d.getFullYear()}`
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// Meetings whose notes @-mention this organization, newest first — the org
+// counterpart of the contact page's "Mentioned in Meetings" card. Self-fetches
+// from /mentions?companyId=. Each row shows the note text surrounding the mention.
+function OrgMentionedInMeetingsCard({ companyId }: { companyId: number }) {
+  const [meetings, setMeetings] = useState<MentionMeeting[]>([])
+
+  useEffect(() => {
+    let active = true
+    api
+      .get<{ data: MentionMeeting[] }>(`/mentions?companyId=${companyId}&limit=50`)
+      .then((res) => { if (active) setMeetings(res.data) })
+      .catch(() => { /* non-critical secondary panel */ })
+    return () => { active = false }
+  }, [companyId])
+
+  if (meetings.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Mentioned in Meetings</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {meetings.map((m) => {
+            const snippet =
+              [m.notes, m.nextSteps, ...m.prepNotes.map((p) => p.content)]
+                .map((t) => mentionSnippet(t, { companyId }))
+                .find((s) => s) ?? null
+            return (
+              <li key={m.id} className="text-sm">
+                <p className="text-xs text-muted-foreground">
+                  {formatMentionDate(m.date, m.datePrecision)}
+                  {' — '}
+                  <Link to={`/meetings?id=${m.id}`} className="text-primary hover:underline">
+                    {conversationDisplayName(m)}
+                  </Link>
+                </p>
+                {snippet && (
+                  <div className="prep-note-markdown mt-0.5 line-clamp-4 text-muted-foreground">
+                    <MentionableMarkdown>{snippet}</MentionableMarkdown>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -602,6 +664,9 @@ export function CompanyDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* @-mentions — meetings where this org was @-mentioned in the notes */}
+          <OrgMentionedInMeetingsCard companyId={company.id} />
 
           {/* Activity Log */}
           <Card>

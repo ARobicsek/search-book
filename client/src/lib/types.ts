@@ -261,13 +261,17 @@ export interface ConversationAttachment {
   createdAt: string;
 }
 
-/** A person @-mentioned inside a meeting's notes. `contactId`/`contact` are null
- *  for a "loose" mention (a name not yet in the CRM). */
+/** A person or organization @-mentioned inside a meeting's notes. For a "loose"
+ *  mention (a name/org not yet in the CRM) the ids/relations are null; `kind`
+ *  ('CONTACT' | 'COMPANY') then says whether it's a person or an organization. */
 export interface ConversationMention {
   id: number;
+  kind: 'CONTACT' | 'COMPANY';
   mentionedName: string;
   contactId: number | null;
   contact: { id: number; name: string } | null;
+  companyId: number | null;
+  company: { id: number; name: string } | null;
 }
 
 /** A meeting row as returned by the Mentions endpoints (lighter than Conversation;

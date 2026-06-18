@@ -3,18 +3,27 @@
 // ConversationMention index in sync so mentions are reviewable later.
 //
 // Token format (valid markdown, so it degrades gracefully at any render site):
-//   [@Display Name](/contacts/123)  → resolved mention (bound to contact 123)
-//   [@Display Name](#mention)       → loose mention (a name not yet a contact)
+//   [@Display Name](/contacts/123)  → resolved person mention (bound to contact 123)
+//   [@Org Name](/companies/45)      → resolved org mention (bound to company 45)
+//   [@Display Name](#mention)       → loose person mention (a name not yet a contact)
+//   [@Org Name](#org-mention)       → loose org mention (an org not yet a company)
 //
 // Mentions are DERIVED from the text: on every conversation save we delete the
 // meeting's rows and recreate them from the current tokens — the note text stays
 // the single source of truth (no separate state to keep in sync).
 
-export const MENTION_RE = /\[@([^\]\n]+)\]\((\/contacts\/(\d+)|#mention)\)/g;
+export const MENTION_RE =
+  /\[@([^\]\n]+)\]\((\/contacts\/(\d+)|\/companies\/(\d+)|#mention|#org-mention)\)/g;
 
-export type ParsedMention = { name: string; contactId: number | null };
+export type MentionKind = 'CONTACT' | 'COMPANY';
+export type ParsedMention = {
+  name: string;
+  kind: MentionKind;
+  contactId: number | null;
+  companyId: number | null;
+};
 
-// The token written for a loose (not-yet-a-contact) mention of `name`.
+// The token written for a loose (not-yet-a-contact) mention of a person.
 export function looseMentionToken(name: string): string {
   return `[@${name}](#mention)`;
 }
@@ -22,6 +31,16 @@ export function looseMentionToken(name: string): string {
 // The token written for a mention bound to an existing contact.
 export function resolvedMentionToken(name: string, contactId: number): string {
   return `[@${name}](/contacts/${contactId})`;
+}
+
+// The token written for a loose (not-yet-a-company) mention of an organization.
+export function looseOrgMentionToken(name: string): string {
+  return `[@${name}](#org-mention)`;
+}
+
+// The token written for a mention bound to an existing organization.
+export function resolvedOrgMentionToken(name: string, companyId: number): string {
+  return `[@${name}](/companies/${companyId})`;
 }
 
 export function parseMentions(text: string | null | undefined): ParsedMention[] {
@@ -34,11 +53,15 @@ export function parseMentions(text: string | null | undefined): ParsedMention[] 
     const name = m[1].trim();
     if (!name) continue;
     const contactId = m[3] ? Number(m[3]) : null;
-    // De-dupe identical (name, contactId) pairs within one meeting.
-    const key = `${contactId ?? 'loose'}|${name.toLowerCase()}`;
+    const companyId = m[4] ? Number(m[4]) : null;
+    const href = m[2];
+    const kind: MentionKind =
+      companyId != null || href === '#org-mention' ? 'COMPANY' : 'CONTACT';
+    // De-dupe identical mentions within one meeting (kind + id + name).
+    const key = `${kind}|${contactId ?? companyId ?? 'loose'}|${name.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ name, contactId });
+    out.push({ name, kind, contactId, companyId });
   }
   return out;
 }
@@ -51,6 +74,7 @@ type MentionDb = {
     create(args: any): Promise<unknown>;
   };
   contact: { findMany(args: any): Promise<{ id: number }[]> };
+  company: { findMany(args: any): Promise<{ id: number }[]> };
 };
 
 // Like MentionDb but also able to read the text that feeds the index.
@@ -71,17 +95,26 @@ export async function syncConversationMentions(
   await db.conversationMention.deleteMany({ where: { conversationId } });
   if (parsed.length === 0) return;
 
-  const ids = [...new Set(parsed.map((p) => p.contactId).filter((x): x is number => x != null))];
-  const existingIds = ids.length
+  // FK-safety: a token may reference a contact/company that no longer exists
+  // (e.g. deleted after the note was written) — degrade those to loose mentions.
+  const contactIds = [...new Set(parsed.map((p) => p.contactId).filter((x): x is number => x != null))];
+  const existingContactIds = contactIds.length
     ? new Set(
-        (await db.contact.findMany({ where: { id: { in: ids } }, select: { id: true } })).map((c) => c.id),
+        (await db.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true } })).map((c) => c.id),
+      )
+    : new Set<number>();
+  const companyIds = [...new Set(parsed.map((p) => p.companyId).filter((x): x is number => x != null))];
+  const existingCompanyIds = companyIds.length
+    ? new Set(
+        (await db.company.findMany({ where: { id: { in: companyIds } }, select: { id: true } })).map((c) => c.id),
       )
     : new Set<number>();
 
   for (const p of parsed) {
-    const contactId = p.contactId != null && existingIds.has(p.contactId) ? p.contactId : null;
+    const contactId = p.contactId != null && existingContactIds.has(p.contactId) ? p.contactId : null;
+    const companyId = p.companyId != null && existingCompanyIds.has(p.companyId) ? p.companyId : null;
     await db.conversationMention.create({
-      data: { conversationId, contactId, mentionedName: p.name },
+      data: { conversationId, kind: p.kind, contactId, companyId, mentionedName: p.name },
     });
   }
 }

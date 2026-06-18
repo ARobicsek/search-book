@@ -2,8 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { Bold, Heading3, Italic, List, ListOrdered, UserPlus } from 'lucide-react'
-import { detectMentionQuery, looseMentionToken, resolvedMentionToken } from '@/lib/mentions'
+import { Bold, Building2, Heading3, Italic, List, ListOrdered, UserPlus } from 'lucide-react'
+import {
+  detectMentionQuery,
+  looseMentionToken,
+  resolvedMentionToken,
+  looseOrgMentionToken,
+  resolvedOrgMentionToken,
+} from '@/lib/mentions'
 
 // Markdown-aware textarea for fast meeting-note typing:
 // - toolbar: H3 / bold / italic / bullets / numbered list
@@ -20,6 +26,11 @@ interface MentionContact {
   title?: string | null
 }
 
+interface MentionCompany {
+  id: number
+  name: string
+}
+
 interface MarkdownTextareaProps {
   id?: string
   value: string
@@ -29,8 +40,18 @@ interface MarkdownTextareaProps {
   className?: string
   autoFocus?: boolean
   onBlur?: () => void
-  // When provided, typing "@" opens a person picker over this list.
+  // When either list is provided, typing "@" opens a picker. People and
+  // organizations are offered together, distinguished by icon.
   mentionContacts?: MentionContact[]
+  mentionCompanies?: MentionCompany[]
+}
+
+// One row in the @ picker. `kind` selects the token written on insert.
+type MentionItem = {
+  kind: 'contact' | 'company' | 'loose-person' | 'loose-org'
+  name: string
+  id?: number
+  title?: string | null
 }
 
 const LIST_PREFIX = /^(\s*)(- |\* |(\d+)\. )(.*)$/
@@ -87,6 +108,7 @@ export function MarkdownTextarea({
   autoFocus,
   onBlur,
   mentionContacts,
+  mentionCompanies,
 }: MarkdownTextareaProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -94,7 +116,7 @@ export function MarkdownTextarea({
   // ── @-mention autocomplete state ──
   const [mention, setMention] = useState<MentionState | null>(null)
   const [mentionIndex, setMentionIndex] = useState(0)
-  const mentionsEnabled = !!mentionContacts
+  const mentionsEnabled = !!(mentionContacts || mentionCompanies)
 
   // Apply a new value and restore the cursor after React re-renders
   const apply = useCallback(
@@ -123,30 +145,44 @@ export function MarkdownTextarea({
     setMentionIndex(0)
   }, [mentionsEnabled])
 
-  // The suggestion list for the current query: matching contacts + a "loose"
-  // option (flag a name that isn't a contact yet).
+  // The suggestion list for the current query: matching people, then matching
+  // organizations, then "loose" options to flag a name/org not in the CRM yet.
   const mentionItems = (() => {
-    if (!mention || !mentionContacts) return [] as { type: 'contact' | 'loose'; name: string; id?: number; title?: string | null }[]
-    const q = mention.query.trim().toLowerCase()
-    const matches = (q
-      ? mentionContacts.filter((c) => c.name.toLowerCase().includes(q))
-      : mentionContacts
-    ).slice(0, 6).map((c) => ({ type: 'contact' as const, name: c.name, id: c.id, title: c.title }))
-    const items: { type: 'contact' | 'loose'; name: string; id?: number; title?: string | null }[] = [...matches]
-    const exact = mentionContacts.some((c) => c.name.toLowerCase() === q)
-    if (q && !exact) items.push({ type: 'loose', name: mention.query.trim() })
+    if (!mention) return [] as MentionItem[]
+    const raw = mention.query.trim()
+    const q = raw.toLowerCase()
+    const contacts = (q
+      ? (mentionContacts ?? []).filter((c) => c.name.toLowerCase().includes(q))
+      : (mentionContacts ?? [])
+    ).slice(0, 5).map((c): MentionItem => ({ kind: 'contact', name: c.name, id: c.id, title: c.title }))
+    const companies = (q
+      ? (mentionCompanies ?? []).filter((c) => c.name.toLowerCase().includes(q))
+      : (mentionCompanies ?? [])
+    ).slice(0, 3).map((c): MentionItem => ({ kind: 'company', name: c.name, id: c.id }))
+    const items: MentionItem[] = [...contacts, ...companies]
+    if (q) {
+      const exactContact = (mentionContacts ?? []).some((c) => c.name.toLowerCase() === q)
+      const exactCompany = (mentionCompanies ?? []).some((c) => c.name.toLowerCase() === q)
+      if (mentionContacts && !exactContact) items.push({ kind: 'loose-person', name: raw })
+      if (mentionCompanies && !exactCompany) items.push({ kind: 'loose-org', name: raw })
+    }
     return items
   })()
 
   // Insert the chosen mention token in place of the "@query" the user typed.
   const insertMention = useCallback(
-    (item: { type: 'contact' | 'loose'; name: string; id?: number }) => {
+    (item: MentionItem) => {
       const el = ref.current
       if (!el || !mention) return
       const caret = el.selectionStart
-      const token = item.type === 'contact' && item.id
-        ? resolvedMentionToken(item.name, item.id)
-        : looseMentionToken(item.name)
+      const token =
+        item.kind === 'contact' && item.id
+          ? resolvedMentionToken(item.name, item.id)
+          : item.kind === 'company' && item.id
+            ? resolvedOrgMentionToken(item.name, item.id)
+            : item.kind === 'loose-org'
+              ? looseOrgMentionToken(item.name)
+              : looseMentionToken(item.name)
       const insert = token + ' '
       const next = value.slice(0, mention.start) + insert + value.slice(caret)
       setMention(null)
@@ -435,7 +471,7 @@ export function MarkdownTextarea({
             style={{ top: mention.top, left: Math.min(mention.left, 220) }}
           >
             {mentionItems.map((item, i) => (
-              <li key={`${item.type}-${item.id ?? item.name}`}>
+              <li key={`${item.kind}-${item.id ?? item.name}`}>
                 <button
                   type="button"
                   // onMouseDown (not onClick) so it fires before the textarea blur closes the list
@@ -443,10 +479,23 @@ export function MarkdownTextarea({
                   onMouseEnter={() => setMentionIndex(i)}
                   className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-accent text-accent-foreground' : ''}`}
                 >
-                  {item.type === 'loose' ? (
+                  {item.kind === 'loose-person' ? (
                     <>
                       <UserPlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span>Mention “{item.name}” <span className="text-muted-foreground">— not a contact yet</span></span>
+                      <span>Mention “{item.name}” <span className="text-muted-foreground">— new person</span></span>
+                    </>
+                  ) : item.kind === 'loose-org' ? (
+                    <>
+                      <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span>Mention “{item.name}” <span className="text-muted-foreground">— new organization</span></span>
+                    </>
+                  ) : item.kind === 'company' ? (
+                    <>
+                      <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{item.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">Organization</div>
+                      </div>
                     </>
                   ) : (
                     <div className="min-w-0">

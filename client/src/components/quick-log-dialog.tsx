@@ -184,10 +184,12 @@ function EditablePrepNote({
   note,
   onDelete,
   mentionContacts,
+  mentionCompanies,
 }: {
   note: ConversationPrepNote
   onDelete: () => void
   mentionContacts?: { id: number; name: string; title?: string | null }[]
+  mentionCompanies?: { id: number; name: string }[]
 }) {
   const [content, setContent] = useState(note.content)
   const [editing, setEditing] = useState(false)
@@ -264,6 +266,7 @@ function EditablePrepNote({
           rows={3}
           autoFocus
           mentionContacts={mentionContacts}
+          mentionCompanies={mentionCompanies}
         />
       ) : (
         <div
@@ -389,8 +392,9 @@ function QuickLogDialog({
   const [contactOptions, setContactOptions] = useState<ComboboxOption[]>([])
   // Per-contact title + employer for the participant-chip hover tooltip, keyed by id string.
   const [contactMeta, setContactMeta] = useState<Map<string, { title?: string | null; employer?: string | null }>>(new Map())
-  // Flat contact list powering the notes "@mention" autocomplete.
+  // Flat contact + company lists powering the notes "@mention" autocomplete.
   const [mentionContacts, setMentionContacts] = useState<{ id: number; name: string; title?: string | null }[]>([])
+  const [mentionCompanies, setMentionCompanies] = useState<{ id: number; name: string }[]>([])
   const [companyOptions, setCompanyOptions] = useState<ComboboxOption[]>([])
   const [tagOptions, setTagOptions] = useState<ComboboxOption[]>([])
   const [lookupsLoaded, setLookupsLoaded] = useState(false)
@@ -470,7 +474,10 @@ function QuickLogDialog({
         })
         .catch(() => { })
       api.get<{ id: number; name: string }[]>('/companies/names')
-        .then((data) => setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name }))))
+        .then((data) => {
+          setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
+          setMentionCompanies(data.map((c) => ({ id: c.id, name: c.name })))
+        })
         .catch(() => { })
       api.get<Tag[]>('/tags')
         .then((data) => setTagOptions(data.map((t) => ({ value: t.id.toString(), label: t.name }))))
@@ -1127,7 +1134,7 @@ function QuickLogDialog({
   const prepNotesBlock = (
     <div className="space-y-2">
       {prepNotes.map((note) => (
-        <EditablePrepNote key={note.id} note={note} onDelete={() => deletePrepNote(note.id)} mentionContacts={mentionContacts} />
+        <EditablePrepNote key={note.id} note={note} onDelete={() => deletePrepNote(note.id)} mentionContacts={mentionContacts} mentionCompanies={mentionCompanies} />
       ))}
       {pendingPrepNotes.map((note, i) => (
         <div key={`pending-${i}`} className="space-y-1 rounded-md bg-yellow-50 p-2">
@@ -1147,6 +1154,7 @@ function QuickLogDialog({
             placeholder="Things to raise, questions to ask... (type @ to mention)"
             rows={2}
             mentionContacts={mentionContacts}
+            mentionCompanies={mentionCompanies}
           />
         </div>
       ))}
@@ -1158,6 +1166,7 @@ function QuickLogDialog({
           placeholder="Things to raise, questions to ask... (type @ to mention, autosaves)"
           rows={2}
           mentionContacts={mentionContacts}
+          mentionCompanies={mentionCompanies}
         />
         {newPrepContent.trim() && (
           <div className="flex items-center justify-between">
@@ -1304,9 +1313,10 @@ function QuickLogDialog({
           id="ql-notes"
           value={notes}
           onChange={setNotes}
-          placeholder="Optional — use ### headings for topics; @ to mention a person; paste screenshots directly"
+          placeholder="Optional — use ### headings for topics; @ to mention a person or org; paste screenshots directly"
           rows={isEdit ? 10 : 6}
           mentionContacts={mentionContacts}
+          mentionCompanies={mentionCompanies}
         />
       </div>
 
@@ -1557,9 +1567,10 @@ function QuickLogDialog({
               id="ql-nextsteps"
               value={nextSteps}
               onChange={setNextSteps}
-              placeholder="What happens next — use ### headings, bold, lists; @ to mention a person…"
+              placeholder="What happens next — use ### headings, bold, lists; @ to mention a person or org…"
               rows={3}
               mentionContacts={mentionContacts}
+              mentionCompanies={mentionCompanies}
             />
           </div>
         </div>

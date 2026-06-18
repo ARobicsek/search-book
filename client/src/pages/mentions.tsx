@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
-import { mentionSnippet } from '@/lib/mentions'
+import { mentionSnippets } from '@/lib/mentions'
+import type { MentionMatcher } from '@/lib/mentions'
 import { toast } from 'sonner'
-import { AtSign, Loader2, Pencil, UserPlus } from 'lucide-react'
+import { AtSign, Building2, Loader2, Pencil, UserPlus } from 'lucide-react'
 
 const PAGE_SIZE = 25
 
@@ -36,22 +37,26 @@ function typeLabel(value: string) {
 function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; onChanged: () => void }) {
   const [creatingId, setCreatingId] = useState<number | null>(null)
 
-  // The note context shown is the text *surrounding* each @-mention (notes or
-  // next steps), not the whole note — deduped when two mentions share a window.
+  // The note context shown is the text *surrounding* the @-mentions (notes, next
+  // steps, or prep notes), not the whole note. Windows are merged per field so
+  // several mentions in one sentence collapse into a single block.
   const snippets = (() => {
+    const matchers: MentionMatcher[] = meeting.mentions.map((m) =>
+      m.contactId != null
+        ? { contactId: m.contactId }
+        : m.companyId != null
+          ? { companyId: m.companyId }
+          : { name: m.mentionedName, kind: m.kind },
+    )
+    const texts = [meeting.notes, meeting.nextSteps, ...meeting.prepNotes.map((p) => p.content)]
     const out: string[] = []
     const seen = new Set<string>()
-    const texts = [meeting.notes, meeting.nextSteps, ...meeting.prepNotes.map((p) => p.content)]
-    for (const m of meeting.mentions) {
-      const matcher = m.contactId != null ? { contactId: m.contactId } : { name: m.mentionedName }
-      let snippet: string | null = null
-      for (const t of texts) {
-        snippet = mentionSnippet(t, matcher)
-        if (snippet) break
-      }
-      if (snippet && !seen.has(snippet)) {
-        seen.add(snippet)
-        out.push(snippet)
+    for (const t of texts) {
+      for (const s of mentionSnippets(t, matchers)) {
+        if (!seen.has(s)) {
+          seen.add(s)
+          out.push(s)
+        }
       }
     }
     return out
@@ -68,6 +73,22 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
       onChanged()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create contact')
+    } finally {
+      setCreatingId(null)
+    }
+  }
+
+  async function createCompany(mentionId: number) {
+    setCreatingId(mentionId)
+    try {
+      const { company } = await api.post<{ company: { id: number; name: string } }>(
+        `/mentions/${mentionId}/create-company`,
+        {},
+      )
+      toast.success(`Created organization “${company.name}”`)
+      onChanged()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create organization')
     } finally {
       setCreatingId(null)
     }
@@ -96,7 +117,7 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
           </Link>
         </div>
 
-        {/* Who was mentioned */}
+        {/* Who / what was mentioned */}
         <div className="flex flex-wrap items-center gap-1.5">
           <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
           {meeting.mentions.map((m) =>
@@ -106,13 +127,25 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
                   {m.contact.name}
                 </Badge>
               </Link>
+            ) : m.company ? (
+              <Link key={m.id} to={`/companies/${m.company.id}`}>
+                <Badge variant="outline" className="bg-violet-50 text-violet-800 border-violet-200 hover:bg-violet-100 text-xs">
+                  <Building2 className="mr-1 h-3 w-3" />
+                  {m.company.name}
+                </Badge>
+              </Link>
             ) : (
               <span key={m.id} className="inline-flex items-center gap-1">
                 <Badge
                   variant="outline"
-                  className="border-dashed border-amber-300 bg-amber-50 text-amber-800 text-xs"
-                  title="Not a contact yet"
+                  className={
+                    m.kind === 'COMPANY'
+                      ? 'border-dashed border-violet-300 bg-violet-50 text-violet-800 text-xs'
+                      : 'border-dashed border-amber-300 bg-amber-50 text-amber-800 text-xs'
+                  }
+                  title={m.kind === 'COMPANY' ? 'Not an organization yet' : 'Not a contact yet'}
                 >
+                  {m.kind === 'COMPANY' && <Building2 className="mr-1 h-3 w-3" />}
                   {m.mentionedName}
                 </Badge>
                 <Button
@@ -120,11 +153,17 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
                   size="sm"
                   className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground"
                   disabled={creatingId === m.id}
-                  onClick={() => createContact(m.id)}
-                  title={`Create a contact for ${m.mentionedName}`}
+                  onClick={() => (m.kind === 'COMPANY' ? createCompany(m.id) : createContact(m.id))}
+                  title={
+                    m.kind === 'COMPANY'
+                      ? `Create an organization for ${m.mentionedName}`
+                      : `Create a contact for ${m.mentionedName}`
+                  }
                 >
                   {creatingId === m.id ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : m.kind === 'COMPANY' ? (
+                    <Building2 className="h-3 w-3" />
                   ) : (
                     <UserPlus className="h-3 w-3" />
                   )}

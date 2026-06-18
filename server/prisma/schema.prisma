@@ -85,6 +85,7 @@ model Company {
   actionCompanies          ActionCompany[] @relation("ActionCompanies")
   activities               CompanyActivity[]
   companyPrepNotes         CompanyPrepNote[]
+  mentionedInConversations ConversationMention[] @relation("OrgMentionedInConversations")
 }
 
 // ─── Company Activities (company-level action log) ──────────
@@ -216,13 +217,20 @@ model ConversationMention {
   id             Int          @id @default(autoincrement())
   conversationId Int
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // A mention targets either a person (contactId) or an organization (companyId).
+  // `kind` ('CONTACT' | 'COMPANY') disambiguates loose mentions, where both ids
+  // are null (a name/org not in the CRM yet). `mentionedName` is the typed text.
+  kind           String       @default("CONTACT")
   contactId      Int?
   contact        Contact?     @relation("MentionedInConversations", fields: [contactId], references: [id], onDelete: SetNull)
+  companyId      Int?
+  company        Company?     @relation("OrgMentionedInConversations", fields: [companyId], references: [id], onDelete: SetNull)
   mentionedName  String
   createdAt      DateTime     @default(now())
 
   @@index([conversationId])
   @@index([contactId])
+  @@index([companyId])
 }
 
 // A recurring meeting series (D4 revised): meetings opt into a series explicitly

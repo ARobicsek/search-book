@@ -1,7 +1,9 @@
 // Client-side helpers for @-mentions in meeting notes. The token format must
 // match the server parser (server/src/lib/mentions.ts):
-//   [@Display Name](/contacts/123)  → resolved mention (bound to a contact)
-//   [@Display Name](#mention)       → loose mention (a name not yet a contact)
+//   [@Display Name](/contacts/123)  → resolved person mention (bound to a contact)
+//   [@Org Name](/companies/45)      → resolved org mention (bound to a company)
+//   [@Display Name](#mention)       → loose person mention (a name not yet a contact)
+//   [@Org Name](#org-mention)       → loose org mention (an org not yet a company)
 
 export function looseMentionToken(name: string): string {
   return `[@${name}](#mention)`
@@ -11,18 +13,47 @@ export function resolvedMentionToken(name: string, contactId: number): string {
   return `[@${name}](/contacts/${contactId})`
 }
 
-// Matches any @-mention token. Group 1 = display name, group 3 = contactId (when
-// bound to a contact). Mirrors MENTION_RE in server/src/lib/mentions.ts.
-const MENTION_RE = /\[@([^\]\n]+)\]\((\/contacts\/(\d+)|#mention)\)/g
+export function looseOrgMentionToken(name: string): string {
+  return `[@${name}](#org-mention)`
+}
 
-// Identifies the @-mention a snippet should be centered on: a bound contact
-// (by id) or a loose name (case-insensitive).
-export type MentionMatcher = { contactId?: number | null; name?: string }
+export function resolvedOrgMentionToken(name: string, companyId: number): string {
+  return `[@${name}](/companies/${companyId})`
+}
 
-function matches(matcher: MentionMatcher, tokenContactId: number | null, tokenName: string): boolean {
-  if (matcher.contactId != null) return tokenContactId === matcher.contactId
+// Matches any @-mention token. Group 1 = display name, group 2 = href, group 3 =
+// contactId, group 4 = companyId. Mirrors MENTION_RE in server/src/lib/mentions.ts.
+const MENTION_RE = /\[@([^\]\n]+)\]\((\/contacts\/(\d+)|\/companies\/(\d+)|#mention|#org-mention)\)/g
+
+// Identifies the @-mention a snippet should be centered on: a bound contact or
+// company (by id), or a loose name (case-insensitive, optionally constrained to
+// a kind so a loose person and loose org of the same name don't collide).
+export type MentionMatcher = {
+  contactId?: number | null
+  companyId?: number | null
+  name?: string
+  kind?: 'CONTACT' | 'COMPANY'
+}
+
+type TokenRef = { name: string; contactId: number | null; companyId: number | null; kind: 'CONTACT' | 'COMPANY' }
+
+function tokenRef(m: RegExpExecArray): TokenRef {
+  const contactId = m[3] ? Number(m[3]) : null
+  const companyId = m[4] ? Number(m[4]) : null
+  const kind = companyId != null || m[2] === '#org-mention' ? 'COMPANY' : 'CONTACT'
+  return { name: m[1].trim(), contactId, companyId, kind }
+}
+
+function matches(matcher: MentionMatcher, tok: TokenRef): boolean {
+  if (matcher.contactId != null) return tok.contactId === matcher.contactId
+  if (matcher.companyId != null) return tok.companyId === matcher.companyId
   if (matcher.name != null) {
-    return tokenContactId == null && tokenName.toLowerCase() === matcher.name.trim().toLowerCase()
+    return (
+      tok.contactId == null &&
+      tok.companyId == null &&
+      (matcher.kind == null || tok.kind === matcher.kind) &&
+      tok.name.toLowerCase() === matcher.name.trim().toLowerCase()
+    )
   }
   return false
 }
@@ -74,8 +105,7 @@ export function mentionSnippet(
   let m: RegExpExecArray | null
   let hit: { start: number; end: number } | null = null
   while ((m = MENTION_RE.exec(text)) !== null) {
-    const tokenContactId = m[3] ? Number(m[3]) : null
-    if (matches(matcher, tokenContactId, m[1].trim())) {
+    if (matches(matcher, tokenRef(m))) {
       hit = { start: m.index, end: m.index + m[0].length }
       break
     }
@@ -83,12 +113,60 @@ export function mentionSnippet(
   if (!hit) return null
 
   const ranges = protectedRanges(text)
-  const start = cleanLeft(text, Math.max(0, hit.start - radius), ranges)
-  const end = cleanRight(text, Math.min(text.length, hit.end + radius), ranges)
+  const window = cleanWindow(text, hit, radius, ranges)
+  return sliceWindow(text, window)
+}
+
+// Expand a mention hit to a ±radius window, snapped to clean boundaries.
+function cleanWindow(
+  text: string,
+  hit: { start: number; end: number },
+  radius: number,
+  ranges: Array<[number, number]>,
+): [number, number] {
+  return [
+    cleanLeft(text, Math.max(0, hit.start - radius), ranges),
+    cleanRight(text, Math.min(text.length, hit.end + radius), ranges),
+  ]
+}
+
+function sliceWindow(text: string, [start, end]: [number, number]): string {
   let snippet = text.slice(start, end).trim()
   if (start > 0) snippet = '… ' + snippet
   if (end < text.length) snippet = snippet + ' …'
   return snippet
+}
+
+// Snippets covering EVERY matching mention in `text`, with overlapping windows
+// merged so clustered mentions (e.g. several names in one sentence) collapse into
+// one block instead of N near-duplicates. Used by the Mentions review list.
+export function mentionSnippets(
+  text: string | null | undefined,
+  matchers: MentionMatcher[],
+  radius = 140,
+): string[] {
+  if (!text) return []
+  const ranges = protectedRanges(text)
+  const windows: Array<[number, number]> = []
+  for (const matcher of matchers) {
+    MENTION_RE.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = MENTION_RE.exec(text)) !== null) {
+      if (matches(matcher, tokenRef(m))) {
+        windows.push(cleanWindow(text, { start: m.index, end: m.index + m[0].length }, radius, ranges))
+      }
+    }
+  }
+  if (windows.length === 0) return []
+  // Merge overlapping / touching windows.
+  windows.sort((a, b) => a[0] - b[0])
+  const merged: Array<[number, number]> = [windows[0]]
+  for (let i = 1; i < windows.length; i++) {
+    const last = merged[merged.length - 1]
+    if (windows[i][0] <= last[1]) last[1] = Math.max(last[1], windows[i][1])
+    else merged.push(windows[i])
+  }
+  return merged.map((w) => sliceWindow(text, w))
 }
 
 // Characters allowed inside the in-progress "@query" (names: letters incl.

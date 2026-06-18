@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { deleteWithSnapshot } from '../lib/undo';
+import { resyncConversationMentions } from '../lib/mentions';
 
 const router = Router();
 
@@ -61,6 +62,8 @@ router.post('/', async (req: Request, res: Response) => {
                 conversationId: conversationId,
             },
         });
+        // Prep notes can hold @-mentions too — keep the meeting's index in sync.
+        await resyncConversationMentions(prisma, conversationId);
         res.status(201).json(prepNote);
     } catch (error) {
         console.error('Error creating meeting prep note:', error);
@@ -113,6 +116,7 @@ router.put('/:id', async (req: Request, res: Response) => {
                 date: date ?? existing.date,
             },
         });
+        await resyncConversationMentions(prisma, existing.conversationId);
         res.json(prepNote);
     } catch (error) {
         console.error('Error updating meeting prep note:', error);
@@ -130,6 +134,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return;
         }
         await deleteWithSnapshot('conversationPrepNote', id, 'Prep note');
+        await resyncConversationMentions(prisma, existing.conversationId);
         res.status(204).send();
     } catch (error) {
         console.error('Error deleting meeting prep note:', error);

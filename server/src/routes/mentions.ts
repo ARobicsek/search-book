@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import {
-  syncConversationMentions,
+  resyncConversationMentions,
   looseMentionToken,
   resolvedMentionToken,
 } from '../lib/mentions';
@@ -20,6 +20,8 @@ const mentionMeetingSelect = {
   nextSteps: true,
   attendeesDescription: true,
   updatedAt: true,
+  // Prep notes can hold @-mentions too; needed to snippet a prep-note-only mention.
+  prepNotes: { select: { content: true } },
   contact: { select: { id: true, name: true } },
   company: { select: { id: true, name: true } },
   participants: {
@@ -103,23 +105,32 @@ router.post('/:id/create-contact', async (req: Request, res: Response) => {
         select: { id: true, name: true },
       });
 
-      // Rewrite every loose token for this exact name → a bound token. Literal
-      // string replace (split/join) avoids regex-escaping the name.
+      // Rewrite every loose token for this exact name → a bound token, wherever
+      // it appears: notes, next steps, AND prep notes. Literal string replace
+      // (split/join) avoids regex-escaping the name.
       const loose = looseMentionToken(name);
       const bound = resolvedMentionToken(name, contact.id);
-      const newNotes = conv.notes ? conv.notes.split(loose).join(bound) : conv.notes;
-      const newNextSteps = conv.nextSteps ? conv.nextSteps.split(loose).join(bound) : conv.nextSteps;
+      const rewrite = (t: string | null) => (t ? t.split(loose).join(bound) : t);
 
       await tx.conversation.update({
         where: { id: conv.id },
-        data: { notes: newNotes, nextSteps: newNextSteps },
+        data: { notes: rewrite(conv.notes), nextSteps: rewrite(conv.nextSteps) },
       });
 
-      await syncConversationMentions(
-        tx,
-        conv.id,
-        [newNotes, newNextSteps].filter((v) => typeof v === 'string' && v).join('\n\n'),
-      );
+      const preps = await tx.conversationPrepNote.findMany({
+        where: { conversationId: conv.id },
+        select: { id: true, content: true },
+      });
+      for (const p of preps) {
+        if (p.content && p.content.includes(loose)) {
+          await tx.conversationPrepNote.update({
+            where: { id: p.id },
+            data: { content: rewrite(p.content)! },
+          });
+        }
+      }
+
+      await resyncConversationMentions(tx, conv.id);
 
       return contact;
     });

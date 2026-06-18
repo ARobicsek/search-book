@@ -47,6 +47,7 @@ import type { SaveStatus } from '@/hooks/use-auto-save'
 import { toast } from 'sonner'
 import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
+import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import {
   Check, ChevronDown, ChevronRight, FileText, ListTodo, Loader2, Paperclip,
   Pencil, Plus, Star, Trash2, X,
@@ -182,9 +183,11 @@ function useIsDesktop() {
 function EditablePrepNote({
   note,
   onDelete,
+  mentionContacts,
 }: {
   note: ConversationPrepNote
   onDelete: () => void
+  mentionContacts?: { id: number; name: string; title?: string | null }[]
 }) {
   const [content, setContent] = useState(note.content)
   const [editing, setEditing] = useState(false)
@@ -257,9 +260,10 @@ function EditablePrepNote({
           value={content}
           onChange={setContent}
           onBlur={() => { flush(); setEditing(false) }}
-          placeholder="Things to raise, questions to ask..."
+          placeholder="Things to raise, questions to ask... (type @ to mention)"
           rows={3}
           autoFocus
+          mentionContacts={mentionContacts}
         />
       ) : (
         <div
@@ -268,7 +272,7 @@ function EditablePrepNote({
           title="Click to edit"
         >
           {content.trim()
-            ? <ReactMarkdown>{content}</ReactMarkdown>
+            ? <MentionableMarkdown>{content}</MentionableMarkdown>
             : <span className="italic text-muted-foreground/60">Empty note — click to edit</span>}
         </div>
       )}
@@ -1123,7 +1127,7 @@ function QuickLogDialog({
   const prepNotesBlock = (
     <div className="space-y-2">
       {prepNotes.map((note) => (
-        <EditablePrepNote key={note.id} note={note} onDelete={() => deletePrepNote(note.id)} />
+        <EditablePrepNote key={note.id} note={note} onDelete={() => deletePrepNote(note.id)} mentionContacts={mentionContacts} />
       ))}
       {pendingPrepNotes.map((note, i) => (
         <div key={`pending-${i}`} className="space-y-1 rounded-md bg-yellow-50 p-2">
@@ -1140,8 +1144,9 @@ function QuickLogDialog({
           <MarkdownTextarea
             value={note.content}
             onChange={(v) => updatePendingPrepNote(i, v)}
-            placeholder="Things to raise, questions to ask..."
+            placeholder="Things to raise, questions to ask... (type @ to mention)"
             rows={2}
+            mentionContacts={mentionContacts}
           />
         </div>
       ))}
@@ -1150,8 +1155,9 @@ function QuickLogDialog({
           value={newPrepContent}
           onChange={setNewPrepContent}
           onBlur={() => { void enqueuePrepSave(() => saveDraftPrepNote(newPrepContent)) }}
-          placeholder="Things to raise, questions to ask... (autosaves)"
+          placeholder="Things to raise, questions to ask... (type @ to mention, autosaves)"
           rows={2}
+          mentionContacts={mentionContacts}
         />
         {newPrepContent.trim() && (
           <div className="flex items-center justify-between">

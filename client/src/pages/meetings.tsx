@@ -35,7 +35,6 @@ import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { PersonTooltip } from '@/components/person-tooltip'
 import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
-import ReactMarkdown from 'react-markdown'
 import {
   Building2, CalendarClock, CalendarDays, ChevronDown, ChevronUp, FileText, Layers, List, Loader2,
   MessageSquarePlus, Paperclip, Pencil, Tag as TagIcon, Trash2, X,
@@ -347,7 +346,7 @@ function MeetingCard({
                 </p>
                 {conv.prepNotes.map((note) => (
                   <div key={note.id} className="prep-note-markdown text-sm text-muted-foreground">
-                    <ReactMarkdown>{note.content}</ReactMarkdown>
+                    <MentionableMarkdown>{note.content}</MentionableMarkdown>
                   </div>
                 ))}
               </div>

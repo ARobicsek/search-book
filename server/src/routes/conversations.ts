@@ -1,13 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { deleteWithSnapshot } from '../lib/undo';
-import { syncConversationMentions } from '../lib/mentions';
-
-// The note text we scan for @-mentions: notes + next steps (both live on the
-// Conversation row and save together).
-function mentionText(notes: unknown, nextSteps: unknown): string {
-  return [notes, nextSteps].filter((v) => typeof v === 'string' && v).join('\n\n');
-}
+import { resyncConversationMentions } from '../lib/mentions';
 
 const router = Router();
 
@@ -280,8 +274,8 @@ router.post('/', async (req: Request, res: Response) => {
         });
       }
 
-      // Index @-mentions found in the notes / next steps.
-      await syncConversationMentions(tx, created.id, mentionText(notes, nextSteps));
+      // Index @-mentions found in the notes / next steps / prep notes.
+      await resyncConversationMentions(tx, created.id);
 
       if (anchorContactId) {
         // Auto-update contact status to CONNECTED if currently blank
@@ -461,11 +455,10 @@ router.put('/:id', async (req: Request, res: Response) => {
         },
       });
 
-      // Re-index @-mentions from the post-update notes / next steps. A partial PUT
-      // may omit either field, so fall back to the stored value.
-      const finalNotes = 'notes' in data ? data.notes : existing.notes;
-      const finalNextSteps = 'nextSteps' in data ? data.nextSteps : existing.nextSteps;
-      await syncConversationMentions(tx, id, mentionText(finalNotes, finalNextSteps));
+      // Re-index @-mentions from the post-update notes / next steps / prep notes
+      // (reads the just-written row + prep notes, so editing notes never drops a
+      // prep-note mention and vice-versa).
+      await resyncConversationMentions(tx, id);
 
       // Create follow-up actions if provided
       const actionsToCreate = createActions?.filter((a: { title: string }) => a.title?.trim()) || [];

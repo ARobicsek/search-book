@@ -282,6 +282,7 @@ export interface MentionMeeting {
   nextSteps: string | null;
   attendeesDescription: string | null;
   updatedAt: string;
+  prepNotes: { content: string }[];
   contact: { id: number; name: string } | null;
   company: { id: number; name: string } | null;
   participants: { contact: { id: number; name: string } }[];

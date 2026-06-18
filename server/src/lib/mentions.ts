@@ -53,6 +53,12 @@ type MentionDb = {
   contact: { findMany(args: any): Promise<{ id: number }[]> };
 };
 
+// Like MentionDb but also able to read the text that feeds the index.
+type ResyncDb = MentionDb & {
+  conversation: { findUnique(args: any): Promise<{ notes: string | null; nextSteps: string | null } | null> };
+  conversationPrepNote: { findMany(args: any): Promise<{ content: string | null }[]> };
+};
+
 // Replace the meeting's mention rows with the ones currently in `text`
 // (notes + next steps). contactIds that no longer exist degrade to loose mentions
 // (FK-safe) — the name is preserved either way.
@@ -78,4 +84,25 @@ export async function syncConversationMentions(
       data: { conversationId, contactId, mentionedName: p.name },
     });
   }
+}
+
+// Re-derive a meeting's mention index from ALL of its mention-bearing text:
+// notes + next steps (on the Conversation row) AND every prep note. Use this
+// whenever any of those change so prep-note mentions stay in the index too.
+export async function resyncConversationMentions(
+  db: ResyncDb,
+  conversationId: number,
+): Promise<void> {
+  const conv = await db.conversation.findUnique({
+    where: { id: conversationId },
+    select: { notes: true, nextSteps: true },
+  });
+  const preps = await db.conversationPrepNote.findMany({
+    where: { conversationId },
+    select: { content: true },
+  });
+  const text = [conv?.notes, conv?.nextSteps, ...preps.map((p) => p.content)]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .join('\n\n');
+  await syncConversationMentions(db, conversationId, text);
 }

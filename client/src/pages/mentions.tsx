@@ -41,9 +41,14 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
   const snippets = (() => {
     const out: string[] = []
     const seen = new Set<string>()
+    const texts = [meeting.notes, meeting.nextSteps, ...meeting.prepNotes.map((p) => p.content)]
     for (const m of meeting.mentions) {
       const matcher = m.contactId != null ? { contactId: m.contactId } : { name: m.mentionedName }
-      const snippet = mentionSnippet(meeting.notes, matcher) ?? mentionSnippet(meeting.nextSteps, matcher)
+      let snippet: string | null = null
+      for (const t of texts) {
+        snippet = mentionSnippet(t, matcher)
+        if (snippet) break
+      }
       if (snippet && !seen.has(snippet)) {
         seen.add(snippet)
         out.push(snippet)

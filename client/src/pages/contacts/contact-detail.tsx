@@ -1200,8 +1200,12 @@ function MentionedInMeetingsCard({ contactId }: { contactId: number }) {
       <CardContent>
         <ul className="space-y-3">
           {meetings.map((m) => {
-            // Show the note text surrounding where THIS contact was @-mentioned.
-            const snippet = mentionSnippet(m.notes, { contactId }) ?? mentionSnippet(m.nextSteps, { contactId })
+            // Show the note text surrounding where THIS contact was @-mentioned
+            // (notes → next steps → prep notes).
+            const snippet =
+              [m.notes, m.nextSteps, ...m.prepNotes.map((p) => p.content)]
+                .map((t) => mentionSnippet(t, { contactId }))
+                .find((s) => s) ?? null
             return (
               <li key={m.id} className="text-sm">
                 <p className="text-xs text-muted-foreground">

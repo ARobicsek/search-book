@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import type { Idea, Contact, Company, Tag } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -33,7 +33,7 @@ import { HighlightedText } from '@/components/highlighted-text'
 import { highlightRehype } from '@/lib/highlight-markdown'
 import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon, List as ListIcon, LayoutGrid } from 'lucide-react'
-import { useAutoSave } from '@/hooks/use-auto-save'
+import type { SaveStatus } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { cn } from '@/lib/utils'
 
@@ -133,7 +133,20 @@ export function IdeaListPage() {
   const [companyFavorites, setCompanyFavorites] = useState<{ id: number; name: string }[]>([])
 
   const [form, setForm] = useState<IdeaForm>(emptyForm)
-  const [originalForm, setOriginalForm] = useState<IdeaForm | null>(null)
+  // The form as last loaded/finalized — drives the dirty/Revert affordance.
+  const [originalForm, setOriginalForm] = useState<IdeaForm>(emptyForm)
+
+  // ── Autosave (mirrors the meeting Quick Log) ──────────────────
+  // `savedId` is the live idea id: = editId in edit mode, or the id minted by the
+  // first create POST in "New Idea" mode. Everything routes through one serialized
+  // save chain so a debounced autosave can never double-create or PUT before POST.
+  const [savedId, setSavedId] = useState<number | null>(null)
+  const savedIdRef = useRef<number | null>(null)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const lastSnapshotRef = useRef<string | null>(null)        // JSON of the last autosaved body (skips no-ops)
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve())
+  const savedFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const recordExists = savedId !== null
 
   const loadIdeas = useCallback(() => {
     setLoading(true)
@@ -205,10 +218,21 @@ export function IdeaListPage() {
   // <mark>), so search terms are highlighted anywhere in the card.
   const descRehype = searchTerms.length ? [highlightRehype(searchTerms, caseSensitive)] : undefined
 
+  // Reset the shared autosave bookkeeping each time the dialog opens. `id` is the
+  // existing record (edit mode) or null (a new idea, created by the first autosave).
+  function resetAutosave(id: number | null, seedSnapshot: string | null) {
+    setSavedId(id)
+    savedIdRef.current = id
+    setSaveStatus('idle')
+    lastSnapshotRef.current = seedSnapshot
+    saveChainRef.current = Promise.resolve()
+  }
+
   function openNew() {
     setEditId(null)
     setForm(emptyForm)
-    setOriginalForm(null)
+    setOriginalForm(emptyForm)
+    resetAutosave(null, null)
     setDialogOpen(true)
   }
 
@@ -223,6 +247,9 @@ export function IdeaListPage() {
     }
     setForm(loadedForm)
     setOriginalForm(loadedForm)
+    // Seed the snapshot from the loaded record so opening an edit doesn't fire an
+    // immediate no-op PUT.
+    resetAutosave(idea.id, autosaveSnapshot(loadedForm))
     setDialogOpen(true)
   }
 
@@ -275,111 +302,211 @@ export function IdeaListPage() {
     return ids
   }, [allTags])
 
-  // Auto-save handler - saves existing contacts/companies (not new entries) + tags
-  const handleAutoSave = useCallback(async (data: IdeaForm) => {
-    if (!editId) return
+  // Existing (already-saved) contact/company ids in the combobox values. Free-text
+  // names (non-numeric) are NOT autosaved — they're resolved into real records only
+  // on finalize (Done), exactly like the meeting Quick Log.
+  function existingIds(values: string[]): number[] {
+    return values.filter((v) => /^\d+$/.test(v)).map(Number)
+  }
 
-    // Only include existing contact/company IDs (not new names)
-    const existingContactIds = data.contactValues
-      .filter((val) => allContacts.some((c) => c.id.toString() === val))
-      .map((val) => parseInt(val))
-    const existingCompanyIds = data.companyValues
-      .filter((val) => allCompanies.some((c) => c.id.toString() === val))
-      .map((val) => parseInt(val))
-    const tagIds = await resolveTagIds(data.tagValues)
-
-    const payload = {
+  // The autosave body: scalars + already-resolved ids. Tags ARE created here
+  // (resolveTagIds) — building a shared tag vocabulary is the point — so they ride
+  // autosave; new contacts/companies do not.
+  function buildAutosaveBody(data: IdeaForm, tagIds: number[]) {
+    return {
       title: data.title.trim(),
       description: data.description.trim() || null,
-      contactIds: existingContactIds,
-      companyIds: existingCompanyIds,
+      contactIds: existingIds(data.contactValues),
+      companyIds: existingIds(data.companyValues),
       tagIds,
     }
-    await api.put(`/ideas/${editId}`, payload)
-  }, [editId, allContacts, allCompanies, resolveTagIds])
+  }
 
-  const autoSave = useAutoSave({
-    data: form,
-    originalData: originalForm,
-    onSave: handleAutoSave,
-    validate: (data) => data.title.trim().length > 0,
-    enabled: editId !== null,
-    onRevert: setForm,
-  })
+  // A cheap signature of everything autosave persists — skips redundant saves and
+  // seeds the edit snapshot. Uses raw tagValues (resolved lazily) so a new tag name
+  // still registers as a change.
+  function autosaveSnapshot(data: IdeaForm): string {
+    return JSON.stringify({
+      title: data.title.trim(),
+      description: data.description.trim(),
+      contactIds: existingIds(data.contactValues),
+      companyIds: existingIds(data.companyValues),
+      tagValues: data.tagValues,
+    })
+  }
 
+  // Serialize every save so the first POST sets the id before any later PUT runs —
+  // never two POSTs, never a PUT before the POST.
+  function enqueueSave(fn: () => Promise<void>): Promise<void> {
+    const next = saveChainRef.current.then(fn, fn)
+    saveChainRef.current = next
+    return next
+  }
+
+  function flashSaved() {
+    setSaveStatus('saved')
+    if (savedFlashRef.current) clearTimeout(savedFlashRef.current)
+    savedFlashRef.current = setTimeout(() => setSaveStatus('idle'), 2500)
+  }
+
+  // POST on first save (minting the id), PUT thereafter. Re-checks the snapshot at
+  // run time so a queued save that's been superseded is a no-op.
+  async function persistAutosave(data: IdeaForm, snapshot: string) {
+    if (snapshot === lastSnapshotRef.current) return
+    setSaveStatus('saving')
+    try {
+      const tagIds = await resolveTagIds(data.tagValues)
+      const body = buildAutosaveBody(data, tagIds)
+      const isCreate = savedIdRef.current === null
+      if (isCreate) {
+        const created = await api.post<Idea>('/ideas', body)
+        savedIdRef.current = created.id
+        setSavedId(created.id)
+      } else {
+        await api.put(`/ideas/${savedIdRef.current}`, body)
+      }
+      lastSnapshotRef.current = snapshot
+      flashSaved()
+      // Surface a brand-new idea in the list behind the dialog (later PUTs don't
+      // need a reload — the card refreshes on close).
+      if (isCreate) loadIdeas()
+    } catch {
+      setSaveStatus('error')
+    }
+  }
+
+  // Debounced autosave (~1.5s after the last edit). Requires a title (the only
+  // required field) so an empty "New Idea" never auto-creates.
+  useEffect(() => {
+    if (!dialogOpen) return
+    if (!form.title.trim()) return
+    const snapshot = autosaveSnapshot(form)
+    if (snapshot === lastSnapshotRef.current) return
+    const timer = setTimeout(() => {
+      void enqueueSave(() => persistAutosave(form, snapshot))
+    }, 1500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogOpen, form])
+
+  useEffect(() => () => { if (savedFlashRef.current) clearTimeout(savedFlashRef.current) }, [])
+
+  // Dirty = the form differs from its loaded/finalized state (drives Revert).
+  const isDirty = JSON.stringify(form) !== JSON.stringify(originalForm)
+
+  // Revert the form to its loaded state and persist that, so the server matches the UI.
+  function revertForm() {
+    setForm(originalForm)
+    if (savedIdRef.current !== null) {
+      void enqueueSave(() => persistAutosave(originalForm, autosaveSnapshot(originalForm)))
+    }
+  }
+
+  // Finalize ("Done" / "Create"): resolves free-text contacts/companies into real
+  // records, persists the full payload, then closes. Routed through the save chain
+  // so it can't race an in-flight autosave; reuses the autosaved id when present.
   async function handleSubmit() {
     if (!form.title.trim()) {
       toast.error('Title is required')
       return
     }
     setSaving(true)
+    setSaveStatus('saving')
     try {
-      // Process contact values - create new contacts if needed
-      const contactIds: number[] = []
-      for (const val of form.contactValues) {
-        const existingContact = allContacts.find((c) => c.id.toString() === val)
-        if (existingContact) {
-          contactIds.push(existingContact.id)
-        } else if (val.trim()) {
-          // Create new contact
-          try {
-            const newContact = await api.post<Contact>('/contacts', {
-              name: val.trim(),
-              status: 'CONNECTED',
-              ecosystem: 'NETWORK',
-            })
-            contactIds.push(newContact.id)
-            setAllContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }])
-          } catch {
-            // Skip if creation fails
+      await enqueueSave(async () => {
+        // Resolve contact values — create new contacts for free-text names.
+        const contactIds: number[] = []
+        for (const val of form.contactValues) {
+          const existingContact = allContacts.find((c) => c.id.toString() === val)
+          if (existingContact) {
+            contactIds.push(existingContact.id)
+          } else if (val.trim()) {
+            try {
+              const newContact = await api.post<Contact>('/contacts', {
+                name: val.trim(),
+                status: 'CONNECTED',
+                ecosystem: 'NETWORK',
+              })
+              contactIds.push(newContact.id)
+              setAllContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }])
+            } catch {
+              // Skip if creation fails
+            }
           }
         }
-      }
 
-      // Process company values - create new companies if needed
-      const companyIds: number[] = []
-      for (const val of form.companyValues) {
-        const existingCompany = allCompanies.find((c) => c.id.toString() === val)
-        if (existingCompany) {
-          companyIds.push(existingCompany.id)
-        } else if (val.trim()) {
-          // Create new company
-          try {
-            const newCompany = await api.post<Company>('/companies', {
-              name: val.trim(),
-              status: 'CONNECTED',
-            })
-            companyIds.push(newCompany.id)
-            setAllCompanies((prev) => [...prev, { id: newCompany.id, name: newCompany.name }])
-          } catch {
-            // Skip if creation fails
+        // Resolve company values — create new companies for free-text names.
+        const companyIds: number[] = []
+        for (const val of form.companyValues) {
+          const existingCompany = allCompanies.find((c) => c.id.toString() === val)
+          if (existingCompany) {
+            companyIds.push(existingCompany.id)
+          } else if (val.trim()) {
+            try {
+              const newCompany = await api.post<Company>('/companies', {
+                name: val.trim(),
+                status: 'CONNECTED',
+              })
+              companyIds.push(newCompany.id)
+              setAllCompanies((prev) => [...prev, { id: newCompany.id, name: newCompany.name }])
+            } catch {
+              // Skip if creation fails
+            }
           }
         }
-      }
 
-      const tagIds = await resolveTagIds(form.tagValues)
+        const tagIds = await resolveTagIds(form.tagValues)
 
-      const payload = {
-        title: form.title.trim(),
-        description: form.description.trim() || null,
-        contactIds,
-        companyIds,
-        tagIds,
-      }
-      if (editId) {
-        await api.put(`/ideas/${editId}`, payload)
-        toast.success('Idea updated')
-      } else {
-        await api.post('/ideas', payload)
-        toast.success('Idea created')
-      }
+        const payload = {
+          title: form.title.trim(),
+          description: form.description.trim() || null,
+          contactIds,
+          companyIds,
+          tagIds,
+        }
+        if (savedIdRef.current !== null) {
+          await api.put(`/ideas/${savedIdRef.current}`, payload)
+        } else {
+          const created = await api.post<Idea>('/ideas', payload)
+          savedIdRef.current = created.id
+          setSavedId(created.id)
+        }
+        // Mark the finalized state as saved so a trailing autosave is a no-op.
+        lastSnapshotRef.current = autosaveSnapshot(form)
+      })
+      toast.success(editId !== null || recordExists ? 'Idea saved' : 'Idea created')
       setDialogOpen(false)
       loadIdeas()
     } catch (err) {
+      setSaveStatus('error')
       toast.error(err instanceof Error ? err.message : 'Failed to save idea')
     } finally {
       setSaving(false)
     }
+  }
+
+  // Discard the in-editor idea entirely (an autosaved new idea, or an existing one).
+  async function discardCurrentIdea() {
+    if (savedIdRef.current === null) return
+    if (!window.confirm('Delete this idea? This cannot be undone.')) return
+    setDeleting(true)
+    try {
+      await api.delete(`/ideas/${savedIdRef.current}`)
+      toast.success('Idea deleted')
+      setDialogOpen(false)
+      loadIdeas()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // Closing via Cancel / X / Escape keeps whatever autosave already persisted;
+  // refresh the list so the card reflects the latest autosaved state.
+  function handleDialogOpenChange(next: boolean) {
+    if (!next) loadIdeas()
+    setDialogOpen(next)
   }
 
   async function handleDelete() {
@@ -669,19 +796,19 @@ export function IdeaListPage() {
       )}
 
       {/* Create/Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
         <DialogContent
           className="sm:w-[28rem] sm:min-w-[22rem] sm:max-w-[92vw] sm:max-h-[85vh] sm:resize sm:overflow-auto"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 pr-6">
               <DialogTitle>{editId ? 'Edit Idea' : 'New Idea'}</DialogTitle>
-              {editId && <SaveStatusIndicator status={autoSave.status} />}
+              <SaveStatusIndicator status={saveStatus} />
             </div>
             <DialogDescription>
-              {editId ? 'Update your idea.' : 'Capture a thought, inspiration, or note.'}
+              {editId ? 'Update your idea — changes autosave.' : 'Capture a thought — it autosaves as you type.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -783,27 +910,35 @@ export function IdeaListPage() {
               })}
             </div>
           </div>
-          <DialogFooter>
-            {editId ? (
-              <>
-                {autoSave.isDirty && (
-                  <Button variant="outline" onClick={autoSave.revert}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Revert
-                  </Button>
-                )}
-                <Button onClick={() => setDialogOpen(false)}>Done</Button>
-              </>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {recordExists ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto"
+                onClick={discardCurrentIdea}
+                disabled={deleting || saving}
+              >
+                <Trash2 className="mr-1 h-4 w-4" />
+                Delete this idea
+              </Button>
             ) : (
-              <>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSubmit} disabled={saving}>
-                  {saving ? 'Saving...' : 'Create'}
-                </Button>
-              </>
+              <span className="hidden sm:block" />
             )}
+            <div className="flex justify-end gap-2">
+              {editId !== null && isDirty && (
+                <Button variant="outline" onClick={revertForm}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Revert
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
+                {recordExists ? 'Close' : 'Cancel'}
+              </Button>
+              <Button onClick={handleSubmit} disabled={saving}>
+                {saving ? 'Saving…' : recordExists ? 'Done' : 'Create'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

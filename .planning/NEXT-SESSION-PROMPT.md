@@ -5,31 +5,40 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Fix: false "changed on another device" 409 blocking edits (2026-06-19)
+### What Was Just Completed — Tags in Global Search + meeting time/date quick-edits (2026-06-19, s4)
 
-One owner ask, **schema-free, pushed/live** (`5910384`). The owner couldn't edit an Organization
-(CMS): every save fired the conflict toast and reverted the edit, with no concurrent editing
-anywhere.
+Three owner asks, **all schema-free, verified live, pushed to `main`** (`02d1a56`, `fcdaac0`,
+`fce6b93`, + fix `d41a44c`).
 
-- **Root cause:** the optimistic-concurrency guard filtered `where: { id, updatedAt: <Date> }`.
-  Prisma 7 stores `DateTime` as text `YYYY-MM-DDTHH:MM:SS.SSS+00:00` and binds that **same** form in
-  equality filters — so the filter only ever matched rows Prisma itself last wrote. Rows whose
-  `updatedAt` was last written by **backup-restore / bulk-import / raw-SQL** are stored as `...Z`
-  (or `YYYY-MM-DD HH:MM:SS`) and could **never** satisfy the filter even at the identical instant →
-  permanent bogus 409 on every save. A normal edit "heals" a row (rewrites `updatedAt` in Prisma's
-  form), which is why most records were fine and only restore-touched ones (CMS) were stuck.
-- **Fix:** replaced the DB-level filter in the contact/company/action PUT routes with an **app-code
-  epoch-ms comparison** — new `assertNotStale(existing.updatedAt, expected)` in
-  `server/src/concurrency.ts`, called inside the existing transaction against the row the route
-  already fetched. Representation-independent; a genuine cross-device save (different instant) still
-  trips a correct 409. **Server-only, no schema change, no Turso DDL, no data migration.**
-- **Files:** `server/src/concurrency.ts` (helper + the gotcha write-up), `server/src/routes/`
-  `companies.ts` / `contacts.ts` / `actions.ts`. Recorded the Prisma datetime-equality gotcha in
-  CLAUDE.md ("Turso / Prisma Gotchas").
+1. **Tags are now first-class in Global Search** (`02d1a56`; fix `d41a44c`). Before, `/search`
+   matched tag names but gave no way to filter by a tag, no view of which tags a result carries, and
+   no list of available tags.
+   - Server `/search` accepts **`tagIds`** (comma-separated). A tag filter **alone** searches — no
+     text query needed (terms-empty ⇒ match-all text AND'd with the tag filter); multiple tags **OR**
+     together; ANDed onto any text query. Actions are untagged → excluded under a tag filter.
+   - Every people/org/meeting/idea result returns its **`tags`**, rendered as **clickable violet
+     chips** that add the tag to the filter. A **"Tags" `MultiCombobox`** (fed by `/tags`) is the
+     catalog of available tags. Tag filter is in the URL (`?tags=`) for shareable links.
+   - **Idea search switched from the legacy comma-string `Idea.tags` to the `IdeaTag` junction**
+     (legacy string still matched for back-compat) — idea tags now behave like every other entity's.
+   - **Fix `d41a44c`:** the reserved `Favorite` tag (favorites mechanism, excluded from `/tags` and
+     all pickers) was leaking as a chip on results — now excluded from search chips + evidence too.
+   - Files: `server/src/routes/search.ts`, `client/src/pages/search.tsx`, `client/src/lib/types.ts`.
+2. **Clearable meeting start time** (`fcdaac0`). The start time is optional and autosaves empty →
+   `startTime: null`, but the native `<input type="time">` clear is hard to find / absent on mobile.
+   Added an explicit "×" beside the time input (shown only when a time is set). Server already
+   persisted `null` on PUT — UI-only. File: `client/src/components/quick-log-dialog.tsx`.
+3. **Inline meeting-date edit** (`fce6b93`). Each `/meetings` card's date is now a popover editor
+   (Today / Yesterday / custom) — `MeetingDateSelect`, partial `PUT {date, datePrecision:'DAY'}` —
+   so a meeting can be re-dated without opening the full editor (mirrors the inline contact-status /
+   action-due-date controls). Picking a concrete day normalizes precision to DAY; the trigger stops
+   propagation so it never toggles the card's expand/collapse. File: `client/src/pages/meetings.tsx`.
 
-Verified by reproducing the guard against the **real libsql adapter** on a copy of `dev.db` (a real
-`...Z`-stored row went 0-match → match after the fix) and **end-to-end over HTTP**: correct loaded
-token → **200** (was 409); wrong token → **409**. `prepush` + full client+server build green.
+Verified all three end-to-end via chrome-devtools (desktop + 390px): tag-only search returned a
+temporarily-tagged contact with a clickable chip and no min-character prompt; the Favorite chip is
+gone; clear-time shows/blanks/hides; inline date took a MONTH-precision meeting (2025-12-01) → today
+/DAY and back. All test mutations reverted on the local dev DB. `prepush` + full `vite build` +
+server typecheck green.
 
 ### What's Next
 
@@ -72,8 +81,9 @@ token → **200** (was 409); wrong token → **409**. `prepush` + full client+se
 
 ### Working branch
 
-`main` — synced before this session at `f50d4b4`. This session adds one schema-free fix commit
-(concurrency-guard false-409, `5910384`) pushed to `main`, plus this docs follow-up.
+`main` — synced before this session at `448f053`. This session adds four schema-free commits pushed
+to `main` — tags in Global Search (`02d1a56`) + Favorite-chip fix (`d41a44c`), clearable meeting
+time (`fcdaac0`), inline meeting-date edit (`fce6b93`) — plus this docs follow-up.
 **Nothing pending** — no Turso DDL needed, no held commits.
 
 ---
@@ -85,9 +95,10 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped one schema-free bugfix —
-**eliminated false "changed on another device" 409s** that were blocking edits of records last
-written by restore/import (the optimistic-concurrency guard now compares `updatedAt` in app code,
-not via a DB datetime-equality filter; gotcha recorded in CLAUDE.md). Nothing is left pending. Plan
-of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
+Context for *this* upcoming session specifically: last session shipped three schema-free owner asks —
+**tags are now first-class in Global Search** (filter by `tagIds`, clickable tag chips on every
+result, a "Tags" picker that lists all tags; idea search moved to the `IdeaTag` junction; reserved
+`Favorite` tag excluded), a **clearable meeting start time**, and **inline meeting-date editing** on
+`/meetings` cards. Nothing is left pending (no Turso DDL, no held commits). Plan of record is
+`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
 D5/D6/D8/D9).

@@ -23,6 +23,11 @@ import {
 } from '@/components/ui/select'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -215,6 +220,79 @@ function MeetingsCalendar() {
   )
 }
 
+// Inline date editor for a meeting card — change a meeting's date straight from
+// the list (mirrors the inline contact-status / action-due-date controls) without
+// opening the full editor. Picking a concrete day also normalizes precision to
+// DAY so the readout stays coherent. Saves via a partial PUT (date only).
+function MeetingDateSelect({ conv, onUpdate }: { conv: Conversation; onUpdate: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const getPreset = (daysToAdd: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() + daysToAdd)
+    return d.toLocaleDateString('en-CA')
+  }
+
+  async function updateDate(newDate: string) {
+    if (!newDate || (newDate === conv.date && conv.datePrecision === 'DAY')) {
+      setOpen(false)
+      return
+    }
+    setSaving(true)
+    try {
+      await api.put(`/conversations/${conv.id}`, { date: newDate, datePrecision: 'DAY' })
+      toast.success('Meeting date updated')
+      onUpdate()
+      setOpen(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update date')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="-mx-1 inline-flex items-center gap-1 rounded px-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Change date"
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
+          {conv.startTime && ` · ${formatStartTime(conv.startTime)}`}
+          <ChevronDown className="h-3 w-3 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2" align="start" onClick={(e) => e.stopPropagation()}>
+        <div className="grid gap-1">
+          <span className="px-2 pb-1 text-xs font-medium text-muted-foreground">Change meeting date</span>
+          <Button variant="ghost" size="sm" className="justify-start font-normal" disabled={saving} onClick={() => updateDate(getPreset(0))}>
+            Today
+          </Button>
+          <Button variant="ghost" size="sm" className="justify-start font-normal" disabled={saving} onClick={() => updateDate(getPreset(-1))}>
+            Yesterday
+          </Button>
+          <div className="my-1 border-t" />
+          <div className="px-2 py-1.5">
+            <span className="mb-1 block text-xs text-muted-foreground">Custom date</span>
+            <Input
+              type="date"
+              className="h-8 text-xs"
+              value={conv.date}
+              disabled={saving}
+              onChange={(e) => updateDate(e.target.value)}
+            />
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 // Collapsed meeting cards are clamped to roughly this content height (~2 inches)
 // so the list scans compactly; clicking a clamped card (or "Show more") expands it.
 const COLLAPSED_MAX_PX = 168
@@ -230,6 +308,7 @@ function MeetingCard({
   onDelete,
   onSeriesClick,
   onTagClick,
+  onUpdate,
 }: {
   conv: Conversation
   qTerm: string
@@ -237,6 +316,7 @@ function MeetingCard({
   onDelete: () => void
   onSeriesClick: (seriesId: number) => void
   onTagClick: (tagId: number) => void
+  onUpdate: () => void
 }) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [expanded, setExpanded] = useState(false)
@@ -284,10 +364,7 @@ function MeetingCard({
               <Badge variant="outline" className={`text-xs ${conversationTypeColors[conv.type]}`}>
                 {getLabel(conv.type, CONVERSATION_TYPE_OPTIONS)}
               </Badge>
-              <span className="text-sm text-muted-foreground">
-                {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
-                {conv.startTime && ` · ${formatStartTime(conv.startTime)}`}
-              </span>
+              <MeetingDateSelect conv={conv} onUpdate={onUpdate} />
               <div className="ml-auto flex items-center gap-1">
                 <Button
                   variant="ghost"
@@ -1039,6 +1116,7 @@ export function MeetingsPage() {
                 onDelete={() => setDeleteId(conv.id)}
                 onSeriesClick={(id) => setParam('seriesId', id.toString())}
                 onTagClick={(id) => setParam('tagId', id.toString())}
+                onUpdate={loadMeetings}
               />
             ))}
           </div>

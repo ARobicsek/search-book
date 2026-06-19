@@ -68,6 +68,13 @@ server typecheck green.
 
 ### Open Bugs / Known Caveats
 
+- **Non-issue (closed): "perpetual browser busy-spinner" was NOT the app.** Owner reported a
+  never-stopping loading cursor after the tags-in-search work; suspected a Turso query hang. Ruled
+  out: local dev reproduces nothing (`readyState: complete`, zero pending/looping requests; SW is
+  active in dev too). Owner then isolated it — the spinner tracks with **VS Code being open** and
+  **persists with the browser fully closed** (Task Manager-confirmed). So it's a local VS Code /
+  agent-harness artifact (debug-driven Chrome / MCP / extension activity), **not SearchBook and not
+  the search change**. No code change. Don't re-chase this as an app bug.
 - **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** Use the Turso web SQL
   console for DDL.
 - **⚠ `prisma db push` local-path gotcha:** from `server/`, `db push` resolves `file:./dev.db` to

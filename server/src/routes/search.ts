@@ -98,6 +98,15 @@ function pushField(fields: FieldVal[], field: string, value: string | null | und
   if (value && value.trim()) fields.push({ field, value, weight });
 }
 
+// The reserved tag behind favorite contacts/orgs — an internal mechanism, never a
+// user-facing tag (mirrors tags.ts). Kept out of result chips and tag evidence.
+const FAVORITE_TAG_NAME = 'Favorite';
+
+// Map a junction's `{ tag }` rows to plain {id,name} tags, dropping the reserved one.
+function visibleTags(rows: { tag: { id: number; name: string } }[] | undefined): { id: number; name: string }[] {
+  return (rows || []).map((r) => r.tag).filter((t) => t && t.name !== FAVORITE_TAG_NAME);
+}
+
 // ─── Sorting ─────────────────────────────────────────────────
 
 interface Scored {
@@ -268,7 +277,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (peopleProfile) {
         pushField(fields, 'name', c.name, 3);
         pushField(fields, 'title', c.title, 3);
-        for (const t of c.tags || []) pushField(fields, 'tag', t.tag.name, 2);
+        for (const t of c.tags || []) if (t.tag.name !== FAVORITE_TAG_NAME) pushField(fields, 'tag', t.tag.name, 2);
         pushField(fields, 'email', c.email, 1);
         pushField(fields, 'email', parseJsonStrings(c.additionalEmails), 1);
         pushField(fields, 'phone', c.phone, 1);
@@ -350,7 +359,7 @@ router.get('/', async (req: Request, res: Response) => {
     const collectCompanyFields = (c: any): FieldVal[] => {
       const fields: FieldVal[] = [];
       pushField(fields, 'name', c.name, 3);
-      for (const t of c.tags || []) pushField(fields, 'tag', t.tag.name, 2);
+      for (const t of c.tags || []) if (t.tag.name !== FAVORITE_TAG_NAME) pushField(fields, 'tag', t.tag.name, 2);
       pushField(fields, 'industry', c.industry, 1);
       pushField(fields, 'website', c.website, 1);
       pushField(fields, 'HQ location', c.hqLocation, 1);
@@ -407,7 +416,7 @@ router.get('/', async (req: Request, res: Response) => {
     const collectConversationFields = (c: any): FieldVal[] => {
       const fields: FieldVal[] = [];
       pushField(fields, 'title', c.title, 3);
-      for (const t of c.tags || []) pushField(fields, 'tag', t.tag.name, 2);
+      for (const t of c.tags || []) if (t.tag.name !== FAVORITE_TAG_NAME) pushField(fields, 'tag', t.tag.name, 2);
       pushField(fields, 'summary', c.summary, 1);
       pushField(fields, 'notes', c.notes, 1);
       pushField(fields, 'next steps', c.nextSteps, 1);
@@ -499,7 +508,7 @@ router.get('/', async (req: Request, res: Response) => {
     const collectIdeaFields = (i: any): FieldVal[] => {
       const fields: FieldVal[] = [];
       pushField(fields, 'title', i.title, 3);
-      for (const tl of i.tagLinks || []) pushField(fields, 'tag', tl.tag.name, 2);
+      for (const tl of i.tagLinks || []) if (tl.tag.name !== FAVORITE_TAG_NAME) pushField(fields, 'tag', tl.tag.name, 2);
       pushField(fields, 'tags', i.tags, 2); // legacy comma-string, back-compat
       pushField(fields, 'description', i.description, 1);
       return fields;
@@ -623,7 +632,7 @@ router.get('/', async (req: Request, res: Response) => {
           ecosystem: contact.ecosystem,
           status: contact.status,
           company: contact.company,
-          tags: (contact.tags || []).map((t: any) => t.tag),
+          tags: visibleTags(contact.tags),
           matches: contact._matches,
         };
         if (fetchRelated) {
@@ -640,7 +649,7 @@ router.get('/', async (req: Request, res: Response) => {
           name: company.name,
           industry: company.industry,
           status: company.status,
-          tags: (company.tags || []).map((t: any) => t.tag),
+          tags: visibleTags(company.tags),
           matches: company._matches,
         };
         if (fetchRelated) {
@@ -667,7 +676,7 @@ router.get('/', async (req: Request, res: Response) => {
       description: idea.description,
       contacts: (idea.contacts || []).map((ic: any) => ic.contact),
       companies: (idea.companies || []).map((ic: any) => ic.company),
-      tags: (idea.tagLinks || []).map((tl: any) => tl.tag),
+      tags: visibleTags(idea.tagLinks),
       matches: idea._matches,
     }));
 
@@ -681,7 +690,7 @@ router.get('/', async (req: Request, res: Response) => {
       displayName: conv.title || conv.contact?.name || conv.company?.name || conv.participants?.[0]?.contact?.name || conv.attendeesDescription || 'Meeting',
       contact: conv.contact,
       company: conv.company,
-      tags: (conv.tags || []).map((t: any) => t.tag),
+      tags: visibleTags(conv.tags),
       matches: conv._matches,
     }));
 

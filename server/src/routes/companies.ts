@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { captureDelete } from '../lib/undo';
-import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
+import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE, assertNotStale } from '../concurrency';
 import { promoteCompaniesToConnected } from '../company-status';
 
 const router = Router();
@@ -391,15 +391,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     const data = pickWritable(req.body, COMPANY_WRITABLE_FIELDS);
     // Task 12: update the company and record any status change atomically.
     const company = await prisma.$transaction(async (tx) => {
-      if (expectedUpdatedAt) {
-        const guard = await tx.company.updateMany({
-          where: { id, updatedAt: expectedUpdatedAt },
-          data,
-        });
-        if (guard.count === 0) throw new StaleWriteError();
-      } else {
-        await tx.company.update({ where: { id }, data });
-      }
+      assertNotStale(existing.updatedAt, expectedUpdatedAt);
+      await tx.company.update({ where: { id }, data });
       if (typeof data.status === 'string' && data.status !== existing.status) {
         await tx.companyStatusHistory.create({
           data: {

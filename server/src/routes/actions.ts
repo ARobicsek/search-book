@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { deleteWithSnapshot } from '../lib/undo';
-import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
+import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE, assertNotStale } from '../concurrency';
 
 const router = Router();
 
@@ -263,17 +263,12 @@ router.put('/:id', async (req: Request, res: Response) => {
       };
     }
 
-    // The action update uses nested junction writes, so we can't compare-and-set in one
-    // updateMany. Instead, inside a transaction, atomically "claim" the row by bumping its
-    // updatedAt only if it still matches the client's copy; a 0-count claim means it's stale.
+    // Optimistic-concurrency guard, then the update (with nested junction writes), inside
+    // one transaction. The guard compares the loaded updatedAt against the row's current
+    // value in app code (see assertNotStale) rather than via a DB-level updateMany filter,
+    // which is unreliable across Prisma's stored-datetime representations.
     const action = await prisma.$transaction(async (tx) => {
-      if (expectedUpdatedAt) {
-        const guard = await tx.action.updateMany({
-          where: { id, updatedAt: expectedUpdatedAt },
-          data: { updatedAt: new Date() },
-        });
-        if (guard.count === 0) throw new StaleWriteError();
-      }
+      assertNotStale(existing.updatedAt, expectedUpdatedAt);
       return tx.action.update({
         where: { id },
         data: { ...rest, ...(owers ?? {}), ...junctionUpdates },

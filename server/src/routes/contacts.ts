@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { deleteWithSnapshot } from '../lib/undo';
-import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE } from '../concurrency';
+import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE, assertNotStale } from '../concurrency';
 import { currentEmployerCompanyIds, promoteCompaniesToConnected } from '../company-status';
 
 const router = Router();
@@ -396,16 +396,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     // Task 12: update the contact and record any status change atomically.
     const contact = await prisma.$transaction(async (tx) => {
-      if (expectedUpdatedAt) {
-        // Atomic compare-and-set: updates only if updatedAt still matches the client's copy.
-        const guard = await tx.contact.updateMany({
-          where: { id, updatedAt: expectedUpdatedAt },
-          data,
-        });
-        if (guard.count === 0) throw new StaleWriteError();
-      } else {
-        await tx.contact.update({ where: { id }, data });
-      }
+      assertNotStale(existing.updatedAt, expectedUpdatedAt);
+      await tx.contact.update({ where: { id }, data });
       if (data.status && data.status !== existing.status) {
         await tx.contactStatusHistory.create({
           data: {

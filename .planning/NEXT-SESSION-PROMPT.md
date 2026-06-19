@@ -5,32 +5,28 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Ideas autosave + nested bullets (2026-06-19)
+### What Was Just Completed — Clear button on all list-filter search boxes (2026-06-19)
 
-Two owner asks, **both schema-free, pushed/live**. Org @-mentions from the prior session
-(`cd2bfdc` + docs `70a6fe1`) are also confirmed **pushed & live** — the earlier "held for DDL"
-carry-over is closed (DDL was applied; remote == local before this session).
+One owner ask, **schema-free, pushed/live**. All standalone list-filter search boxes (magnifying
+glass on the left) now afford a **one-click clear** (an "X" button on the right, shown only when the
+box has text).
 
-1. **Autosave for new Ideas — meeting-log parity.** Ideas already autosaved when *editing*; a **new**
-   idea only saved on "Create". Brought it to Quick-Log parity: the idea dialog now uses the same
-   bespoke serialized save chain (`enqueueSave` + `savedIdRef` + snapshot dedup) — typing a title
-   POSTs the idea, later edits PUT, free-text contacts/companies resolve only on finalize ("Done"),
-   tags still create eagerly. Footer mirrors meetings (Delete this idea / Close / Done + Revert when
-   dirty); header shows the Saved/Saving indicator in both modes. Replaced the `useAutoSave` hook
-   usage in `idea-list.tsx` (edit-mode behavior preserved; create-mode added). Files:
-   `client/src/pages/ideas/idea-list.tsx`.
-2. **Second-level bullets (Tab to nest).** Shared `MarkdownTextarea` now indents/outdents list
-   items with **Tab / Shift+Tab** (2 spaces per level → CommonMark sub-lists; off a list line Tab
-   keeps default focus-move). Enter on an empty *nested* item outdents one level (Word-style), then
-   ends the list. New nested-list CSS in `index.css` gives distinct markers per level
-   (disc → circle → square; ordered → lower-alpha → lower-roman). Applies everywhere the editor is
-   used (Ideas, contact notes, prep notes, meeting notes/next-steps). Files:
-   `client/src/components/markdown-textarea.tsx`, `client/src/index.css`.
+- **Where:** Ideas, Contacts, Companies, Actions list pages. Global Search (`search.tsx`) and the
+  Meetings title filter (`meetings.tsx`) already had this — they were the source of the established
+  pattern, which was simply replicated.
+- **Pattern:** in the existing `relative` wrapper, after the `Input`, render
+  `{value && (<button onClick={() => setValue('')} aria-label="Clear search" className="absolute right-0 top-0 flex h-9 w-9 …"><X/></button>)}`
+  and add a conditional `pr-9` to the input so long text doesn't slide under the button.
+- **Files:** `client/src/pages/ideas/idea-list.tsx`,
+  `client/src/pages/contacts/contact-list.tsx`, `client/src/pages/companies/company-list.tsx`,
+  `client/src/pages/actions/action-list.tsx` (added `X` to lucide imports in idea-list + action-list;
+  the other two already imported it).
+- **Out of scope (left as-is):** the combobox / command-palette typeahead inputs
+  ("Search or type new name…") inside popovers — different UX (closing the popover resets them); not
+  "search boxes like this one." Easy to extend later if wanted.
 
-Verified end-to-end via chrome-devtools (desktop + 390px): new-idea autosave (status flips to
-"Saved", count 3→4, footer transitions), `- a / Tab / - b / Tab / - c` produced correct 2/4-space
-nesting and rendered disc/circle/square; test idea deleted afterward. `prepush` + full `vite build`
-green.
+Verified end-to-end via chrome-devtools (desktop + 390px) on the Ideas page: typing reveals the X,
+clicking it empties the box and restores the full list (3→1→3). `prepush` + full `vite build` green.
 
 ### What's Next
 
@@ -69,9 +65,9 @@ green.
 
 ### Working branch
 
-`main` — fully synced (remote == local) before this session at `70a6fe1`. This session adds two
-schema-free commits (Ideas autosave; nested bullets) pushed to `main`. **Nothing pending** — no
-Turso DDL needed, no held commits.
+`main` — fully synced (remote == local) before this session at `74db62c`. This session adds one
+schema-free commit (search-box clear buttons) pushed to `main`. **Nothing pending** — no Turso DDL
+needed, no held commits.
 
 ---
 
@@ -82,8 +78,8 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped two schema-free owner asks —
-**autosave for new Ideas** (meeting-log parity: type a title and it persists; "Done" finalizes
-free-text) and **second-level bullets** (Tab/Shift+Tab to nest in any markdown note editor). Nothing
-is left pending. Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the
-"⏳ Waiting on owner" block, D5/D6/D8/D9).
+Context for *this* upcoming session specifically: last session shipped one schema-free owner ask —
+**one-click clear buttons on every list-filter search box** (Ideas/Contacts/Companies/Actions; global
+Search + Meetings already had it). Nothing is left pending. Plan of record is
+`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
+D5/D6/D8/D9).

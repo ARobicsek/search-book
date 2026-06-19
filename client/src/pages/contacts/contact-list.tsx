@@ -869,8 +869,18 @@ export function ContactListPage() {
             placeholder="Search name, title, company..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-8"
+            className={`pl-8 ${globalFilter ? 'pr-9' : ''}`}
           />
+          {globalFilter && (
+            <button
+              type="button"
+              onClick={() => setGlobalFilter('')}
+              aria-label="Clear search"
+              className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Select value={ecosystemFilter} onValueChange={setEcosystemFilter}>

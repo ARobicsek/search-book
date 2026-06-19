@@ -32,7 +32,7 @@ import {
 import { HighlightedText } from '@/components/highlighted-text'
 import { highlightRehype } from '@/lib/highlight-markdown'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon, List as ListIcon, LayoutGrid } from 'lucide-react'
+import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon, List as ListIcon, LayoutGrid, X } from 'lucide-react'
 import type { SaveStatus } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { cn } from '@/lib/utils'
@@ -618,8 +618,18 @@ export function IdeaListPage() {
             placeholder="Search ideas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
+            className={`pl-8 ${search ? 'pr-9' : ''}`}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 sm:ml-auto">
           <button

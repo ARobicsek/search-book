@@ -1211,14 +1211,32 @@ function QuickLogDialog({
           <Label htmlFor="ql-date">Date &amp; time</Label>
           <div className="flex gap-2">
             <Input id="ql-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="flex-1" />
-            <Input
-              aria-label="Start time"
-              title="Start time (optional)"
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="w-[7.5rem]"
-            />
+            <div className="flex items-center gap-1">
+              <Input
+                aria-label="Start time"
+                title="Start time (optional)"
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-[7.5rem]"
+              />
+              {/* Explicit clear — the native time input's clear control is hard to
+                  find (and absent on mobile); this reliably blanks the time, which
+                  autosaves as startTime: null. */}
+              {startTime && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                  title="Clear start time"
+                  aria-label="Clear start time"
+                  onClick={() => setStartTime('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
         <div className="space-y-2">

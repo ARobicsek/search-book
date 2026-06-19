@@ -5,28 +5,31 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Clear button on all list-filter search boxes (2026-06-19)
+### What Was Just Completed — Fix: false "changed on another device" 409 blocking edits (2026-06-19)
 
-One owner ask, **schema-free, pushed/live** (`2375820`). All standalone list-filter search boxes
-(magnifying glass on the left) now afford a **one-click clear** (an "X" button on the right, shown
-only when the box has text).
+One owner ask, **schema-free, pushed/live** (`5910384`). The owner couldn't edit an Organization
+(CMS): every save fired the conflict toast and reverted the edit, with no concurrent editing
+anywhere.
 
-- **Where:** Ideas, Contacts, Companies, Actions list pages. Global Search (`search.tsx`) and the
-  Meetings title filter (`meetings.tsx`) already had this — they were the source of the established
-  pattern, which was simply replicated.
-- **Pattern:** in the existing `relative` wrapper, after the `Input`, render
-  `{value && (<button onClick={() => setValue('')} aria-label="Clear search" className="absolute right-0 top-0 flex h-9 w-9 …"><X/></button>)}`
-  and add a conditional `pr-9` to the input so long text doesn't slide under the button.
-- **Files:** `client/src/pages/ideas/idea-list.tsx`,
-  `client/src/pages/contacts/contact-list.tsx`, `client/src/pages/companies/company-list.tsx`,
-  `client/src/pages/actions/action-list.tsx` (added `X` to lucide imports in idea-list + action-list;
-  the other two already imported it).
-- **Out of scope (left as-is):** the combobox / command-palette typeahead inputs
-  ("Search or type new name…") inside popovers — different UX (closing the popover resets them); not
-  "search boxes like this one." Easy to extend later if wanted.
+- **Root cause:** the optimistic-concurrency guard filtered `where: { id, updatedAt: <Date> }`.
+  Prisma 7 stores `DateTime` as text `YYYY-MM-DDTHH:MM:SS.SSS+00:00` and binds that **same** form in
+  equality filters — so the filter only ever matched rows Prisma itself last wrote. Rows whose
+  `updatedAt` was last written by **backup-restore / bulk-import / raw-SQL** are stored as `...Z`
+  (or `YYYY-MM-DD HH:MM:SS`) and could **never** satisfy the filter even at the identical instant →
+  permanent bogus 409 on every save. A normal edit "heals" a row (rewrites `updatedAt` in Prisma's
+  form), which is why most records were fine and only restore-touched ones (CMS) were stuck.
+- **Fix:** replaced the DB-level filter in the contact/company/action PUT routes with an **app-code
+  epoch-ms comparison** — new `assertNotStale(existing.updatedAt, expected)` in
+  `server/src/concurrency.ts`, called inside the existing transaction against the row the route
+  already fetched. Representation-independent; a genuine cross-device save (different instant) still
+  trips a correct 409. **Server-only, no schema change, no Turso DDL, no data migration.**
+- **Files:** `server/src/concurrency.ts` (helper + the gotcha write-up), `server/src/routes/`
+  `companies.ts` / `contacts.ts` / `actions.ts`. Recorded the Prisma datetime-equality gotcha in
+  CLAUDE.md ("Turso / Prisma Gotchas").
 
-Verified end-to-end via chrome-devtools (desktop + 390px) on the Ideas page: typing reveals the X,
-clicking it empties the box and restores the full list (3→1→3). `prepush` + full `vite build` green.
+Verified by reproducing the guard against the **real libsql adapter** on a copy of `dev.db` (a real
+`...Z`-stored row went 0-match → match after the fix) and **end-to-end over HTTP**: correct loaded
+token → **200** (was 409); wrong token → **409**. `prepush` + full client+server build green.
 
 ### What's Next
 
@@ -49,6 +52,10 @@ clicking it empties the box and restores the full list (3→1→3). `prepush` + 
 5. **`updatedAt` under-bumping:** `Conversation.updatedAt` only bumps on edits to the meeting
    row/junctions, not isolated child-record edits (prep note / attachment). Bump it in those routes
    if "Recently updated" should float a meeting on those too.
+6. **Mixed `updatedAt`/`createdAt` text formats in the DB** (some rows `...Z`, some `...+00:00`, some
+   `YYYY-MM-DD HH:MM:SS`) — left as-is; the concurrency guard no longer cares (compares in app code).
+   But **don't add exact `DateTime` equality `where` filters** on those columns (range `gte`/`lt` is
+   fine); see the CLAUDE.md gotcha. A one-off normalize-to-`+00:00` is possible later but unneeded.
 
 ### Open Bugs / Known Caveats
 
@@ -65,8 +72,8 @@ clicking it empties the box and restores the full list (3→1→3). `prepush` + 
 
 ### Working branch
 
-`main` — fully synced (remote == local) before this session at `74db62c`. This session adds one
-schema-free commit (search-box clear buttons, `2375820`) pushed to `main`, plus this docs follow-up.
+`main` — synced before this session at `f50d4b4`. This session adds one schema-free fix commit
+(concurrency-guard false-409, `5910384`) pushed to `main`, plus this docs follow-up.
 **Nothing pending** — no Turso DDL needed, no held commits.
 
 ---
@@ -78,8 +85,9 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped one schema-free owner ask —
-**one-click clear buttons on every list-filter search box** (Ideas/Contacts/Companies/Actions; global
-Search + Meetings already had it). Nothing is left pending. Plan of record is
-`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
+Context for *this* upcoming session specifically: last session shipped one schema-free bugfix —
+**eliminated false "changed on another device" 409s** that were blocking edits of records last
+written by restore/import (the optimistic-concurrency guard now compares `updatedAt` in app code,
+not via a DB datetime-equality filter; gotcha recorded in CLAUDE.md). Nothing is left pending. Plan
+of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
 D5/D6/D8/D9).

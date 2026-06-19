@@ -129,13 +129,21 @@ router.get('/', async (req: Request, res: Response) => {
     // so the hot path defaults to NOT fanning out — that fan-out was the ~20s cost.
     const { q, limit = '10', includeRelated = 'false' } = req.query;
 
-    if (!q || typeof q !== 'string' || q.trim().length < 2) {
-      return res.status(400).json({ error: 'Query must be at least 2 characters' });
-    }
+    // Tag filter: comma-separated Tag ids. Lets you browse "everything tagged X"
+    // with no text query, or narrow a text search to tagged records. All four
+    // tagged entity types (contacts/orgs/meetings/ideas) share the Tag junction.
+    const tagIds = typeof req.query.tagIds === 'string' && req.query.tagIds.trim()
+      ? req.query.tagIds.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isFinite(n))
+      : [];
+    const hasTagFilter = tagIds.length > 0;
 
-    const terms = parseTerms(q.trim());
-    if (terms.length === 0) {
-      return res.status(400).json({ error: 'Query must be at least 2 characters' });
+    const qStr = typeof q === 'string' ? q.trim() : '';
+    // Terms are parsed only when there's a real query; a tag-only search runs with
+    // no terms (the DB text-clause AND-array is then empty = match-all, intersected
+    // with the tag filter).
+    const terms = qStr.length >= 2 ? parseTerms(qStr) : [];
+    if (terms.length === 0 && !hasTagFilter) {
+      return res.status(400).json({ error: 'Query must be at least 2 characters (or pick a tag)' });
     }
 
     const maxResults = Math.min(parseInt(limit as string) || 10, 50);
@@ -165,6 +173,13 @@ router.get('/', async (req: Request, res: Response) => {
     const anyPeople = peopleProfile || peopleNotes || useful;
 
     const tStart = Date.now();
+
+    // Tag-filter clause for one entity, ANDed onto its text clauses. Contacts/
+    // orgs/meetings expose the junction as `tags`; ideas as `tagLinks`. Multiple
+    // selected tags are OR'd (a record matching ANY selected tag passes), the
+    // usual faceted-search convention. Returns [] (no constraint) when no filter.
+    const tagClause = (relation: 'tags' | 'tagLinks'): Record<string, unknown>[] =>
+      hasTagFilter ? [{ [relation]: { some: { tagId: { in: tagIds } } } }] : [];
 
     // Per-term company-name lookup: contacts affiliated with a company via the
     // additionalCompanyIds/connectedCompanyIds JSON fields should match when the
@@ -230,7 +245,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const contactsPromise: Promise<any[]> = anyPeople
       ? prisma.contact.findMany({
-        where: { AND: terms.map((t) => ({ OR: contactClausesFor(t) })) },
+        where: { AND: [...terms.map((t) => ({ OR: contactClausesFor(t) })), ...tagClause('tags')] },
         select: {
           id: true, name: true, title: true, ecosystem: true, status: true, updatedAt: true,
           email: true, additionalEmails: true, phone: true, linkedinUrl: true, location: true,
@@ -238,7 +253,7 @@ router.get('/', async (req: Request, res: Response) => {
           notes: true, personalDetails: true, openQuestions: true, usefulFor: true, mutualConnections: true,
           additionalCompanyIds: true, connectedCompanyIds: true, referredById: true,
           company: { select: { id: true, name: true } },
-          tags: { select: { tag: { select: { name: true } } } },
+          tags: { select: { tag: { select: { id: true, name: true } } } },
           prepNotes: { select: { content: true }, take: 20 },
           participantInConversations: { select: { note: true }, take: 50 },
           employmentHistory: { select: { companyName: true, title: true, company: { select: { name: true } } } },
@@ -319,11 +334,11 @@ router.get('/', async (req: Request, res: Response) => {
 
     const companiesPromise: Promise<any[]> = scopes.has('orgs')
       ? prisma.company.findMany({
-        where: { AND: terms.map((t) => ({ OR: companyClausesFor(t) })) },
+        where: { AND: [...terms.map((t) => ({ OR: companyClausesFor(t) })), ...tagClause('tags')] },
         select: {
           id: true, name: true, industry: true, status: true, updatedAt: true,
           website: true, hqLocation: true, size: true, notes: true,
-          tags: { select: { tag: { select: { name: true } } } },
+          tags: { select: { tag: { select: { id: true, name: true } } } },
           activities: { select: { title: true, notes: true }, orderBy: { date: 'desc' }, take: 25 },
           companyPrepNotes: { select: { content: true }, take: 20 },
         },
@@ -370,14 +385,14 @@ router.get('/', async (req: Request, res: Response) => {
 
     const conversationsPromise: Promise<any[]> = scopes.has('meetings')
       ? prisma.conversation.findMany({
-        where: { AND: terms.map((t) => ({ OR: conversationClausesFor(t) })) },
+        where: { AND: [...terms.map((t) => ({ OR: conversationClausesFor(t) })), ...tagClause('tags')] },
         select: {
           id: true, title: true, summary: true, notes: true, nextSteps: true,
           attendeesDescription: true, date: true, type: true,
           contact: { select: { id: true, name: true } },
           company: { select: { id: true, name: true } },
           orgs: { select: { company: { select: { name: true } } } },
-          tags: { select: { tag: { select: { name: true } } } },
+          tags: { select: { tag: { select: { id: true, name: true } } } },
           prepNotes: { select: { content: true }, take: 20 },
           attachments: { select: { name: true } },
           participants: { select: { note: true, contact: { select: { name: true } } } },
@@ -423,7 +438,8 @@ router.get('/', async (req: Request, res: Response) => {
       { contact: { companyName: { contains: term } } },
     ];
 
-    const actionsPromise: Promise<any[]> = scopes.has('actions')
+    // Actions carry no tags, so a tag filter excludes them entirely.
+    const actionsPromise: Promise<any[]> = scopes.has('actions') && !hasTagFilter
       ? prisma.action.findMany({
         where: { AND: terms.map((t) => ({ OR: actionClausesFor(t) })) },
         select: {
@@ -452,18 +468,22 @@ router.get('/', async (req: Request, res: Response) => {
     };
 
     // ── Ideas ────────────────────────────────────────────────
+    // Tags live on the shared IdeaTag junction (`tagLinks`); the legacy
+    // comma-string `tags` column is kept in the text match for back-compat.
     const ideaClausesFor = (term: string): Record<string, unknown>[] => [
       { title: { contains: term } },
       { description: { contains: term } },
       { tags: { contains: term } },
+      { tagLinks: { some: { tag: { name: { contains: term } } } } },
     ];
 
     const ideasPromise: Promise<any[]> = scopes.has('ideas')
       ? prisma.idea.findMany({
-        where: { AND: terms.map((t) => ({ OR: ideaClausesFor(t) })) },
+        where: { AND: [...terms.map((t) => ({ OR: ideaClausesFor(t) })), ...tagClause('tagLinks')] },
         include: {
           contacts: { include: { contact: { select: { id: true, name: true } } } },
           companies: { include: { company: { select: { id: true, name: true } } } },
+          tagLinks: { select: { tag: { select: { id: true, name: true } } } },
         },
         take,
         orderBy: { createdAt: 'desc' },
@@ -479,7 +499,8 @@ router.get('/', async (req: Request, res: Response) => {
     const collectIdeaFields = (i: any): FieldVal[] => {
       const fields: FieldVal[] = [];
       pushField(fields, 'title', i.title, 3);
-      pushField(fields, 'tags', i.tags, 2);
+      for (const tl of i.tagLinks || []) pushField(fields, 'tag', tl.tag.name, 2);
+      pushField(fields, 'tags', i.tags, 2); // legacy comma-string, back-compat
       pushField(fields, 'description', i.description, 1);
       return fields;
     };
@@ -571,19 +592,19 @@ router.get('/', async (req: Request, res: Response) => {
     } else {
       const [tContacts, tCompanies, tConversations, tActions, tIdeas] = await Promise.all([
         anyPeople
-          ? prisma.contact.count({ where: { AND: terms.map((t) => ({ OR: contactClausesFor(t) })) } })
+          ? prisma.contact.count({ where: { AND: [...terms.map((t) => ({ OR: contactClausesFor(t) })), ...tagClause('tags')] } })
           : 0,
         scopes.has('orgs')
-          ? prisma.company.count({ where: { AND: terms.map((t) => ({ OR: companyClausesFor(t) })) } })
+          ? prisma.company.count({ where: { AND: [...terms.map((t) => ({ OR: companyClausesFor(t) })), ...tagClause('tags')] } })
           : 0,
         scopes.has('meetings')
-          ? prisma.conversation.count({ where: { AND: terms.map((t) => ({ OR: conversationClausesFor(t) })) } })
+          ? prisma.conversation.count({ where: { AND: [...terms.map((t) => ({ OR: conversationClausesFor(t) })), ...tagClause('tags')] } })
           : 0,
-        scopes.has('actions')
+        scopes.has('actions') && !hasTagFilter
           ? prisma.action.count({ where: { AND: terms.map((t) => ({ OR: actionClausesFor(t) })) } })
           : 0,
         scopes.has('ideas')
-          ? prisma.idea.count({ where: { AND: terms.map((t) => ({ OR: ideaClausesFor(t) })) } })
+          ? prisma.idea.count({ where: { AND: [...terms.map((t) => ({ OR: ideaClausesFor(t) })), ...tagClause('tagLinks')] } })
           : 0,
       ]);
       totals = {
@@ -602,6 +623,7 @@ router.get('/', async (req: Request, res: Response) => {
           ecosystem: contact.ecosystem,
           status: contact.status,
           company: contact.company,
+          tags: (contact.tags || []).map((t: any) => t.tag),
           matches: contact._matches,
         };
         if (fetchRelated) {
@@ -618,6 +640,7 @@ router.get('/', async (req: Request, res: Response) => {
           name: company.name,
           industry: company.industry,
           status: company.status,
+          tags: (company.tags || []).map((t: any) => t.tag),
           matches: company._matches,
         };
         if (fetchRelated) {
@@ -644,6 +667,7 @@ router.get('/', async (req: Request, res: Response) => {
       description: idea.description,
       contacts: (idea.contacts || []).map((ic: any) => ic.contact),
       companies: (idea.companies || []).map((ic: any) => ic.company),
+      tags: (idea.tagLinks || []).map((tl: any) => tl.tag),
       matches: idea._matches,
     }));
 
@@ -657,11 +681,12 @@ router.get('/', async (req: Request, res: Response) => {
       displayName: conv.title || conv.contact?.name || conv.company?.name || conv.participants?.[0]?.contact?.name || conv.attendeesDescription || 'Meeting',
       contact: conv.contact,
       company: conv.company,
+      tags: (conv.tags || []).map((t: any) => t.tag),
       matches: conv._matches,
     }));
 
     console.log(
-      `[TIMING] search q="${q.trim()}" terms=${terms.length} scopes=${[...scopes].join('+')} ` +
+      `[TIMING] search q="${qStr}" terms=${terms.length} tags=${tagIds.length} scopes=${[...scopes].join('+')} ` +
       `cs=${caseSensitive} sort=${sort} → ${Date.now() - tStart}ms ` +
       `(contacts ${contactResults.length}/${totals.contacts}, companies ${companyResults.length}/${totals.companies}, ` +
       `meetings ${conversationResults.length}/${totals.conversations}, actions ${actionResults.length}/${totals.actions}, ` +
@@ -669,9 +694,10 @@ router.get('/', async (req: Request, res: Response) => {
     );
 
     res.json({
-      query: q.trim(),
+      query: qStr,
       terms,
       scopes: [...scopes],
+      tagIds,
       sort,
       caseSensitive,
       totals,

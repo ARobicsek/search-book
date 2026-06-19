@@ -473,6 +473,7 @@ export interface ConversationSearchResult {
   displayName: string;
   contact?: { id: number; name: string } | null;
   company?: { id: number; name: string } | null;
+  tags?: { id: number; name: string }[];
   matches?: SearchMatch[];
 }
 
@@ -495,6 +496,7 @@ export interface ContactSearchResult {
   ecosystem: string;
   status: string;
   company?: { id: number; name: string } | null;
+  tags?: { id: number; name: string }[];
   matches?: SearchMatch[];
   related?: {
     companies: RelatedCompany[];
@@ -511,6 +513,7 @@ export interface CompanySearchResult {
   industry: string | null;
   status: string;
   _count?: { contacts: number };
+  tags?: { id: number; name: string }[];
   matches?: SearchMatch[];
   related?: {
     contacts: { id: number; name: string; title: string | null }[];
@@ -537,5 +540,6 @@ export interface IdeaSearchResult {
   description: string | null;
   contacts?: { id: number; name: string }[];
   companies?: { id: number; name: string }[];
+  tags?: { id: number; name: string }[];
   matches?: SearchMatch[];
 }

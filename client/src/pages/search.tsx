@@ -12,10 +12,12 @@ import type {
   ContactStatus,
   CompanyStatus,
   Action,
+  Tag,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { MultiCombobox } from '@/components/ui/combobox'
 import { ActionDateSelect } from '@/components/action-date-select'
 import { HighlightedText } from '@/components/highlighted-text'
 import { Button } from '@/components/ui/button'
@@ -42,6 +44,7 @@ import {
   CaseSensitive,
   ArrowRight,
   X,
+  Tag as TagIcon,
 } from 'lucide-react'
 
 const ecosystemColors: Record<Ecosystem, string> = {
@@ -170,6 +173,24 @@ function ShowAllLink({ to, total, label }: { to: string; total: number; label: s
   )
 }
 
+/** A result's tags as clickable chips. Clicking one adds it to the search's tag
+ * filter, so any card surfaces "show me everything else tagged this." */
+function ResultTags({ tags, onTagClick }: { tags?: { id: number; name: string }[]; onTagClick: (id: number) => void }) {
+  if (!tags || tags.length === 0) return null
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {tags.map((t) => (
+        <button key={t.id} type="button" onClick={() => onTagClick(t.id)} title={`Filter by tag "${t.name}"`}>
+          <Badge variant="outline" className="text-xs bg-violet-50 text-violet-800 border-violet-200 hover:bg-violet-100">
+            <TagIcon className="mr-1 h-3 w-3" />
+            {t.name}
+          </Badge>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 type ContactRelated = NonNullable<ContactSearchResult['related']>
 type CompanyRelated = NonNullable<CompanySearchResult['related']>
 type RelatedData = ContactRelated | CompanyRelated
@@ -200,7 +221,7 @@ interface EvidenceProps {
   caseSensitive: boolean
 }
 
-function MeetingSearchCard({ conv, ev }: { conv: NonNullable<SearchResult['conversations']>[number]; ev: EvidenceProps }) {
+function MeetingSearchCard({ conv, ev, onTagClick }: { conv: NonNullable<SearchResult['conversations']>[number]; ev: EvidenceProps; onTagClick: (id: number) => void }) {
   return (
     <Card className="mb-2">
       <CardContent className="p-3">
@@ -219,6 +240,7 @@ function MeetingSearchCard({ conv, ev }: { conv: NonNullable<SearchResult['conve
           {conv.summary && ` — ${conv.summary}`}
         </p>
         <MatchEvidence matches={conv.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
+        <ResultTags tags={conv.tags} onTagClick={onTagClick} />
       </CardContent>
     </Card>
   )
@@ -264,7 +286,7 @@ function ActionSearchCard({
   )
 }
 
-function IdeaSearchCard({ idea, ev }: { idea: SearchResult['ideas'][number]; ev: EvidenceProps }) {
+function IdeaSearchCard({ idea, ev, onTagClick }: { idea: SearchResult['ideas'][number]; ev: EvidenceProps; onTagClick: (id: number) => void }) {
   return (
     <Card className="mb-2">
       <CardContent className="p-3">
@@ -282,6 +304,7 @@ function IdeaSearchCard({ idea, ev }: { idea: SearchResult['ideas'][number]; ev:
           </p>
         ) : null}
         <MatchEvidence matches={idea.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
+        <ResultTags tags={idea.tags} onTagClick={onTagClick} />
       </CardContent>
     </Card>
   )
@@ -294,6 +317,7 @@ function ContactSearchCard({
   onToggle,
   related,
   relatedLoading,
+  onTagClick,
 }: {
   contact: ContactSearchResult
   ev: EvidenceProps
@@ -301,6 +325,7 @@ function ContactSearchCard({
   onToggle: () => void
   related?: ContactRelated
   relatedLoading?: boolean
+  onTagClick: (id: number) => void
 }) {
   return (
     <Card className="mb-3">
@@ -331,6 +356,7 @@ function ContactSearchCard({
               </Badge>
             </div>
             <MatchEvidence matches={contact.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
+            <ResultTags tags={contact.tags} onTagClick={onTagClick} />
           </div>
           <Button variant="ghost" size="sm" onClick={onToggle} className="shrink-0">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -451,6 +477,7 @@ function CompanySearchCard({
   onToggle,
   related,
   relatedLoading,
+  onTagClick,
 }: {
   company: CompanySearchResult
   ev: EvidenceProps
@@ -458,6 +485,7 @@ function CompanySearchCard({
   onToggle: () => void
   related?: CompanyRelated
   relatedLoading?: boolean
+  onTagClick: (id: number) => void
 }) {
   return (
     <Card className="mb-3">
@@ -484,6 +512,7 @@ function CompanySearchCard({
               )}
             </div>
             <MatchEvidence matches={company.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
+            <ResultTags tags={company.tags} onTagClick={onTagClick} />
           </div>
           <Button variant="ghost" size="sm" onClick={onToggle} className="shrink-0">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -588,6 +617,10 @@ export function SearchPage() {
   const prefs = loadPrefs()
   const urlScopes = (searchParams.get('scopes') || '').split(',').filter(isScope)
   const urlSort = searchParams.get('sort') || ''
+  const urlTags = (searchParams.get('tags') || '')
+    .split(',')
+    .map((s) => parseInt(s, 10))
+    .filter((n) => Number.isFinite(n) && n > 0)
 
   const [query, setQuery] = useState(queryParam)
   // Always default to every scope on (incl. "Useful for"); a narrowed selection is
@@ -602,10 +635,25 @@ export function SearchPage() {
   const [caseSensitive, setCaseSensitive] = useState<boolean>(
     searchParams.has('cs') ? searchParams.get('cs') === '1' : !!prefs.caseSensitive
   )
+  // Tag filter (Tag ids). Searchable even with no text query — picking a tag
+  // alone lists "everything tagged X". `allTags` powers the picker (and is how
+  // you discover what tags exist).
+  const [tagFilter, setTagFilter] = useState<number[]>(urlTags)
+  const [allTags, setAllTags] = useState<Tag[]>([])
   const [results, setResults] = useState<SearchResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandedEntity, setExpandedEntity] = useState<string | null>(null)
   const [tab, setTab] = useState('all')
+
+  // Load the full tag list once for the filter picker.
+  useEffect(() => {
+    api.get<Tag[]>('/tags').then(setAllTags).catch(() => setAllTags([]))
+  }, [])
+
+  // Add a tag to the active filter (used by the clickable chips on result cards).
+  const addTagFilter = useCallback((id: number) => {
+    setTagFilter((prev) => (prev.includes(id) ? prev : [...prev, id]))
+  }, [])
 
   // Lazy "Related" panel: fetched per card on first expand, cached by `${type}-${id}`.
   const [relatedCache, setRelatedCache] = useState<Record<string, RelatedData>>({})
@@ -645,18 +693,20 @@ export function SearchPage() {
   // Track the latest search request to discard stale responses
   const currentSearchRef = React.useRef('')
 
-  const doSearch = useCallback(async (searchTerm: string, scopeList: SearchScope[], sortMode: SearchSort, cs: boolean) => {
-    if (searchTerm.length < 2) {
+  const doSearch = useCallback(async (searchTerm: string, scopeList: SearchScope[], sortMode: SearchSort, cs: boolean, tagList: number[]) => {
+    // A tag filter alone is enough to search — no text required.
+    if (searchTerm.length < 2 && tagList.length === 0) {
       currentSearchRef.current = ''
       setResults(null)
       setLoading(false)
       return
     }
     const params = new URLSearchParams({
-      q: searchTerm,
       limit: '20',
       sort: sortMode,
     })
+    if (searchTerm.length >= 2) params.set('q', searchTerm)
+    if (tagList.length) params.set('tagIds', tagList.join(','))
     // Related entities are now lazy-loaded per card via /search/related/:type/:id
     // (see loadRelated) — keeping them off the hot path is the ~20s search fix.
     if (scopeList.length < ALL_SCOPES.length) params.set('scopes', scopeList.join(','))
@@ -686,12 +736,13 @@ export function SearchPage() {
     const next = new URLSearchParams()
     if (debouncedQuery) next.set('q', debouncedQuery)
     if (!allScopesOn) next.set('scopes', scopes.join(','))
+    if (tagFilter.length) next.set('tags', tagFilter.join(','))
     if (sort !== 'relevance') next.set('sort', sort)
     if (caseSensitive) next.set('cs', '1')
     setSearchParams(next, { replace: true })
     localStorage.setItem(PREFS_KEY, JSON.stringify({ sort, caseSensitive }))
-    doSearch(debouncedQuery, scopes, sort, caseSensitive)
-  }, [debouncedQuery, scopes, sort, caseSensitive, allScopesOn, setSearchParams, doSearch])
+    doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter)
+  }, [debouncedQuery, scopes, sort, caseSensitive, tagFilter, allScopesOn, setSearchParams, doSearch])
 
   // Load query from URL on mount
   useEffect(() => {
@@ -719,13 +770,17 @@ export function SearchPage() {
   }
 
   const refresh = useCallback(() => {
-    doSearch(debouncedQuery, scopes, sort, caseSensitive)
-  }, [doSearch, debouncedQuery, scopes, sort, caseSensitive])
+    doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter)
+  }, [doSearch, debouncedQuery, scopes, sort, caseSensitive, tagFilter])
 
   const ev: EvidenceProps = {
     terms: results?.terms || (debouncedQuery ? [debouncedQuery] : []),
     caseSensitive,
   }
+
+  const tagOptions = allTags.map((t) => ({ value: t.id.toString(), label: t.name }))
+  // A search runs when there's a query OR a tag filter; the empty-state copy below keys off this.
+  const hasCriteria = debouncedQuery.length >= 2 || tagFilter.length > 0
 
   const showPeople = scopes.includes('people-profile') || scopes.includes('people-notes') || scopes.includes('useful')
   const showOrgs = scopes.includes('orgs')
@@ -821,6 +876,24 @@ export function SearchPage() {
         </div>
       </div>
 
+      {/* Tag filter — narrows ALL result types to records carrying a chosen tag.
+          The picker doubles as the catalog of available tags. */}
+      <div className="flex items-center gap-2">
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+          <TagIcon className="h-3.5 w-3.5" /> Tags
+        </span>
+        <div className="min-w-0 max-w-md flex-1">
+          <MultiCombobox
+            options={tagOptions}
+            values={tagFilter.map(String)}
+            onChange={(vals) => setTagFilter(vals.map(Number))}
+            placeholder="Filter by tag…"
+            searchPlaceholder="Find a tag…"
+            emptyMessage="No tags yet"
+          />
+        </div>
+      </div>
+
       {/* Loading state */}
       {loading && (
         <div className="flex justify-center py-8">
@@ -829,16 +902,17 @@ export function SearchPage() {
       )}
 
       {/* No query */}
-      {!loading && !results && debouncedQuery.length < 2 && (
+      {!loading && !results && !hasCriteria && (
         <p className="text-center text-muted-foreground py-8">
-          Enter at least 2 characters to search
+          Enter at least 2 characters, or pick a tag, to search
         </p>
       )}
 
       {/* No results */}
       {!loading && results && totalResults(results) === 0 && (
         <p className="text-center text-muted-foreground py-8">
-          No results found for "{results.query}"
+          No results found{results.query ? ` for "${results.query}"` : ''}
+          {tagFilter.length > 0 && ` with ${tagFilter.length === 1 ? 'this tag' : 'these tags'}`}
           {caseSensitive && ' (match case is on)'}
         </p>
       )}
@@ -897,6 +971,7 @@ export function SearchPage() {
                     related={relatedCache[`contact-${contact.id}`] as ContactRelated}
                     relatedLoading={!!relatedLoading[`contact-${contact.id}`]}
                     onToggle={() => toggleEntity('contact', contact.id)}
+                    onTagClick={addTagFilter}
                   />
                 ))}
                 {results.contacts.length > 5 && (
@@ -921,6 +996,7 @@ export function SearchPage() {
                     related={relatedCache[`company-${company.id}`] as CompanyRelated}
                     relatedLoading={!!relatedLoading[`company-${company.id}`]}
                     onToggle={() => toggleEntity('company', company.id)}
+                    onTagClick={addTagFilter}
                   />
                 ))}
                 {results.companies.length > 5 && (
@@ -937,7 +1013,7 @@ export function SearchPage() {
                   <MessageSquare className="h-5 w-5" /> Meetings
                 </h2>
                 {results.conversations.slice(0, 5).map((conv) => (
-                  <MeetingSearchCard key={conv.id} conv={conv} ev={ev} />
+                  <MeetingSearchCard key={conv.id} conv={conv} ev={ev} onTagClick={addTagFilter} />
                 ))}
                 {(results.conversations.length > 5) && (
                   <Button variant="link" className="px-0" onClick={() => setTab('meetings')}>
@@ -969,7 +1045,7 @@ export function SearchPage() {
                   <Lightbulb className="h-5 w-5" /> Ideas
                 </h2>
                 {results.ideas.slice(0, 5).map((idea) => (
-                  <IdeaSearchCard key={idea.id} idea={idea} ev={ev} />
+                  <IdeaSearchCard key={idea.id} idea={idea} ev={ev} onTagClick={addTagFilter} />
                 ))}
                 {results.ideas.length > 5 && (
                   <Button variant="link" className="px-0" onClick={() => setTab('ideas')}>
@@ -990,6 +1066,7 @@ export function SearchPage() {
                 related={relatedCache[`contact-${contact.id}`] as ContactRelated}
                 relatedLoading={!!relatedLoading[`contact-${contact.id}`]}
                 onToggle={() => toggleEntity('contact', contact.id)}
+                onTagClick={addTagFilter}
               />
             ))}
             {totals && totals.contacts > results.contacts.length && (
@@ -1011,6 +1088,7 @@ export function SearchPage() {
                 related={relatedCache[`company-${company.id}`] as CompanyRelated}
                 relatedLoading={!!relatedLoading[`company-${company.id}`]}
                 onToggle={() => toggleEntity('company', company.id)}
+                onTagClick={addTagFilter}
               />
             ))}
             {totals && totals.companies > results.companies.length && (
@@ -1024,7 +1102,7 @@ export function SearchPage() {
 
           <TabsContent value="meetings" className="mt-4">
             {results.conversations?.map((conv) => (
-              <MeetingSearchCard key={conv.id} conv={conv} ev={ev} />
+              <MeetingSearchCard key={conv.id} conv={conv} ev={ev} onTagClick={addTagFilter} />
             ))}
             {totals && totals.conversations > (results.conversations?.length ?? 0) && (
               <ShowAllLink
@@ -1048,7 +1126,7 @@ export function SearchPage() {
 
           <TabsContent value="ideas" className="mt-4">
             {results.ideas.map((idea) => (
-              <IdeaSearchCard key={idea.id} idea={idea} ev={ev} />
+              <IdeaSearchCard key={idea.id} idea={idea} ev={ev} onTagClick={addTagFilter} />
             ))}
             {totals && totals.ideas > results.ideas.length && (
               <p className="text-sm text-muted-foreground">

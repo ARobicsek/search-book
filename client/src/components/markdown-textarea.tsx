@@ -257,6 +257,43 @@ export function MarkdownTextarea({
     prefixLines((i) => `${i + 1}. `, /^(\s*)(- |\* |\d+\. )/)
   }, [prefixLines])
 
+  // Tab / Shift+Tab indent or outdent the list item(s) spanned by the selection by
+  // one level (2 spaces) — Word-style nesting, rendered by ReactMarkdown as a
+  // sub-list. Returns false (doing nothing) when no selected line is a list item,
+  // so Tab keeps its default behaviour off a list.
+  const indentLines = useCallback(
+    (outdent: boolean): boolean => {
+      const el = ref.current
+      if (!el) return false
+      const { selectionStart: start, selectionEnd: end } = el
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1
+      const lineEndIdx = value.indexOf('\n', end)
+      const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx
+      const lines = value.slice(lineStart, lineEnd).split('\n')
+      if (!lines.some((l) => LIST_PREFIX.test(l))) return false
+      let firstDelta = 0 // chars added(+)/removed(−) on the first line, to keep the caret put
+      const nextLines = lines.map((l, i) => {
+        if (!LIST_PREFIX.test(l)) return l
+        if (outdent) {
+          const remove = Math.min(2, l.match(/^ */)![0].length)
+          if (i === 0) firstDelta = -remove
+          return l.slice(remove)
+        }
+        if (i === 0) firstDelta = 2
+        return '  ' + l
+      })
+      const nextBlock = nextLines.join('\n')
+      const next = value.slice(0, lineStart) + nextBlock + value.slice(lineEnd)
+      if (lines.length > 1) {
+        apply(next, lineStart, lineStart + nextBlock.length)
+      } else {
+        apply(next, Math.max(lineStart, start + firstDelta))
+      }
+      return true
+    },
+    [value, apply]
+  )
+
   // Enter inside a list item continues the list; Enter on an empty item ends it
   const handleEnter = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
@@ -271,7 +308,14 @@ export function MarkdownTextarea({
       e.preventDefault()
       const [, indent, marker, num, rest] = m
       if (!rest.trim()) {
-        // Empty item: end the list by stripping the marker
+        // Empty item: outdent one level if nested (Word-style — Enter walks back up
+        // the levels), otherwise end the list by stripping the marker.
+        if (indent.length >= 2) {
+          const newIndent = indent.slice(2)
+          const next = value.slice(0, lineStart) + newIndent + marker + value.slice(start)
+          apply(next, lineStart + newIndent.length + marker.length)
+          return true
+        }
         const next = value.slice(0, lineStart) + value.slice(start)
         apply(next, lineStart)
         return true
@@ -311,6 +355,13 @@ export function MarkdownTextarea({
         }
       }
 
+      // Tab / Shift+Tab nest (indent) or un-nest (outdent) list items. Off a list
+      // line it does nothing, so Tab still moves focus as usual.
+      if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (indentLines(e.shiftKey)) e.preventDefault()
+        return
+      }
+
       if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
         handleEnter(e)
         return
@@ -342,7 +393,7 @@ export function MarkdownTextarea({
         wrapSelection('*')
       }
     },
-    [mention, mentionItems, mentionIndex, insertMention, handleEnter, insertHeading, insertBullets, insertNumbered, wrapSelection]
+    [mention, mentionItems, mentionIndex, insertMention, indentLines, handleEnter, insertHeading, insertBullets, insertNumbered, wrapSelection]
   )
 
   // Upload one or more image files and insert their markdown at the caret.

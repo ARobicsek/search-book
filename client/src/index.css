@@ -161,6 +161,30 @@
   margin-bottom: 0;
 }
 
+/* Nested bullets (Tab to indent) — distinct markers per level, like a Word doc.
+   Nested lists hug their parent item (no extra top/bottom gap). */
+.prep-note-markdown li > ul,
+.prep-note-markdown li > ol {
+  margin-top: 0.125rem;
+  margin-bottom: 0;
+}
+
+.prep-note-markdown ul ul {
+  list-style-type: circle;
+}
+
+.prep-note-markdown ul ul ul {
+  list-style-type: square;
+}
+
+.prep-note-markdown ol ol {
+  list-style-type: lower-alpha;
+}
+
+.prep-note-markdown ol ol ol {
+  list-style-type: lower-roman;
+}
+
 .prep-note-markdown h1,
 .prep-note-markdown h2,
 .prep-note-markdown h3 {

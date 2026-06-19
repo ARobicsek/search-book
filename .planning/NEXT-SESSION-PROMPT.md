@@ -5,39 +5,32 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — @-mentions enhancements session (2026-06-18 PM)
+### What Was Just Completed — Ideas autosave + nested bullets (2026-06-19)
 
-Four follow-up enhancements (all to the @-mentions / notes feature family). **Tasks 1, 2, 4 are
-pushed/live** (`d6e39a6`, `2b8d0b8`, `7b7dcad`). **Task 3 (org mentions) is committed locally
-(`cd2bfdc`) but NOT pushed — it adds columns and is gated on the Turso DDL below.**
+Two owner asks, **both schema-free, pushed/live**. Org @-mentions from the prior session
+(`cd2bfdc` + docs `70a6fe1`) are also confirmed **pushed & live** — the earlier "held for DDL"
+carry-over is closed (DDL was applied; remote == local before this session).
 
-1. **Surrounding-context snippets** (`d6e39a6`, live). The `/mentions` page and the per-contact
-   "Mentioned in Meetings" card now show the text *around* the @-mention (`mentionSnippet`, ±140 chars
-   snapped to word/token boundaries, chip preserved), not the whole note from the top.
-2. **@-mentions in prep notes** (`2b8d0b8`, live). Prep-note editors open the `@` picker, prep notes
-   render chips, and prep-note text feeds the index via new `resyncConversationMentions` (aggregates
-   notes+next-steps+all prep notes; prep-note CRUD re-syncs; `create-contact` rewrites prep tokens).
-3. **@-mentions for Organizations — full parity** (`cd2bfdc`, **committed, NOT pushed — needs DDL**).
-   `@` picker offers orgs (building icon) + a "new organization" loose option; violet chips link to
-   `/companies/:id`; `/mentions` shows org badges + one-click "Create organization"; new
-   "Mentioned in Meetings" card on each org page. Schema: `ConversationMention` gains `companyId`
-   (FK→Company SetNull) + index + `kind` ('CONTACT'|'COMPANY'). Also merged the Mentions-page
-   snippets per field (clustered mentions → one block). **Verified end-to-end via chrome-devtools on
-   local dev (DB migrated locally); test data cleaned up.**
-4. **Click-to-zoom note images** (`7b7dcad`, live). One app-root `NoteImageLightbox` opens any
-   `.prep-note-markdown img` full-screen (fit↔actual-size toggle, Esc/backdrop close) — fixes
-   unreadable small pasted screenshots. Covers all note render sites; images get a `zoom-in` cursor.
+1. **Autosave for new Ideas — meeting-log parity.** Ideas already autosaved when *editing*; a **new**
+   idea only saved on "Create". Brought it to Quick-Log parity: the idea dialog now uses the same
+   bespoke serialized save chain (`enqueueSave` + `savedIdRef` + snapshot dedup) — typing a title
+   POSTs the idea, later edits PUT, free-text contacts/companies resolve only on finalize ("Done"),
+   tags still create eagerly. Footer mirrors meetings (Delete this idea / Close / Done + Revert when
+   dirty); header shows the Saved/Saving indicator in both modes. Replaced the `useAutoSave` hook
+   usage in `idea-list.tsx` (edit-mode behavior preserved; create-mode added). Files:
+   `client/src/pages/ideas/idea-list.tsx`.
+2. **Second-level bullets (Tab to nest).** Shared `MarkdownTextarea` now indents/outdents list
+   items with **Tab / Shift+Tab** (2 spaces per level → CommonMark sub-lists; off a list line Tab
+   keeps default focus-move). Enter on an empty *nested* item outdents one level (Word-style), then
+   ends the list. New nested-list CSS in `index.css` gives distinct markers per level
+   (disc → circle → square; ordered → lower-alpha → lower-roman). Applies everywhere the editor is
+   used (Ideas, contact notes, prep notes, meeting notes/next-steps). Files:
+   `client/src/components/markdown-textarea.tsx`, `client/src/index.css`.
 
-### ⚠️ IMMEDIATE — finish Task 3 (org mentions)
-
-**Run this Turso DDL via the web SQL console (committed rw token is stale), then push `cd2bfdc`:**
-```sql
-ALTER TABLE "ConversationMention" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'CONTACT';
-ALTER TABLE "ConversationMention" ADD COLUMN "companyId" INTEGER REFERENCES "Company"("id") ON DELETE SET NULL;
-CREATE INDEX "ConversationMention_companyId_idx" ON "ConversationMention"("companyId");
-```
-Take a backup first. All three are safe additive statements. After it's applied:
-`git push origin main` (pushes `cd2bfdc` + the session-doc commit). Do NOT push before the DDL.
+Verified end-to-end via chrome-devtools (desktop + 390px): new-idea autosave (status flips to
+"Saved", count 3→4, footer transitions), `- a / Tab / - b / Tab / - c` produced correct 2/4-space
+nesting and rendered disc/circle/square; test idea deleted afterward. `prepush` + full `vite build`
+green.
 
 ### What's Next
 
@@ -76,9 +69,9 @@ Take a backup first. All three are safe additive statements. After it's applied:
 
 ### Working branch
 
-`main` — remote tip is `7b7dcad` (Tasks 1/2/4 live). **Local is ahead by `cd2bfdc` (Task 3, org
-mentions) — held until the Turso DDL above is applied, then push.** This session: `d6e39a6`,
-`2b8d0b8`, `7b7dcad` (pushed); `cd2bfdc` + the session-doc commit (pending push).
+`main` — fully synced (remote == local) before this session at `70a6fe1`. This session adds two
+schema-free commits (Ideas autosave; nested bullets) pushed to `main`. **Nothing pending** — no
+Turso DDL needed, no held commits.
 
 ---
 
@@ -89,8 +82,8 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped four enhancements — LinkedIn
-title preference, participant hover tooltips (incl. combobox pills), the Outlook-env doc, and
-**@-mentions in meeting notes** (new `/mentions` page + per-contact card; Turso DDL applied, live).
-Nothing is left pending from it. Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+,
-gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).
+Context for *this* upcoming session specifically: last session shipped two schema-free owner asks —
+**autosave for new Ideas** (meeting-log parity: type a title and it persists; "Done" finalizes
+free-text) and **second-level bullets** (Tab/Shift+Tab to nest in any markdown note editor). Nothing
+is left pending. Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the
+"⏳ Waiting on owner" block, D5/D6/D8/D9).

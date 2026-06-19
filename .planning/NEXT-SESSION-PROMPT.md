@@ -7,9 +7,9 @@ here.
 
 ### What Was Just Completed — Clear button on all list-filter search boxes (2026-06-19)
 
-One owner ask, **schema-free, pushed/live**. All standalone list-filter search boxes (magnifying
-glass on the left) now afford a **one-click clear** (an "X" button on the right, shown only when the
-box has text).
+One owner ask, **schema-free, pushed/live** (`2375820`). All standalone list-filter search boxes
+(magnifying glass on the left) now afford a **one-click clear** (an "X" button on the right, shown
+only when the box has text).
 
 - **Where:** Ideas, Contacts, Companies, Actions list pages. Global Search (`search.tsx`) and the
   Meetings title filter (`meetings.tsx`) already had this — they were the source of the established
@@ -66,8 +66,8 @@ clicking it empties the box and restores the full list (3→1→3). `prepush` + 
 ### Working branch
 
 `main` — fully synced (remote == local) before this session at `74db62c`. This session adds one
-schema-free commit (search-box clear buttons) pushed to `main`. **Nothing pending** — no Turso DDL
-needed, no held commits.
+schema-free commit (search-box clear buttons, `2375820`) pushed to `main`, plus this docs follow-up.
+**Nothing pending** — no Turso DDL needed, no held commits.
 
 ---
 

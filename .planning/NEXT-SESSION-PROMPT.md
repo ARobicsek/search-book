@@ -5,77 +5,52 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — CSV import "Reports To" relationships (2026-06-22)
+### What Was Just Completed — Any-field enrich import "fill blanks only" (2026-06-22 s2)
 
-One owner ask, **schema-free, verified live, pushed to `main`**. Extends last session's enrich import.
+One owner ask (last session's agreed PRIMARY), **schema-free, verified live, pushed to `main`** (`0ac5c0b`).
+Extends the same enrich import.
 
-**Problem:** owner had a 2-column org-chart CSV (`Name`, `Reports To (1-up)` — e.g. `qmrg_1up_reporting.csv`)
-and wanted the enrich import to turn the manager column into a **`REPORTS_TO` relationship** between
-contacts.
+**Problem:** the name-match path on `POST /api/contacts/import-match` previously enriched a matched
+contact with **email only** (+ the reports-to relationship); every other mapped column was ignored
+for existing contacts. Owner wanted a CSV to fill **any** mapped field — **but only when that field
+is currently empty; never overwrite curated data** (owner AskUserQuestion decision: *fill blanks
+only*, not per-column toggles, not a global overwrite, for v1).
 
-**Built — `reportsTo` support on the existing `POST /api/contacts/import-match`:**
-- Each row may now carry a **`reportsTo`** (manager name); the call also carries a **`defaultEcosystem`**.
-  After each subject is matched/created, the manager is resolved via the same case-insensitive name
-  index (match existing, else **create a bare contact**, indexed so repeats de-dup) and a **`REPORTS_TO`
-  relationship** is created `subject → manager` (matches the `[from] reports to [to]` UI direction).
-  - **Idempotent** — pre-loads all existing `REPORTS_TO` pairs + a per-run set; never duplicates.
-  - Blank / **"Not found"** / self-reference → **no relationship**.
-  - Ambiguous manager (name matches >1 existing) → skipped + reported.
-  - **`dryRun`** predicts everything via negative **synthetic ids** (one code path, no writes) so the
-    preview shows relationships-to-create + the new-manager names.
-- Dialog (`client/src/components/csv-import-dialog.tsx`): a **"Reports To (manager)"** field mapping
-  (+ header aliases incl. `reports to (1-up)`); **mapping a Reports-To column auto-routes through the
-  match endpoint** so subjects + managers de-dup (no duplicates); a new **"Ecosystem for new contacts"**
-  picker (default General Network — set NCQA Internal for internal org charts); the preview adds a
-  relationship/new-manager summary that **surfaces name-form near-dups** ("Josie Granner" vs
-  "Josephine (Josie) Granner"); apply toast + button label include relationship counts.
+**Built — fill-blanks enrich on the `matches.length === 1` branch:**
+- **Server** (`server/src/routes/contacts.ts`): new `buildFillBlanksPatch` over the scalar set
+  (`title, roleDescription, phone, linkedinUrl, location, howConnected, mutualConnections, whereFound,
+  openQuestions, notes, personalDetails`) — fills a field only when the row has a value AND the
+  contact's field is empty; **non-empty fields are never touched**. Email keeps its existing additive
+  merge. **Company** fills `companyId` only when the contact has **no current employer**
+  (`currentEmployerCompanyIds` + `resolveCompany`; promotes that company to CONNECTED when the contact
+  is CONNECTED — same rule as create); no 2nd-employer append in v1. **`ecosystem`/`status` excluded.**
+  The contact index `findMany` now selects the fill fields (incl. notes/personalDetails — fine for a
+  one-shot single-user import; still no `_count`). `dryRun` predicts all of it; result adds
+  **`fieldsFilled`** + **`fieldsFilledByName`** (+ per-row `filled`).
+- **Client** (`csv-import-dialog.tsx`): relabel "Add email to existing" → **"Enrich existing (fill
+  blanks)"**; new **blank-fields-filled breakdown** ("N blank fields will be filled across M contacts"
+  + "Title ×2, Phone ×1, …"); updated checkbox/footer copy, completion summary, toast, apply-button.
 
-Verified end-to-end: server via a throwaway script (dry-run on the real 60-row `qmrg_1up_reporting.csv`
-= **57 relationships** [= 60 − 3 "Not found"], 14 managers created, 0 ambiguous, 0 errors; real-write
-test asserted direction + ecosystem + idempotent re-run + not-found/self skips, then cleaned up its 2
-test contacts + relationship); full browser flow (chrome-devtools, desktop + 390px) — auto-mapped,
-ecosystem→NCQA Internal, preview "57 rel / 14 new managers"; closed without applying so the dev DB was
-untouched. `prepush` + full client build green. **Schema-free** (`Relationship`/`REPORTS_TO` already
-existed → no Turso DDL).
+Verified end-to-end: two throwaway HTTP scripts (fill-a-blank + leave-non-blank-untouched +
+email-as-primary + ecosystem/status untouched + company-fill + idempotent re-run = 0 changes +
+additive 2nd email; plus a company-guard proving company is **not** filled when an employer already
+exists) — all green, test rows + companies cleaned up; full browser flow (chrome-devtools, desktop +
+**true-390px device emulation**) on a CSV matching two seeded contacts + one new name → preview
+"2 enrich / 1 new / 0 skip", "5 blank fields across 2 contacts · Title ×2, Phone ×1, Location ×1,
+Notes ×1", "2 reporting relationships" — closed without applying, seeded contacts deleted, dev DB
+clean; console clean. `prepush` + full client `vite build` green. **Schema-free** (no Turso DDL).
 
-**Owner note (data hygiene) — ✅ RESOLVED 2026-06-22:** the import matches names **exactly**
-(case-insensitive), so short/long forms are treated as different people. The production dry-run
-flagged near-duplicate **manager** names that would have created spurious new contacts (e.g.
-"Vivek Garg" vs existing "Vivek (Viv-ACHE) Garg"; "Keirsha (KEER-shuh) Thompson" vs existing
-"...Tompson"; plus "Josie Granner" vs "Josephine (Josie) Granner"). **The owner normalized those
-manager cells in the CSV so they resolve to the existing contacts** — no spurious new-manager dupes.
-(General reminder for future imports: this is inherent to exact-name matching; normalize name forms
-in the CSV up front, or merge dupes afterward.)
+**Reminder (inherent to exact-name matching):** enrich matches names **exactly** (case-insensitive),
+so short/long name forms are different people. Normalize name forms in the CSV up front (or merge
+dupes afterward) before an enrich import.
 
 ### What's Next
 
-1. **★ PRIMARY (owner ask, 2026-06-22): any-field enrich import — "fill blanks only."** Today the
-   match-by-name path only enriches existing contacts with **email** (+ the new reports-to
-   relationship); every other mapped column is ignored for matched contacts (the no-clobber rule).
-   Extend it so a CSV can fill **any** mapped field on an existing contact — **but only when that
-   field is currently empty; never overwrite curated data** (owner decision via AskUserQuestion:
-   *fill blanks only* — NOT per-column toggles, NOT a global overwrite mode, for v1).
-   - **Server** (`POST /api/contacts/import-match`, the `matches.length === 1` branch in
-     `server/src/routes/contacts.ts`): replace the email-only merge with a **fill-blanks patch
-     builder** — for each mapped scalar field present in the row AND empty/null on the matched
-     contact, include it. Email keeps its existing additive merge (`buildEmailMerge` → primary if
-     empty else `additionalEmails`, deduped) — unchanged. Apply to the free-text/scalar set
-     (`title, roleDescription, phone, linkedinUrl, location, howConnected, mutualConnections,
-     whereFound, openQuestions, notes, personalDetails`). Patch empty → action `skip`; non-empty →
-     `update`. **Still never touches a non-empty field.**
-   - **Sub-decisions to settle next session (recommended defaults in parens):** company —
-     fill `companyId` only when the contact has **no** current employer, via `resolveCompany`
-     (don't append a 2nd employer in v1); `ecosystem`/`status` — **exclude** from fill (create-time
-     only; no real "blank" for ecosystem, and `status` blank = the `NONE` sentinel); `notes`/
-     `personalDetails` — **fill-only**, not append (append could be a later option).
-   - **Preview/UX:** the client already maps every field and `buildRowData` already sends them all,
-     so the work is mostly server + dry-run reporting. Improve the dry-run to report **which/how
-     many fields would be filled** (e.g. relabel "Add email to existing" → "Enrich existing (fill
-     blanks)" and show a blank-fields-filled count, ideally a small per-row/field breakdown). Keep
-     the 3-card shape; reports-to summary stays.
-   - **Schema-free** (same endpoint, additive logic). Verify like this session: throwaway server
-     script (fill-a-blank, leave-non-blank-untouched, idempotent re-run) + chrome-devtools desktop
-     + 390px; clean up test rows; `prepush` + full client build.
+1. **No carried-over primary task.** The CSV-import enrich line is feature-complete for v1
+   (de-dup → email merge → reports-to relationships → fill-blanks any-field). Possible **future**
+   enrich options the owner has *not* asked for (don't build unprompted): per-column overwrite
+   toggles, a global overwrite mode, append-vs-fill for `notes`/`personalDetails`, appending a
+   2nd employer instead of fill-only company. Surface only if the owner raises a need.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
    AI ingest) on D5/D6. Don't push on those until the owner raises them.
@@ -122,8 +97,8 @@ in the CSV up front, or merge dupes afterward.)
 
 ### Working branch
 
-`main` — this session adds one schema-free commit pushed to `main`: CSV import "Reports To"
-relationships (extends the enrich import). **Nothing pending** — no Turso DDL needed, no held commits.
+`main` — this session adds two schema-free commits pushed to `main`: the fill-blanks any-field enrich
+import (`0ac5c0b`) + this docs update. **Nothing pending** — no Turso DDL needed, no held commits.
 
 ---
 
@@ -135,15 +110,12 @@ Durable version (works every session — it defers to the docs, which stay curre
 > where we left off and what's next before doing anything.
 
 Context for *this* upcoming session specifically: last session shipped one schema-free owner ask —
-**CSV import "Reports To" relationships**: the enrich import (`POST /api/contacts/import-match`) now
-accepts a per-row `reportsTo` (manager name) and turns it into a `REPORTS_TO` relationship
-`subject → manager`, resolving/creating both contacts by name (idempotent; blank/"Not found"/self →
-no relationship; ambiguous manager skipped). The dialog gained a "Reports To (manager)" mapping (which
-auto-routes through the match endpoint) and an "Ecosystem for new contacts" picker. Nothing is left
-pending (no Turso DDL, no held commits).
-
-**The agreed primary task for next session** (see "What's Next" #1): extend the same enrich import so
-a CSV can fill **any** mapped field on an existing contact — **fill blanks only, never overwrite**
-(owner decision) — not just email + the reports-to relationship. Schema-free; design + sub-decisions
-are spelled out in "What's Next." Plan of record otherwise stays `.planning/NCQA-ADAPTATION-PLAN.md`
-(Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).
+**any-field enrich import "fill blanks only"** (`0ac5c0b`): the name-match path on
+`POST /api/contacts/import-match` now fills **any** mapped scalar field on a matched contact when that
+field is **currently empty** (never overwriting curated data; `ecosystem`/`status` excluded; company
+fills only when there's no current employer), on top of the existing email merge + reports-to
+relationships. The preview gained a blank-fields-filled breakdown. **No carried-over task** — the
+CSV-import enrich feature is complete for v1 (future overwrite/append options exist but are
+unrequested; don't build unprompted). Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`
+(Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9). Nothing is pending (no Turso DDL,
+no held commits).

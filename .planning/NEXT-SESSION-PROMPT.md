@@ -5,40 +5,37 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Tags in Global Search + meeting time/date quick-edits (2026-06-19, s4)
+### What Was Just Completed — De-duplicating CSV import (match by name + merge emails) (2026-06-21)
 
-Three owner asks, **all schema-free, verified live, pushed to `main`** (`02d1a56`, `fcdaac0`,
-`fce6b93`, + fix `d41a44c`).
+One owner ask, **schema-free, verified live, pushed to `main`** (`6fb67e7`).
 
-1. **Tags are now first-class in Global Search** (`02d1a56`; fix `d41a44c`). Before, `/search`
-   matched tag names but gave no way to filter by a tag, no view of which tags a result carries, and
-   no list of available tags.
-   - Server `/search` accepts **`tagIds`** (comma-separated). A tag filter **alone** searches — no
-     text query needed (terms-empty ⇒ match-all text AND'd with the tag filter); multiple tags **OR**
-     together; ANDed onto any text query. Actions are untagged → excluded under a tag filter.
-   - Every people/org/meeting/idea result returns its **`tags`**, rendered as **clickable violet
-     chips** that add the tag to the filter. A **"Tags" `MultiCombobox`** (fed by `/tags`) is the
-     catalog of available tags. Tag filter is in the URL (`?tags=`) for shareable links.
-   - **Idea search switched from the legacy comma-string `Idea.tags` to the `IdeaTag` junction**
-     (legacy string still matched for back-compat) — idea tags now behave like every other entity's.
-   - **Fix `d41a44c`:** the reserved `Favorite` tag (favorites mechanism, excluded from `/tags` and
-     all pickers) was leaking as a chip on results — now excluded from search chips + evidence too.
-   - Files: `server/src/routes/search.ts`, `client/src/pages/search.tsx`, `client/src/lib/types.ts`.
-2. **Clearable meeting start time** (`fcdaac0`). The start time is optional and autosaves empty →
-   `startTime: null`, but the native `<input type="time">` clear is hard to find / absent on mobile.
-   Added an explicit "×" beside the time input (shown only when a time is set). Server already
-   persisted `null` on PUT — UI-only. File: `client/src/components/quick-log-dialog.tsx`.
-3. **Inline meeting-date edit** (`fce6b93`). Each `/meetings` card's date is now a popover editor
-   (Today / Yesterday / custom) — `MeetingDateSelect`, partial `PUT {date, datePrecision:'DAY'}` —
-   so a meeting can be re-dated without opening the full editor (mirrors the inline contact-status /
-   action-due-date controls). Picking a concrete day normalizes precision to DAY; the trigger stops
-   propagation so it never toggles the card's expand/collapse. File: `client/src/pages/meetings.tsx`.
+**Problem:** owner wanted to bulk-import a list of NCQA email addresses (a 2-column CSV: Name + NCQA
+email) without creating duplicates of contacts already in the DB. The old "Import Contacts from CSV"
+always did `POST /contacts` per row → guaranteed duplicates, and the contacts **list** endpoint's
+`select` doesn't even return `email`, so naive client-side matching wasn't viable.
 
-Verified all three end-to-end via chrome-devtools (desktop + 390px): tag-only search returned a
-temporarily-tagged contact with a clickable chip and no min-character prompt; the Favorite chip is
-gone; clear-time shows/blanks/hides; inline date took a MONTH-precision meeting (2025-12-01) → today
-/DAY and back. All test mutations reverted on the local dev DB. `prepush` + full `vite build` +
-server typecheck green.
+**Built — opt-in "Update existing contacts (match by name)" mode:**
+- New server endpoint **`POST /api/contacts/import-match`** (`server/src/routes/contacts.ts`). Matches
+  each row's name **case-insensitively** against all existing contacts:
+  - **Exactly one match → merge the email only** (primary if the contact has none, else appended to
+    `additionalEmails`, deduped) and **touch NOTHING else** — ecosystem, status, and every other
+    field are never clobbered (the owner's explicit requirement).
+  - **No match → create new** contact, default ecosystem **`NETWORK`** (General Network, per owner).
+  - **>1 match → ambiguous**, skipped and reported (resolve by hand).
+  - **`dryRun`** classifies every row without writing — powers the preview.
+  - Helper `buildEmailMerge` does the no-clobber email merge; company find-or-create is server-side
+    (cached) for created rows only.
+- Dialog (`client/src/components/csv-import-dialog.tsx`): a **Checkbox toggle** on the map step; the
+  Preview step calls the dry-run and shows a 3-card breakdown (**Add email to existing / Create new /
+  No change**) + an amber list of ambiguous names, with a reassurance line that existing fields are
+  preserved. The legacy create-only path is **unchanged** when the toggle is off.
+
+Verified end-to-end: server via direct API assertions (merge-to-additional, set-primary, create
+NETWORK/CONNECTED, ambiguous skip, already-on-file no-op, **no duplicate, no clobber** — all test rows
+cleaned up); full browser flow (chrome-devtools) against the real 60-row `ncqa_email_addresses.csv` —
+auto-mapped Name+Email, dry-run = **3 matched existing** (Madeline Henry / Julie Seibert / Tricia
+Elliott) · **57 new** · **0 clobbered**; closed without applying so the dev DB was left untouched.
+`prepush` + full client+server build green.
 
 ### What's Next
 
@@ -88,10 +85,8 @@ server typecheck green.
 
 ### Working branch
 
-`main` — synced before this session at `448f053`. This session adds four schema-free commits pushed
-to `main` — tags in Global Search (`02d1a56`) + Favorite-chip fix (`d41a44c`), clearable meeting
-time (`fcdaac0`), inline meeting-date edit (`fce6b93`) — plus this docs follow-up.
-**Nothing pending** — no Turso DDL needed, no held commits.
+`main` — this session adds one schema-free commit pushed to `main`: de-duplicating CSV import
+(`6fb67e7`) — plus this docs follow-up. **Nothing pending** — no Turso DDL needed, no held commits.
 
 ---
 
@@ -102,10 +97,10 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped three schema-free owner asks —
-**tags are now first-class in Global Search** (filter by `tagIds`, clickable tag chips on every
-result, a "Tags" picker that lists all tags; idea search moved to the `IdeaTag` junction; reserved
-`Favorite` tag excluded), a **clearable meeting start time**, and **inline meeting-date editing** on
-`/meetings` cards. Nothing is left pending (no Turso DDL, no held commits). Plan of record is
-`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block,
-D5/D6/D8/D9).
+Context for *this* upcoming session specifically: last session shipped one schema-free owner ask —
+**de-duplicating CSV import**: the "Import Contacts from CSV" dialog has a new opt-in "Update existing
+contacts (match by name)" mode backed by `POST /api/contacts/import-match` that merges emails into
+existing contacts (no clobbering of any other field), creates unmatched names as new contacts
+(General Network), and flags ambiguous duplicate-name rows — with a dry-run preview. Nothing is left
+pending (no Turso DDL, no held commits). Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`
+(Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).

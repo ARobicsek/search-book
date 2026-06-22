@@ -40,6 +40,12 @@ exists) — all green, test rows + companies cleaned up; full browser flow (chro
 Notes ×1", "2 reporting relationships" — closed without applying, seeded contacts deleted, dev DB
 clean; console clean. `prepush` + full client `vite build` green. **Schema-free** (no Turso DDL).
 
+**Plus — CSV header auto-mapper hardened (`ad3b529`, client-only):** the import dialog now recognizes
+many more reasonable header synonyms (normalized, case/punctuation-insensitive; expanded aliases for
+every field incl. ones that had none — e.g. `mutualConnections` catches "mutual connections" /
+"connections" / "connecting people"), with a conservative single-candidate fuzzy fallback that leaves
+ambiguous headers unmapped instead of mis-assigning. Verified on a 19-column alt-header CSV.
+
 **Reminder (inherent to exact-name matching):** enrich matches names **exactly** (case-insensitive),
 so short/long name forms are different people. Normalize name forms in the CSV up front (or merge
 dupes afterward) before an enrich import.
@@ -97,8 +103,9 @@ dupes afterward) before an enrich import.
 
 ### Working branch
 
-`main` — this session adds two schema-free commits pushed to `main`: the fill-blanks any-field enrich
-import (`0ac5c0b`) + this docs update. **Nothing pending** — no Turso DDL needed, no held commits.
+`main` — this session adds schema-free commits pushed to `main`: the fill-blanks any-field enrich
+import (`0ac5c0b`), the CSV header auto-mapper hardening (`ad3b529`), + docs updates. **Nothing
+pending** — no Turso DDL needed, no held commits.
 
 ---
 

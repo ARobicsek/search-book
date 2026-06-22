@@ -418,10 +418,17 @@ router.post('/import-match', async (req: Request, res: Response) => {
       rows?: Array<Record<string, string>>;
       createUnmatched?: boolean;
       dryRun?: boolean;
+      defaultEcosystem?: string;
     };
     const rows = Array.isArray(body.rows) ? body.rows : [];
     const createUnmatched = body.createUnmatched !== false; // default true
     const dryRun = body.dryRun === true;
+    // Ecosystem assigned to contacts created by this import (managers + unmatched rows).
+    // Backwards-compatible default NETWORK; the dialog lets the user pick (e.g. NCQA Internal).
+    const VALID_ECOSYSTEMS = new Set(['PAYER', 'PROVIDER', 'GOVERNMENT', 'ACADEMIA', 'HEALTH_TECH', 'POLICY', 'MEDIA', 'FUNDER', 'NCQA', 'NETWORK', 'RECRUITER', 'CONSULTANT']);
+    const defaultEcosystem = VALID_ECOSYSTEMS.has((body.defaultEcosystem || '').trim())
+      ? (body.defaultEcosystem as string).trim()
+      : 'NETWORK';
 
     if (rows.length === 0) {
       res.status(400).json({ error: 'No rows to import' });
@@ -445,6 +452,11 @@ router.post('/import-match', async (req: Request, res: Response) => {
     const result = {
       updated: 0,
       created: 0,
+      // "Reports To" relationship import (optional — only when rows carry a reportsTo value).
+      relationshipsCreated: 0,
+      managersCreated: 0,           // contacts created solely because they were named as a manager
+      managersCreatedNames: [] as string[],
+      relationshipsSkipped: [] as { row: number; manager: string; reason: string }[],
       ambiguous: [] as { row: number; name: string; count: number }[],
       errors: [] as { row: number; message: string }[],
       preview: [] as {
@@ -486,6 +498,89 @@ router.post('/import-match', async (req: Request, res: Response) => {
       'notes', 'personalDetails',
     ];
 
+    // ─── "Reports To" relationship support ──────────────────────────────────
+    // Each row may carry a `reportsTo` (the manager's name). We resolve the
+    // manager by the same case-insensitive name index, creating a bare contact
+    // when absent, then create a REPORTS_TO relationship (subject → manager).
+    // Idempotent: existing REPORTS_TO pairs are never duplicated. dryRun assigns
+    // negative synthetic ids so create-then-reference works in one code path.
+    const wantsReportsTo = rows.some(
+      (r) => (r?.reportsTo || '').trim() && (r.reportsTo as string).trim().toLowerCase() !== 'not found',
+    );
+    const reportsToPairs = new Set<string>(); // `${fromId}:${toId}` for existing/created REPORTS_TO edges
+    if (wantsReportsTo) {
+      const rels = await prisma.relationship.findMany({
+        where: { type: 'REPORTS_TO' },
+        select: { fromContactId: true, toContactId: true },
+      });
+      for (const r of rels) reportsToPairs.add(`${r.fromContactId}:${r.toContactId}`);
+    }
+    let syntheticSeq = -1; // dry-run placeholder ids for would-be-created contacts
+
+    async function createBareContact(name: string): Promise<number> {
+      const created = await prisma.$transaction(async (tx) => {
+        const c = await tx.contact.create({
+          data: { name, ecosystem: defaultEcosystem, status: 'CONNECTED' } as any,
+        });
+        await tx.contactStatusHistory.create({
+          data: { contactId: c.id, oldStatus: null, newStatus: c.status },
+        });
+        return c;
+      });
+      byName.set(name.toLowerCase(), [{ id: created.id, name: created.name, email: created.email, additionalEmails: created.additionalEmails }]);
+      return created.id;
+    }
+
+    async function processReportsTo(rowNum: number, subjectId: number, subjectKey: string, reportsToRaw: string | undefined) {
+      const mgrName = (reportsToRaw || '').trim();
+      if (!mgrName || mgrName.toLowerCase() === 'not found') return;
+      if (mgrName.toLowerCase() === subjectKey) {
+        result.relationshipsSkipped.push({ row: rowNum, manager: mgrName, reason: 'self' });
+        return;
+      }
+      const mgrKey = mgrName.toLowerCase();
+      const m = byName.get(mgrKey) || [];
+      let managerId: number;
+      if (m.length > 1) {
+        result.relationshipsSkipped.push({ row: rowNum, manager: mgrName, reason: 'ambiguous' });
+        return;
+      }
+      if (m.length === 1) {
+        managerId = m[0].id;
+      } else {
+        // Manager isn't a contact yet.
+        if (!createUnmatched) {
+          result.relationshipsSkipped.push({ row: rowNum, manager: mgrName, reason: 'not-created' });
+          return;
+        }
+        if (dryRun) {
+          managerId = syntheticSeq--;
+          byName.set(mgrKey, [{ id: managerId, name: mgrName, email: null, additionalEmails: null }]);
+        } else {
+          try {
+            managerId = await createBareContact(mgrName);
+          } catch (err) {
+            result.errors.push({ row: rowNum, message: `Manager "${mgrName}": ${err instanceof Error ? err.message : 'create failed'}` });
+            return;
+          }
+        }
+        result.managersCreated++;
+        result.managersCreatedNames.push(mgrName);
+      }
+      const pairKey = `${subjectId}:${managerId}`;
+      if (reportsToPairs.has(pairKey)) return; // already exists, or created earlier in this run
+      reportsToPairs.add(pairKey);
+      if (!dryRun) {
+        try {
+          await prisma.relationship.create({ data: { fromContactId: subjectId, toContactId: managerId, type: 'REPORTS_TO' } });
+        } catch (err) {
+          result.errors.push({ row: rowNum, message: `Relationship → "${mgrName}": ${err instanceof Error ? err.message : 'create failed'}` });
+          return;
+        }
+      }
+      result.relationshipsCreated++;
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] || {};
       const rowNum = i + 2; // +2: the header is row 1 in the source CSV
@@ -515,13 +610,17 @@ router.post('/import-match', async (req: Request, res: Response) => {
           action: merge ? 'update' : 'skip',
           matchedName: match.name,
         });
-        if (dryRun || !merge) continue;
-        try {
-          await prisma.contact.update({ where: { id: match.id }, data: merge });
-          result.updated++;
-        } catch (err) {
-          result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Update failed' });
+        if (merge && !dryRun) {
+          try {
+            await prisma.contact.update({ where: { id: match.id }, data: merge });
+            result.updated++;
+          } catch (err) {
+            result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Update failed' });
+          }
         }
+        // A matched contact can still gain a reporting relationship (this never
+        // touches the contact's own fields — it only adds a Relationship row).
+        await processReportsTo(rowNum, match.id, name.toLowerCase(), row.reportsTo);
         continue;
       }
 
@@ -531,56 +630,68 @@ router.post('/import-match', async (req: Request, res: Response) => {
         continue;
       }
       result.preview.push({ row: rowNum, name, action: 'create' });
-      if (dryRun) continue;
-      try {
-        const companyName = (row.companyName || '').trim();
-        const companyId = companyName ? await resolveCompany(companyName) : null;
 
-        const data: Record<string, unknown> = {
-          name,
-          ecosystem: (row.ecosystem || '').trim() || 'NETWORK',
-          status: (row.status || '').trim() || 'CONNECTED',
-        };
-        const email = (row.email || '').trim();
-        if (email) data.email = email;
-        for (const f of SIMPLE_FIELDS) {
-          const v = (row[f] || '').trim();
-          if (v) data[f] = v;
-        }
-        if (companyId) data.companyId = companyId;
-        else if (companyName) data.companyName = companyName;
+      let subjectId: number;
+      if (dryRun) {
+        // Predict the create without writing; index a synthetic id so later rows
+        // referencing this name (as a duplicate or as a manager) resolve to it.
+        subjectId = syntheticSeq--;
+        byName.set(name.toLowerCase(), [{ id: subjectId, name, email: null, additionalEmails: null }]);
+      } else {
+        try {
+          const companyName = (row.companyName || '').trim();
+          const companyId = companyName ? await resolveCompany(companyName) : null;
 
-        const createdContact = await prisma.$transaction(async (tx) => {
-          const created = await tx.contact.create({ data: data as any });
-          await tx.contactStatusHistory.create({
-            data: { contactId: created.id, oldStatus: null, newStatus: created.status },
+          const data: Record<string, unknown> = {
+            name,
+            ecosystem: (row.ecosystem || '').trim() || defaultEcosystem,
+            status: (row.status || '').trim() || 'CONNECTED',
+          };
+          const email = (row.email || '').trim();
+          if (email) data.email = email;
+          for (const f of SIMPLE_FIELDS) {
+            const v = (row[f] || '').trim();
+            if (v) data[f] = v;
+          }
+          if (companyId) data.companyId = companyId;
+          else if (companyName) data.companyName = companyName;
+
+          const createdContact = await prisma.$transaction(async (tx) => {
+            const created = await tx.contact.create({ data: data as any });
+            await tx.contactStatusHistory.create({
+              data: { contactId: created.id, oldStatus: null, newStatus: created.status },
+            });
+            if (created.status === 'CONNECTED') {
+              await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(created));
+            }
+            return created;
           });
-          if (created.status === 'CONNECTED') {
-            await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(created));
-          }
-          return created;
-        });
 
-        const linkUrl = (row.linkUrl || '').trim();
-        if (linkUrl) {
-          try {
-            await prisma.link.create({ data: { url: linkUrl, title: linkUrl, contactId: createdContact.id } });
-          } catch {
-            // link is best-effort — the contact was still created
+          const linkUrl = (row.linkUrl || '').trim();
+          if (linkUrl) {
+            try {
+              await prisma.link.create({ data: { url: linkUrl, title: linkUrl, contactId: createdContact.id } });
+            } catch {
+              // link is best-effort — the contact was still created
+            }
           }
+
+          // Index the new contact so a later duplicate row in the same file matches it.
+          byName.set(name.toLowerCase(), [{
+            id: createdContact.id,
+            name: createdContact.name,
+            email: createdContact.email,
+            additionalEmails: createdContact.additionalEmails,
+          }]);
+          result.created++;
+          subjectId = createdContact.id;
+        } catch (err) {
+          result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Create failed' });
+          continue;
         }
-
-        // Index the new contact so a later duplicate row in the same file matches it.
-        byName.set(name.toLowerCase(), [{
-          id: createdContact.id,
-          name: createdContact.name,
-          email: createdContact.email,
-          additionalEmails: createdContact.additionalEmails,
-        }]);
-        result.created++;
-      } catch (err) {
-        result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Create failed' });
       }
+
+      await processReportsTo(rowNum, subjectId, name.toLowerCase(), row.reportsTo);
     }
 
     res.json(result);

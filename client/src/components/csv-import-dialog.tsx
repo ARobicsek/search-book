@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { api } from '@/lib/api'
-import type { Contact } from '@/lib/types'
+import { ECOSYSTEM_OPTIONS, type Contact } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -54,6 +54,7 @@ const IMPORTABLE_FIELDS = [
   { value: 'openQuestions', label: 'Open Questions' },
   { value: 'notes', label: 'Notes' },
   { value: 'personalDetails', label: 'Personal Details' },
+  { value: 'reportsTo', label: 'Reports To (manager)' },
 ]
 
 // Column header aliases for auto-mapping
@@ -102,6 +103,14 @@ const HEADER_ALIASES: Record<string, string> = {
   'url': 'linkUrl',
   'notes': 'notes',
   'ecosystem': 'ecosystem',
+  // Reports-To relationship (the manager's name)
+  'reports to': 'reportsTo',
+  'reports to (1-up)': 'reportsTo',
+  'reports to (1 up)': 'reportsTo',
+  'reportsto': 'reportsTo',
+  'manager': 'reportsTo',
+  '1-up': 'reportsTo',
+  'reports_to': 'reportsTo',
 }
 
 // Valid ecosystem values (legacy job-search terms map into the NCQA taxonomy)
@@ -156,6 +165,10 @@ type ImportMatchAction = 'update' | 'create' | 'ambiguous' | 'skip'
 interface ImportMatchResult {
   updated: number
   created: number
+  relationshipsCreated: number
+  managersCreated: number
+  managersCreatedNames: string[]
+  relationshipsSkipped: { row: number; manager: string; reason: string }[]
   ambiguous: { row: number; name: string; count: number }[]
   errors: { row: number; message: string }[]
   preview: { row: number; name: string; action: ImportMatchAction; matchedName?: string }[]
@@ -180,6 +193,8 @@ export function CsvImportDialog({
   const [importResults, setImportResults] = useState<{ success: number; errors: string[] } | null>(null)
   // Enrichment mode: match CSV rows to existing contacts by name and merge (don't duplicate).
   const [updateExisting, setUpdateExisting] = useState(false)
+  // Ecosystem assigned to any contacts this import creates (default General Network).
+  const [newEcosystem, setNewEcosystem] = useState<string>('NETWORK')
   const [analyzing, setAnalyzing] = useState(false)
   const [dryRun, setDryRun] = useState<ImportMatchResult | null>(null)
   const [matchResult, setMatchResult] = useState<ImportMatchResult | null>(null)
@@ -191,6 +206,7 @@ export function CsvImportDialog({
     setColumnMap({})
     setImportResults(null)
     setUpdateExisting(false)
+    setNewEcosystem('NETWORK')
     setAnalyzing(false)
     setDryRun(null)
     setMatchResult(null)
@@ -369,6 +385,7 @@ export function CsvImportDialog({
       'title', 'roleDescription', 'email', 'companyName', 'linkedinUrl', 'location',
       'howConnected', 'mutualConnections', 'whereFound', 'openQuestions', 'notes',
       'personalDetails', 'linkUrl',
+      'reportsTo', // not a Contact field — the server turns it into a REPORTS_TO relationship
     ]
     for (const f of passthrough) {
       if (rawData[f]) out[f] = rawData[f]
@@ -376,10 +393,11 @@ export function CsvImportDialog({
     return out
   }
 
-  // Moving from "map" → "preview": in enrichment mode, ask the server to classify every
-  // row (a dry run that writes nothing) so the preview shows real update/create/skip counts.
+  // Moving from "map" → "preview": when using the match endpoint, ask the server to classify
+  // every row (a dry run that writes nothing) so the preview shows real update/create/skip
+  // counts plus how many reporting relationships and manager-contacts will be created.
   async function handleGoToPreview() {
-    if (updateExisting) {
+    if (useMatchEndpoint) {
       setAnalyzing(true)
       try {
         const rows = csvData.map(buildRowData)
@@ -387,6 +405,7 @@ export function CsvImportDialog({
           rows,
           createUnmatched: true,
           dryRun: true,
+          defaultEcosystem: newEcosystem,
         })
         setDryRun(res)
       } catch {
@@ -401,6 +420,10 @@ export function CsvImportDialog({
 
   const hasNameMapping = Object.values(columnMap).includes('name') ||
     (Object.values(columnMap).includes('firstName') || Object.values(columnMap).includes('lastName'))
+  // A mapped "Reports To" column means we must de-duplicate by name (so the manager and
+  // subject resolve to existing contacts, not duplicates) → always use the match endpoint.
+  const hasReportsTo = Object.values(columnMap).includes('reportsTo')
+  const useMatchEndpoint = updateExisting || hasReportsTo
 
   async function handleImport() {
     if (!hasNameMapping) {
@@ -408,9 +431,10 @@ export function CsvImportDialog({
       return
     }
 
-    // Enrichment mode: hand the whole batch to the server, which matches by name,
-    // merges emails into existing contacts (no clobbering), and creates the rest.
-    if (updateExisting) {
+    // Match-by-name mode: hand the whole batch to the server, which matches by name,
+    // merges emails into existing contacts (no clobbering), creates the rest, and (when a
+    // "Reports To" column is mapped) wires up REPORTS_TO relationships.
+    if (useMatchEndpoint) {
       setImporting(true)
       try {
         const rows = csvData.map(buildRowData)
@@ -418,14 +442,19 @@ export function CsvImportDialog({
           rows,
           createUnmatched: true,
           dryRun: false,
+          defaultEcosystem: newEcosystem,
         })
         setMatchResult(res)
+        const totalCreated = res.created + res.managersCreated
+        const changed = res.updated + totalCreated + res.relationshipsCreated
         setImportResults({
-          success: res.updated + res.created,
+          success: changed,
           errors: res.errors.map((e) => `Row ${e.row}: ${e.message}`),
         })
-        if (res.updated + res.created > 0) {
-          toast.success(`Updated ${res.updated}, created ${res.created}`)
+        if (changed > 0) {
+          const parts = [`Updated ${res.updated}`, `created ${totalCreated}`]
+          if (res.relationshipsCreated > 0) parts.push(`${res.relationshipsCreated} relationship${res.relationshipsCreated === 1 ? '' : 's'}`)
+          toast.success(parts.join(', '))
           onImportComplete()
         } else {
           toast.info('No contacts were added or changed')
@@ -669,9 +698,40 @@ export function CsvImportDialog({
                 <p className="text-xs text-muted-foreground">
                   Adds the email to a contact that already exists (matched by name), instead of
                   creating a duplicate — without changing any of their other details. Names not
-                  found are added as new contacts (General Network).
+                  found are added as new contacts.
                 </p>
               </div>
+            </div>
+            {hasReportsTo && (
+              <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div className="space-y-0.5">
+                  <p className="font-medium">Reporting relationships will be imported.</p>
+                  <p className="text-xs">
+                    Each person will be linked with a "Reports To" relationship to their manager.
+                    Names are matched to existing contacts (no duplicates); managers not yet on file
+                    are added as new contacts. "Not found" or blank means no manager.
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="new-ecosystem" className="cursor-pointer">Ecosystem for new contacts</Label>
+                <p className="text-xs text-muted-foreground">
+                  Applied to any contacts this import creates. Existing contacts are never changed.
+                </p>
+              </div>
+              <Select value={newEcosystem} onValueChange={setNewEcosystem}>
+                <SelectTrigger id="new-ecosystem" className="w-[180px] shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ECOSYSTEM_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {!hasNameMapping && (
               <div className="flex items-center gap-2 text-amber-600 text-sm">
@@ -691,7 +751,9 @@ export function CsvImportDialog({
                   {matchResult ? (
                     <p className="text-sm text-muted-foreground mt-1">
                       {matchResult.updated} existing contact{matchResult.updated === 1 ? '' : 's'} updated,
-                      {' '}{matchResult.created} created.
+                      {' '}{matchResult.created + matchResult.managersCreated} created.
+                      {matchResult.relationshipsCreated > 0 &&
+                        ` ${matchResult.relationshipsCreated} reporting relationship${matchResult.relationshipsCreated === 1 ? '' : 's'} added.`}
                       {matchResult.ambiguous.length > 0 &&
                         ` ${matchResult.ambiguous.length} skipped (duplicate name in your contacts).`}
                       {matchResult.errors.length > 0 && ` ${matchResult.errors.length} rows failed.`}
@@ -719,7 +781,7 @@ export function CsvImportDialog({
                   </div>
                 )}
               </div>
-            ) : updateExisting && dryRun ? (
+            ) : useMatchEndpoint && dryRun ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   Matched {csvData.length} rows against your existing contacts:
@@ -758,9 +820,29 @@ export function CsvImportDialog({
                     </div>
                   </div>
                 )}
+                {hasReportsTo && (
+                  <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                    <p className="font-medium">
+                      {dryRun.relationshipsCreated} reporting relationship{dryRun.relationshipsCreated === 1 ? '' : 's'} will be created.
+                    </p>
+                    {dryRun.managersCreated > 0 && (
+                      <p className="text-xs">
+                        Includes {dryRun.managersCreated} new manager contact{dryRun.managersCreated === 1 ? '' : 's'} (named only in "Reports To"):{' '}
+                        {dryRun.managersCreatedNames.join(', ')}
+                      </p>
+                    )}
+                    {dryRun.relationshipsSkipped.length > 0 && (
+                      <p className="text-xs">
+                        {dryRun.relationshipsSkipped.length} relationship{dryRun.relationshipsSkipped.length === 1 ? '' : 's'} skipped
+                        (ambiguous or self-referential manager):{' '}
+                        {dryRun.relationshipsSkipped.map((s) => s.manager).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Existing contacts keep their ecosystem, status, and every other field — only the
-                  email is added.
+                  email and any reporting relationship are added.
                 </p>
               </div>
             ) : (
@@ -824,8 +906,8 @@ export function CsvImportDialog({
               <Button onClick={handleImport} disabled={importing}>
                 {importing
                   ? 'Importing...'
-                  : updateExisting && dryRun
-                    ? `Apply (${dryRun.preview.filter((p) => p.action === 'update').length} update, ${dryRun.preview.filter((p) => p.action === 'create').length} new)`
+                  : useMatchEndpoint && dryRun
+                    ? `Apply (${dryRun.preview.filter((p) => p.action === 'update').length} update, ${dryRun.preview.filter((p) => p.action === 'create').length} new${dryRun.relationshipsCreated > 0 ? `, ${dryRun.relationshipsCreated} rel` : ''})`
                     : `Import ${csvData.length} Contacts`}
               </Button>
             </>

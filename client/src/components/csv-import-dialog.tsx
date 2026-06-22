@@ -165,13 +165,31 @@ type ImportMatchAction = 'update' | 'create' | 'ambiguous' | 'skip'
 interface ImportMatchResult {
   updated: number
   created: number
+  fieldsFilled: number
+  fieldsFilledByName: Record<string, number>
   relationshipsCreated: number
   managersCreated: number
   managersCreatedNames: string[]
   relationshipsSkipped: { row: number; manager: string; reason: string }[]
   ambiguous: { row: number; name: string; count: number }[]
   errors: { row: number; message: string }[]
-  preview: { row: number; name: string; action: ImportMatchAction; matchedName?: string }[]
+  preview: { row: number; name: string; action: ImportMatchAction; matchedName?: string; filled?: number }[]
+}
+
+// Friendly labels for the fill-blanks per-field breakdown in the dry-run preview.
+const FILL_FIELD_LABEL: Record<string, string> = {
+  title: 'Title',
+  roleDescription: 'Role',
+  phone: 'Phone',
+  linkedinUrl: 'LinkedIn',
+  location: 'Location',
+  howConnected: 'How connected',
+  mutualConnections: 'Mutual connections',
+  whereFound: 'Where found',
+  openQuestions: 'Open questions',
+  notes: 'Notes',
+  personalDetails: 'Personal details',
+  company: 'Company',
 }
 
 interface CsvImportDialogProps {
@@ -452,7 +470,8 @@ export function CsvImportDialog({
           errors: res.errors.map((e) => `Row ${e.row}: ${e.message}`),
         })
         if (changed > 0) {
-          const parts = [`Updated ${res.updated}`, `created ${totalCreated}`]
+          const parts = [`Enriched ${res.updated}`, `created ${totalCreated}`]
+          if (res.fieldsFilled > 0) parts.push(`${res.fieldsFilled} blank field${res.fieldsFilled === 1 ? '' : 's'} filled`)
           if (res.relationshipsCreated > 0) parts.push(`${res.relationshipsCreated} relationship${res.relationshipsCreated === 1 ? '' : 's'}`)
           toast.success(parts.join(', '))
           onImportComplete()
@@ -696,9 +715,10 @@ export function CsvImportDialog({
                   Update existing contacts (match by name)
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Adds the email to a contact that already exists (matched by name), instead of
-                  creating a duplicate — without changing any of their other details. Names not
-                  found are added as new contacts.
+                  Enriches a contact that already exists (matched by name) instead of creating a
+                  duplicate — fills in any <strong>blank</strong> fields (email, title, phone, etc.)
+                  from the CSV but <strong>never overwrites</strong> details they already have.
+                  Ecosystem and status are left unchanged. Names not found are added as new contacts.
                 </p>
               </div>
             </div>
@@ -750,8 +770,10 @@ export function CsvImportDialog({
                   <p className="font-medium">Import Complete</p>
                   {matchResult ? (
                     <p className="text-sm text-muted-foreground mt-1">
-                      {matchResult.updated} existing contact{matchResult.updated === 1 ? '' : 's'} updated,
+                      {matchResult.updated} existing contact{matchResult.updated === 1 ? '' : 's'} enriched,
                       {' '}{matchResult.created + matchResult.managersCreated} created.
+                      {matchResult.fieldsFilled > 0 &&
+                        ` ${matchResult.fieldsFilled} blank field${matchResult.fieldsFilled === 1 ? '' : 's'} filled.`}
                       {matchResult.relationshipsCreated > 0 &&
                         ` ${matchResult.relationshipsCreated} reporting relationship${matchResult.relationshipsCreated === 1 ? '' : 's'} added.`}
                       {matchResult.ambiguous.length > 0 &&
@@ -791,7 +813,7 @@ export function CsvImportDialog({
                     <div className="text-2xl font-semibold">
                       {dryRun.preview.filter((p) => p.action === 'update').length}
                     </div>
-                    <div className="text-xs text-muted-foreground">Add email to existing</div>
+                    <div className="text-xs text-muted-foreground">Enrich existing (fill blanks)</div>
                   </div>
                   <div className="rounded-md border p-3 text-center">
                     <div className="text-2xl font-semibold">
@@ -806,6 +828,21 @@ export function CsvImportDialog({
                     <div className="text-xs text-muted-foreground">No change / skipped</div>
                   </div>
                 </div>
+                {dryRun.fieldsFilled > 0 && (
+                  <div className="rounded-md border p-3 text-sm">
+                    <p className="font-medium">
+                      {dryRun.fieldsFilled} blank field{dryRun.fieldsFilled === 1 ? '' : 's'} will be filled
+                      {' '}across {dryRun.preview.filter((p) => (p.filled ?? 0) > 0).length} contact
+                      {dryRun.preview.filter((p) => (p.filled ?? 0) > 0).length === 1 ? '' : 's'}.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {Object.entries(dryRun.fieldsFilledByName)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([f, n]) => `${FILL_FIELD_LABEL[f] || f} ×${n}`)
+                        .join(', ')}
+                    </p>
+                  </div>
+                )}
                 {dryRun.ambiguous.length > 0 && (
                   <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-700">
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -841,8 +878,9 @@ export function CsvImportDialog({
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Existing contacts keep their ecosystem, status, and every other field — only the
-                  email and any reporting relationship are added.
+                  Existing contacts are enriched by filling <strong>blank</strong> fields only —
+                  data they already have is never overwritten, and ecosystem and status are never
+                  changed.
                 </p>
               </div>
             ) : (
@@ -907,7 +945,7 @@ export function CsvImportDialog({
                 {importing
                   ? 'Importing...'
                   : useMatchEndpoint && dryRun
-                    ? `Apply (${dryRun.preview.filter((p) => p.action === 'update').length} update, ${dryRun.preview.filter((p) => p.action === 'create').length} new${dryRun.relationshipsCreated > 0 ? `, ${dryRun.relationshipsCreated} rel` : ''})`
+                    ? `Apply (${dryRun.preview.filter((p) => p.action === 'update').length} enrich, ${dryRun.preview.filter((p) => p.action === 'create').length} new${dryRun.relationshipsCreated > 0 ? `, ${dryRun.relationshipsCreated} rel` : ''})`
                     : `Import ${csvData.length} Contacts`}
               </Button>
             </>

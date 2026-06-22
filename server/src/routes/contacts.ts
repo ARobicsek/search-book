@@ -405,9 +405,12 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // POST /api/contacts/import-match — bulk CSV import with name-based de-duplication.
-//  • A row whose name matches exactly one existing contact (case-insensitive) only has its
-//    email merged in (primary if empty, else additionalEmails) — NOTHING else on that
-//    contact is touched (ecosystem, status, etc. are never clobbered).
+//  • A row whose name matches exactly one existing contact (case-insensitive) ENRICHES that
+//    contact "fill blanks only": its email is merged additively (primary if empty, else
+//    additionalEmails) AND any mapped scalar field that is currently empty on the contact is
+//    filled from the row. A field that already has a value is NEVER overwritten. ecosystem and
+//    status are excluded entirely (create-time only). Company fills `companyId` only when the
+//    contact has no current employer (no 2nd-employer append in v1).
 //  • A row that matches nothing is created as a new contact (default ecosystem NETWORK)
 //    when createUnmatched is true; otherwise it is skipped.
 //  • A row that matches MORE THAN ONE contact is ambiguous → skipped and reported.
@@ -435,11 +438,29 @@ router.post('/import-match', async (req: Request, res: Response) => {
       return;
     }
 
-    // Build a case-insensitive name index of existing contacts (only the fields we need —
-    // no _count, no large text fields).
-    type IndexedContact = { id: number; name: string; email: string | null; additionalEmails: string | null };
+    // Build a case-insensitive name index of existing contacts. Fill-blanks enrich needs the
+    // current value of every field we might fill, so the index carries them all (incl. the large
+    // notes/personalDetails text). That's acceptable here — this is a one-shot single-user import,
+    // not a hot list endpoint — but still no _count (hangs the libsql adapter). The fill fields
+    // are optional on the type so the synthetic/bare-contact index entries below stay terse.
+    type IndexedContact = {
+      id: number; name: string;
+      email: string | null; additionalEmails: string | null;
+      status?: string;
+      companyId?: number | null; additionalCompanyIds?: string | null;
+      title?: string | null; roleDescription?: string | null; phone?: string | null;
+      linkedinUrl?: string | null; location?: string | null; howConnected?: string | null;
+      mutualConnections?: string | null; whereFound?: string | null; openQuestions?: string | null;
+      notes?: string | null; personalDetails?: string | null;
+    };
     const existing = await prisma.contact.findMany({
-      select: { id: true, name: true, email: true, additionalEmails: true },
+      select: {
+        id: true, name: true, status: true, email: true, additionalEmails: true,
+        companyId: true, additionalCompanyIds: true,
+        title: true, roleDescription: true, phone: true, linkedinUrl: true, location: true,
+        howConnected: true, mutualConnections: true, whereFound: true, openQuestions: true,
+        notes: true, personalDetails: true,
+      },
     });
     const byName = new Map<string, IndexedContact[]>();
     for (const c of existing) {
@@ -452,6 +473,10 @@ router.post('/import-match', async (req: Request, res: Response) => {
     const result = {
       updated: 0,
       created: 0,
+      // Fill-blanks enrich reporting: total blank fields filled across all matched contacts,
+      // plus a per-field breakdown (e.g. { title: 3, phone: 2 }) for the preview.
+      fieldsFilled: 0,
+      fieldsFilledByName: {} as Record<string, number>,
       // "Reports To" relationship import (optional — only when rows carry a reportsTo value).
       relationshipsCreated: 0,
       managersCreated: 0,           // contacts created solely because they were named as a manager
@@ -464,6 +489,7 @@ router.post('/import-match', async (req: Request, res: Response) => {
         name: string;
         action: 'update' | 'create' | 'ambiguous' | 'skip';
         matchedName?: string;
+        filled?: number;            // # of blank fields this row would fill on the matched contact
       }[],
     };
 
@@ -497,6 +523,29 @@ router.post('/import-match', async (req: Request, res: Response) => {
       'howConnected', 'mutualConnections', 'whereFound', 'openQuestions',
       'notes', 'personalDetails',
     ];
+
+    // Fill-blanks patch: for each mapped scalar field present (non-empty) in the row AND
+    // empty/null on the matched contact, include it. Never overwrites a non-empty field
+    // (the no-clobber rule). Returns the patch plus the list of field names that were filled.
+    // (Email is handled separately — additive merge — and company separately too.)
+    function buildFillBlanksPatch(
+      contact: IndexedContact,
+      row: Record<string, string>,
+    ): { patch: Record<string, unknown>; filled: string[] } {
+      const patch: Record<string, unknown> = {};
+      const filled: string[] = [];
+      for (const f of SIMPLE_FIELDS) {
+        const incoming = (row[f] || '').trim();
+        if (!incoming) continue;
+        const current = (((contact as Record<string, unknown>)[f] as string | null | undefined) ?? '')
+          .toString()
+          .trim();
+        if (current) continue; // already has a value — never clobber curated data
+        patch[f] = incoming;
+        filled.push(f);
+      }
+      return { patch, filled };
+    }
 
     // ─── "Reports To" relationship support ──────────────────────────────────
     // Each row may carry a `reportsTo` (the manager's name). We resolve the
@@ -599,21 +648,55 @@ router.post('/import-match', async (req: Request, res: Response) => {
         continue;
       }
 
-      // Exactly one match — merge the email only; never touch any other field.
+      // Exactly one match — ENRICH "fill blanks only": additive email merge + fill any blank
+      // scalar field + fill company when there's no current employer. Curated (non-empty)
+      // fields are never overwritten; ecosystem/status are never touched.
       if (matches.length === 1) {
         const match = matches[0];
         const newEmail = (row.email || '').trim();
-        const merge = newEmail ? buildEmailMerge(match, newEmail) : null;
+        const emailMerge = newEmail ? buildEmailMerge(match, newEmail) : null;
+        const { patch, filled } = buildFillBlanksPatch(match, row);
+
+        // Company: fill companyId only when the contact has no current employer.
+        const companyName = (row.companyName || '').trim();
+        const canFillCompany = !!companyName && currentEmployerCompanyIds({
+          companyId: match.companyId ?? null,
+          additionalCompanyIds: match.additionalCompanyIds ?? null,
+        }).length === 0;
+        if (canFillCompany) filled.push('company');
+
+        const willChange = !!emailMerge || filled.length > 0;
         result.preview.push({
           row: rowNum,
           name,
-          action: merge ? 'update' : 'skip',
+          action: willChange ? 'update' : 'skip',
           matchedName: match.name,
+          filled: filled.length,
         });
-        if (merge && !dryRun) {
+        if (filled.length > 0) {
+          result.fieldsFilled += filled.length;
+          for (const f of filled) result.fieldsFilledByName[f] = (result.fieldsFilledByName[f] || 0) + 1;
+        }
+
+        if (willChange && !dryRun) {
           try {
-            await prisma.contact.update({ where: { id: match.id }, data: merge });
-            result.updated++;
+            let filledCompanyId: number | null = null;
+            if (canFillCompany) {
+              filledCompanyId = await resolveCompany(companyName);
+              if (filledCompanyId) patch.companyId = filledCompanyId;
+            }
+            const data: Record<string, unknown> = { ...patch, ...(emailMerge || {}) };
+            if (Object.keys(data).length > 0) {
+              await prisma.$transaction(async (tx) => {
+                await tx.contact.update({ where: { id: match.id }, data });
+                // Associating an employer with an already-connected contact promotes that
+                // company to CONNECTED too (same rule as create; guarded against downgrades).
+                if (filledCompanyId && match.status === 'CONNECTED') {
+                  await promoteCompaniesToConnected(tx, [filledCompanyId]);
+                }
+              });
+              result.updated++;
+            }
           } catch (err) {
             result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Update failed' });
           }

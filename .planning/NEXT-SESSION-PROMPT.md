@@ -38,11 +38,14 @@ ecosystem→NCQA Internal, preview "57 rel / 14 new managers"; closed without ap
 untouched. `prepush` + full client build green. **Schema-free** (`Relationship`/`REPORTS_TO` already
 existed → no Turso DDL).
 
-**Owner note (data hygiene):** the import matches names **exactly** (case-insensitive), so short/long
-forms are treated as different people. In this file that means two **near-duplicate pairs** will be
-created: "Josie Granner" (manager) vs "Josephine (Josie) Granner" (subject), and "Keirsha Thompson"
-(manager) vs "Keirsha (KEER-shuh) Tompson" (subject, also misspelled). Either normalize those names in
-the CSV before importing, or merge the dupes afterward.
+**Owner note (data hygiene) — ✅ RESOLVED 2026-06-22:** the import matches names **exactly**
+(case-insensitive), so short/long forms are treated as different people. The production dry-run
+flagged near-duplicate **manager** names that would have created spurious new contacts (e.g.
+"Vivek Garg" vs existing "Vivek (Viv-ACHE) Garg"; "Keirsha (KEER-shuh) Thompson" vs existing
+"...Tompson"; plus "Josie Granner" vs "Josephine (Josie) Granner"). **The owner normalized those
+manager cells in the CSV so they resolve to the existing contacts** — no spurious new-manager dupes.
+(General reminder for future imports: this is inherent to exact-name matching; normalize name forms
+in the CSV up front, or merge dupes afterward.)
 
 ### What's Next
 

@@ -339,6 +339,36 @@ export function processFormData(data: Record<string, unknown>): Record<string, u
   return processCompanies(processEmails(data));
 }
 
+// Merge a new email into a contact WITHOUT clobbering: if the contact has no primary
+// email the incoming one becomes primary; otherwise it's appended to additionalEmails
+// (and skipped entirely if the address is already on file, primary or additional).
+// Returns the partial update payload, or null when there is nothing to change.
+function buildEmailMerge(
+  contact: { email: string | null; additionalEmails: string | null },
+  newEmail: string,
+): Record<string, unknown> | null {
+  const incoming = newEmail.trim();
+  if (!incoming) return null;
+  const primary = (contact.email || '').trim();
+  if (!primary) {
+    return { email: incoming };
+  }
+  let additionals: string[] = [];
+  if (contact.additionalEmails) {
+    try {
+      const parsed = JSON.parse(contact.additionalEmails);
+      if (Array.isArray(parsed)) additionals = parsed.filter((e): e is string => typeof e === 'string');
+    } catch {
+      // malformed JSON — treat as no additional emails
+    }
+  }
+  const onFile = [primary, ...additionals].map((e) => e.trim().toLowerCase());
+  if (onFile.includes(incoming.toLowerCase())) {
+    return null; // already on file — nothing to add
+  }
+  return { additionalEmails: JSON.stringify([...additionals, incoming]) };
+}
+
 // POST /api/contacts — create
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -371,6 +401,192 @@ router.post('/', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error creating contact:', error);
     res.status(500).json({ error: 'Failed to create contact' });
+  }
+});
+
+// POST /api/contacts/import-match — bulk CSV import with name-based de-duplication.
+//  • A row whose name matches exactly one existing contact (case-insensitive) only has its
+//    email merged in (primary if empty, else additionalEmails) — NOTHING else on that
+//    contact is touched (ecosystem, status, etc. are never clobbered).
+//  • A row that matches nothing is created as a new contact (default ecosystem NETWORK)
+//    when createUnmatched is true; otherwise it is skipped.
+//  • A row that matches MORE THAN ONE contact is ambiguous → skipped and reported.
+//  • dryRun classifies every row (the import preview) without writing anything.
+router.post('/import-match', async (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as {
+      rows?: Array<Record<string, string>>;
+      createUnmatched?: boolean;
+      dryRun?: boolean;
+    };
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    const createUnmatched = body.createUnmatched !== false; // default true
+    const dryRun = body.dryRun === true;
+
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'No rows to import' });
+      return;
+    }
+
+    // Build a case-insensitive name index of existing contacts (only the fields we need —
+    // no _count, no large text fields).
+    type IndexedContact = { id: number; name: string; email: string | null; additionalEmails: string | null };
+    const existing = await prisma.contact.findMany({
+      select: { id: true, name: true, email: true, additionalEmails: true },
+    });
+    const byName = new Map<string, IndexedContact[]>();
+    for (const c of existing) {
+      const key = c.name.trim().toLowerCase();
+      const arr = byName.get(key);
+      if (arr) arr.push(c);
+      else byName.set(key, [c]);
+    }
+
+    const result = {
+      updated: 0,
+      created: 0,
+      ambiguous: [] as { row: number; name: string; count: number }[],
+      errors: [] as { row: number; message: string }[],
+      preview: [] as {
+        row: number;
+        name: string;
+        action: 'update' | 'create' | 'ambiguous' | 'skip';
+        matchedName?: string;
+      }[],
+    };
+
+    // Company find-or-create cache, only consulted for newly-created rows.
+    const companyCache = new Map<string, number>();
+    let allCompanies: { id: number; name: string }[] | null = null;
+    async function resolveCompany(rawName: string): Promise<number | null> {
+      const key = rawName.trim().toLowerCase();
+      if (!key) return null;
+      const cached = companyCache.get(key);
+      if (cached) return cached;
+      if (!allCompanies) {
+        allCompanies = await prisma.company.findMany({ select: { id: true, name: true } });
+      }
+      const found = allCompanies.find((c) => c.name.trim().toLowerCase() === key);
+      if (found) {
+        companyCache.set(key, found.id);
+        return found.id;
+      }
+      const createdCo = await prisma.company.create({
+        data: { name: rawName.trim(), status: 'RESEARCHING' },
+        select: { id: true },
+      });
+      allCompanies.push({ id: createdCo.id, name: rawName.trim() });
+      companyCache.set(key, createdCo.id);
+      return createdCo.id;
+    }
+
+    const SIMPLE_FIELDS = [
+      'title', 'roleDescription', 'phone', 'linkedinUrl', 'location',
+      'howConnected', 'mutualConnections', 'whereFound', 'openQuestions',
+      'notes', 'personalDetails',
+    ];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] || {};
+      const rowNum = i + 2; // +2: the header is row 1 in the source CSV
+      const name = (row.name || '').trim();
+      if (!name) {
+        result.errors.push({ row: rowNum, message: 'Missing name' });
+        result.preview.push({ row: rowNum, name: '', action: 'skip' });
+        continue;
+      }
+      const matches = byName.get(name.toLowerCase()) || [];
+
+      // Ambiguous — more than one contact shares this name.
+      if (matches.length > 1) {
+        result.ambiguous.push({ row: rowNum, name, count: matches.length });
+        result.preview.push({ row: rowNum, name, action: 'ambiguous' });
+        continue;
+      }
+
+      // Exactly one match — merge the email only; never touch any other field.
+      if (matches.length === 1) {
+        const match = matches[0];
+        const newEmail = (row.email || '').trim();
+        const merge = newEmail ? buildEmailMerge(match, newEmail) : null;
+        result.preview.push({
+          row: rowNum,
+          name,
+          action: merge ? 'update' : 'skip',
+          matchedName: match.name,
+        });
+        if (dryRun || !merge) continue;
+        try {
+          await prisma.contact.update({ where: { id: match.id }, data: merge });
+          result.updated++;
+        } catch (err) {
+          result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Update failed' });
+        }
+        continue;
+      }
+
+      // No match.
+      if (!createUnmatched) {
+        result.preview.push({ row: rowNum, name, action: 'skip' });
+        continue;
+      }
+      result.preview.push({ row: rowNum, name, action: 'create' });
+      if (dryRun) continue;
+      try {
+        const companyName = (row.companyName || '').trim();
+        const companyId = companyName ? await resolveCompany(companyName) : null;
+
+        const data: Record<string, unknown> = {
+          name,
+          ecosystem: (row.ecosystem || '').trim() || 'NETWORK',
+          status: (row.status || '').trim() || 'CONNECTED',
+        };
+        const email = (row.email || '').trim();
+        if (email) data.email = email;
+        for (const f of SIMPLE_FIELDS) {
+          const v = (row[f] || '').trim();
+          if (v) data[f] = v;
+        }
+        if (companyId) data.companyId = companyId;
+        else if (companyName) data.companyName = companyName;
+
+        const createdContact = await prisma.$transaction(async (tx) => {
+          const created = await tx.contact.create({ data: data as any });
+          await tx.contactStatusHistory.create({
+            data: { contactId: created.id, oldStatus: null, newStatus: created.status },
+          });
+          if (created.status === 'CONNECTED') {
+            await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(created));
+          }
+          return created;
+        });
+
+        const linkUrl = (row.linkUrl || '').trim();
+        if (linkUrl) {
+          try {
+            await prisma.link.create({ data: { url: linkUrl, title: linkUrl, contactId: createdContact.id } });
+          } catch {
+            // link is best-effort — the contact was still created
+          }
+        }
+
+        // Index the new contact so a later duplicate row in the same file matches it.
+        byName.set(name.toLowerCase(), [{
+          id: createdContact.id,
+          name: createdContact.name,
+          email: createdContact.email,
+          additionalEmails: createdContact.additionalEmails,
+        }]);
+        result.created++;
+      } catch (err) {
+        result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Create failed' });
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in import-match:', error);
+    res.status(500).json({ error: 'Failed to import contacts' });
   }
 });
 

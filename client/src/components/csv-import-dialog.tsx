@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 import type { Contact } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -150,6 +151,16 @@ const STATUS_MAP: Record<string, string> = {
   closed: 'NONE',
 }
 
+// Result of the server-side name-matching import (POST /contacts/import-match).
+type ImportMatchAction = 'update' | 'create' | 'ambiguous' | 'skip'
+interface ImportMatchResult {
+  updated: number
+  created: number
+  ambiguous: { row: number; name: string; count: number }[]
+  errors: { row: number; message: string }[]
+  preview: { row: number; name: string; action: ImportMatchAction; matchedName?: string }[]
+}
+
 interface CsvImportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -167,6 +178,11 @@ export function CsvImportDialog({
   const [columnMap, setColumnMap] = useState<Record<number, string>>({})
   const [importing, setImporting] = useState(false)
   const [importResults, setImportResults] = useState<{ success: number; errors: string[] } | null>(null)
+  // Enrichment mode: match CSV rows to existing contacts by name and merge (don't duplicate).
+  const [updateExisting, setUpdateExisting] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [dryRun, setDryRun] = useState<ImportMatchResult | null>(null)
+  const [matchResult, setMatchResult] = useState<ImportMatchResult | null>(null)
 
   const resetState = useCallback(() => {
     setStep('upload')
@@ -174,6 +190,10 @@ export function CsvImportDialog({
     setHeaders([])
     setColumnMap({})
     setImportResults(null)
+    setUpdateExisting(false)
+    setAnalyzing(false)
+    setDryRun(null)
+    setMatchResult(null)
   }, [])
 
   function handleClose() {
@@ -324,12 +344,96 @@ export function CsvImportDialog({
     })
   }
 
+  // Build the mapped, server-ready row object for the enrichment endpoint. Only includes
+  // fields actually present in the CSV (the server applies defaults for created contacts).
+  function buildRowData(row: string[]): Record<string, string> {
+    const rawData: Record<string, string> = {}
+    Object.entries(columnMap).forEach(([colIdx, field]) => {
+      const value = row[parseInt(colIdx)]?.trim() ?? ''
+      if (value) rawData[field] = value
+    })
+
+    const out: Record<string, string> = {}
+    if (rawData.name) {
+      out.name = rawData.name
+    } else if (rawData.firstName || rawData.lastName) {
+      out.name = [rawData.firstName, rawData.lastName].filter(Boolean).join(' ')
+    }
+    if (rawData.phone && rawData.mobile) out.phone = `${rawData.phone} / ${rawData.mobile}`
+    else if (rawData.phone) out.phone = rawData.phone
+    else if (rawData.mobile) out.phone = rawData.mobile
+    if (rawData.ecosystem) out.ecosystem = ECOSYSTEM_MAP[rawData.ecosystem.toLowerCase()] || 'NETWORK'
+    if (rawData.status) out.status = STATUS_MAP[rawData.status.toLowerCase()] || 'CONNECTED'
+
+    const passthrough = [
+      'title', 'roleDescription', 'email', 'companyName', 'linkedinUrl', 'location',
+      'howConnected', 'mutualConnections', 'whereFound', 'openQuestions', 'notes',
+      'personalDetails', 'linkUrl',
+    ]
+    for (const f of passthrough) {
+      if (rawData[f]) out[f] = rawData[f]
+    }
+    return out
+  }
+
+  // Moving from "map" → "preview": in enrichment mode, ask the server to classify every
+  // row (a dry run that writes nothing) so the preview shows real update/create/skip counts.
+  async function handleGoToPreview() {
+    if (updateExisting) {
+      setAnalyzing(true)
+      try {
+        const rows = csvData.map(buildRowData)
+        const res = await api.post<ImportMatchResult>('/contacts/import-match', {
+          rows,
+          createUnmatched: true,
+          dryRun: true,
+        })
+        setDryRun(res)
+      } catch {
+        toast.error('Could not analyze the import. Is the server running?')
+        setAnalyzing(false)
+        return
+      }
+      setAnalyzing(false)
+    }
+    setStep('preview')
+  }
+
   const hasNameMapping = Object.values(columnMap).includes('name') ||
     (Object.values(columnMap).includes('firstName') || Object.values(columnMap).includes('lastName'))
 
   async function handleImport() {
     if (!hasNameMapping) {
       toast.error('You must map a column to "Name" or "First Name"/"Last Name"')
+      return
+    }
+
+    // Enrichment mode: hand the whole batch to the server, which matches by name,
+    // merges emails into existing contacts (no clobbering), and creates the rest.
+    if (updateExisting) {
+      setImporting(true)
+      try {
+        const rows = csvData.map(buildRowData)
+        const res = await api.post<ImportMatchResult>('/contacts/import-match', {
+          rows,
+          createUnmatched: true,
+          dryRun: false,
+        })
+        setMatchResult(res)
+        setImportResults({
+          success: res.updated + res.created,
+          errors: res.errors.map((e) => `Row ${e.row}: ${e.message}`),
+        })
+        if (res.updated + res.created > 0) {
+          toast.success(`Updated ${res.updated}, created ${res.created}`)
+          onImportComplete()
+        } else {
+          toast.info('No contacts were added or changed')
+        }
+      } catch {
+        toast.error('Import failed. Is the server running?')
+      }
+      setImporting(false)
       return
     }
 
@@ -551,6 +655,24 @@ export function CsvImportDialog({
                 </TableBody>
               </Table>
             </div>
+            <div className="flex items-start gap-3 rounded-md border p-3">
+              <Checkbox
+                id="update-existing"
+                checked={updateExisting}
+                onCheckedChange={(v) => setUpdateExisting(v === true)}
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="update-existing" className="cursor-pointer">
+                  Update existing contacts (match by name)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Adds the email to a contact that already exists (matched by name), instead of
+                  creating a duplicate — without changing any of their other details. Names not
+                  found are added as new contacts (General Network).
+                </p>
+              </div>
+            </div>
             {!hasNameMapping && (
               <div className="flex items-center gap-2 text-amber-600 text-sm">
                 <AlertCircle className="h-4 w-4" />
@@ -566,10 +688,20 @@ export function CsvImportDialog({
               <div className="space-y-4">
                 <div className="p-4 bg-muted rounded-lg">
                   <p className="font-medium">Import Complete</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {importResults.success} contacts imported successfully.
-                    {importResults.errors.length > 0 && ` ${importResults.errors.length} rows failed.`}
-                  </p>
+                  {matchResult ? (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {matchResult.updated} existing contact{matchResult.updated === 1 ? '' : 's'} updated,
+                      {' '}{matchResult.created} created.
+                      {matchResult.ambiguous.length > 0 &&
+                        ` ${matchResult.ambiguous.length} skipped (duplicate name in your contacts).`}
+                      {matchResult.errors.length > 0 && ` ${matchResult.errors.length} rows failed.`}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {importResults.success} contacts imported successfully.
+                      {importResults.errors.length > 0 && ` ${importResults.errors.length} rows failed.`}
+                    </p>
+                  )}
                 </div>
                 {importResults.errors.length > 0 && (
                   <div className="border rounded-md p-3 max-h-[200px] overflow-auto">
@@ -586,6 +718,50 @@ export function CsvImportDialog({
                     </ul>
                   </div>
                 )}
+              </div>
+            ) : updateExisting && dryRun ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Matched {csvData.length} rows against your existing contacts:
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-md border p-3 text-center">
+                    <div className="text-2xl font-semibold">
+                      {dryRun.preview.filter((p) => p.action === 'update').length}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Add email to existing</div>
+                  </div>
+                  <div className="rounded-md border p-3 text-center">
+                    <div className="text-2xl font-semibold">
+                      {dryRun.preview.filter((p) => p.action === 'create').length}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Create new</div>
+                  </div>
+                  <div className="rounded-md border p-3 text-center">
+                    <div className="text-2xl font-semibold">
+                      {dryRun.preview.filter((p) => p.action === 'skip').length}
+                    </div>
+                    <div className="text-xs text-muted-foreground">No change / skipped</div>
+                  </div>
+                </div>
+                {dryRun.ambiguous.length > 0 && (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-700">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium">
+                        {dryRun.ambiguous.length} name{dryRun.ambiguous.length === 1 ? '' : 's'} skipped (more than one
+                        contact has that name — resolve by hand):
+                      </p>
+                      <p className="text-xs mt-1">
+                        {dryRun.ambiguous.map((a) => a.name).join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Existing contacts keep their ecosystem, status, and every other field — only the
+                  email is added.
+                </p>
               </div>
             ) : (
               <>
@@ -635,8 +811,8 @@ export function CsvImportDialog({
               <Button variant="outline" onClick={() => setStep('upload')}>
                 Back
               </Button>
-              <Button onClick={() => setStep('preview')} disabled={!hasNameMapping}>
-                Preview
+              <Button onClick={handleGoToPreview} disabled={!hasNameMapping || analyzing}>
+                {analyzing ? 'Analyzing…' : 'Preview'}
               </Button>
             </>
           )}
@@ -646,7 +822,11 @@ export function CsvImportDialog({
                 Back
               </Button>
               <Button onClick={handleImport} disabled={importing}>
-                {importing ? 'Importing...' : `Import ${csvData.length} Contacts`}
+                {importing
+                  ? 'Importing...'
+                  : updateExisting && dryRun
+                    ? `Apply (${dryRun.preview.filter((p) => p.action === 'update').length} update, ${dryRun.preview.filter((p) => p.action === 'create').length} new)`
+                    : `Import ${csvData.length} Contacts`}
               </Button>
             </>
           )}

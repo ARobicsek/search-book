@@ -5,37 +5,44 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — De-duplicating CSV import (match by name + merge emails) (2026-06-21)
+### What Was Just Completed — CSV import "Reports To" relationships (2026-06-22)
 
-One owner ask, **schema-free, verified live, pushed to `main`** (`6fb67e7`).
+One owner ask, **schema-free, verified live, pushed to `main`**. Extends last session's enrich import.
 
-**Problem:** owner wanted to bulk-import a list of NCQA email addresses (a 2-column CSV: Name + NCQA
-email) without creating duplicates of contacts already in the DB. The old "Import Contacts from CSV"
-always did `POST /contacts` per row → guaranteed duplicates, and the contacts **list** endpoint's
-`select` doesn't even return `email`, so naive client-side matching wasn't viable.
+**Problem:** owner had a 2-column org-chart CSV (`Name`, `Reports To (1-up)` — e.g. `qmrg_1up_reporting.csv`)
+and wanted the enrich import to turn the manager column into a **`REPORTS_TO` relationship** between
+contacts.
 
-**Built — opt-in "Update existing contacts (match by name)" mode:**
-- New server endpoint **`POST /api/contacts/import-match`** (`server/src/routes/contacts.ts`). Matches
-  each row's name **case-insensitively** against all existing contacts:
-  - **Exactly one match → merge the email only** (primary if the contact has none, else appended to
-    `additionalEmails`, deduped) and **touch NOTHING else** — ecosystem, status, and every other
-    field are never clobbered (the owner's explicit requirement).
-  - **No match → create new** contact, default ecosystem **`NETWORK`** (General Network, per owner).
-  - **>1 match → ambiguous**, skipped and reported (resolve by hand).
-  - **`dryRun`** classifies every row without writing — powers the preview.
-  - Helper `buildEmailMerge` does the no-clobber email merge; company find-or-create is server-side
-    (cached) for created rows only.
-- Dialog (`client/src/components/csv-import-dialog.tsx`): a **Checkbox toggle** on the map step; the
-  Preview step calls the dry-run and shows a 3-card breakdown (**Add email to existing / Create new /
-  No change**) + an amber list of ambiguous names, with a reassurance line that existing fields are
-  preserved. The legacy create-only path is **unchanged** when the toggle is off.
+**Built — `reportsTo` support on the existing `POST /api/contacts/import-match`:**
+- Each row may now carry a **`reportsTo`** (manager name); the call also carries a **`defaultEcosystem`**.
+  After each subject is matched/created, the manager is resolved via the same case-insensitive name
+  index (match existing, else **create a bare contact**, indexed so repeats de-dup) and a **`REPORTS_TO`
+  relationship** is created `subject → manager` (matches the `[from] reports to [to]` UI direction).
+  - **Idempotent** — pre-loads all existing `REPORTS_TO` pairs + a per-run set; never duplicates.
+  - Blank / **"Not found"** / self-reference → **no relationship**.
+  - Ambiguous manager (name matches >1 existing) → skipped + reported.
+  - **`dryRun`** predicts everything via negative **synthetic ids** (one code path, no writes) so the
+    preview shows relationships-to-create + the new-manager names.
+- Dialog (`client/src/components/csv-import-dialog.tsx`): a **"Reports To (manager)"** field mapping
+  (+ header aliases incl. `reports to (1-up)`); **mapping a Reports-To column auto-routes through the
+  match endpoint** so subjects + managers de-dup (no duplicates); a new **"Ecosystem for new contacts"**
+  picker (default General Network — set NCQA Internal for internal org charts); the preview adds a
+  relationship/new-manager summary that **surfaces name-form near-dups** ("Josie Granner" vs
+  "Josephine (Josie) Granner"); apply toast + button label include relationship counts.
 
-Verified end-to-end: server via direct API assertions (merge-to-additional, set-primary, create
-NETWORK/CONNECTED, ambiguous skip, already-on-file no-op, **no duplicate, no clobber** — all test rows
-cleaned up); full browser flow (chrome-devtools) against the real 60-row `ncqa_email_addresses.csv` —
-auto-mapped Name+Email, dry-run = **3 matched existing** (Madeline Henry / Julie Seibert / Tricia
-Elliott) · **57 new** · **0 clobbered**; closed without applying so the dev DB was left untouched.
-`prepush` + full client+server build green.
+Verified end-to-end: server via a throwaway script (dry-run on the real 60-row `qmrg_1up_reporting.csv`
+= **57 relationships** [= 60 − 3 "Not found"], 14 managers created, 0 ambiguous, 0 errors; real-write
+test asserted direction + ecosystem + idempotent re-run + not-found/self skips, then cleaned up its 2
+test contacts + relationship); full browser flow (chrome-devtools, desktop + 390px) — auto-mapped,
+ecosystem→NCQA Internal, preview "57 rel / 14 new managers"; closed without applying so the dev DB was
+untouched. `prepush` + full client build green. **Schema-free** (`Relationship`/`REPORTS_TO` already
+existed → no Turso DDL).
+
+**Owner note (data hygiene):** the import matches names **exactly** (case-insensitive), so short/long
+forms are treated as different people. In this file that means two **near-duplicate pairs** will be
+created: "Josie Granner" (manager) vs "Josephine (Josie) Granner" (subject), and "Keirsha Thompson"
+(manager) vs "Keirsha (KEER-shuh) Tompson" (subject, also misspelled). Either normalize those names in
+the CSV before importing, or merge the dupes afterward.
 
 ### What's Next
 
@@ -85,8 +92,8 @@ Elliott) · **57 new** · **0 clobbered**; closed without applying so the dev DB
 
 ### Working branch
 
-`main` — this session adds one schema-free commit pushed to `main`: de-duplicating CSV import
-(`6fb67e7`) — plus this docs follow-up. **Nothing pending** — no Turso DDL needed, no held commits.
+`main` — this session adds one schema-free commit pushed to `main`: CSV import "Reports To"
+relationships (extends the enrich import). **Nothing pending** — no Turso DDL needed, no held commits.
 
 ---
 
@@ -98,9 +105,10 @@ Durable version (works every session — it defers to the docs, which stay curre
 > where we left off and what's next before doing anything.
 
 Context for *this* upcoming session specifically: last session shipped one schema-free owner ask —
-**de-duplicating CSV import**: the "Import Contacts from CSV" dialog has a new opt-in "Update existing
-contacts (match by name)" mode backed by `POST /api/contacts/import-match` that merges emails into
-existing contacts (no clobbering of any other field), creates unmatched names as new contacts
-(General Network), and flags ambiguous duplicate-name rows — with a dry-run preview. Nothing is left
+**CSV import "Reports To" relationships**: the enrich import (`POST /api/contacts/import-match`) now
+accepts a per-row `reportsTo` (manager name) and turns it into a `REPORTS_TO` relationship
+`subject → manager`, resolving/creating both contacts by name (idempotent; blank/"Not found"/self →
+no relationship; ambiguous manager skipped). The dialog gained a "Reports To (manager)" mapping (which
+auto-routes through the match endpoint) and an "Ecosystem for new contacts" picker. Nothing is left
 pending (no Turso DDL, no held commits). Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`
 (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).

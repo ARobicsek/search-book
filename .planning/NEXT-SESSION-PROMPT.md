@@ -116,12 +116,14 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped one schema-free owner ask —
-**any-field enrich import "fill blanks only"** (`0ac5c0b`): the name-match path on
+Context for *this* upcoming session specifically: last session shipped two schema-free owner asks.
+(1) **Any-field enrich import "fill blanks only"** (`0ac5c0b`): the name-match path on
 `POST /api/contacts/import-match` now fills **any** mapped scalar field on a matched contact when that
 field is **currently empty** (never overwriting curated data; `ecosystem`/`status` excluded; company
 fills only when there's no current employer), on top of the existing email merge + reports-to
-relationships. The preview gained a blank-fields-filled breakdown. **No carried-over task** — the
+relationships. The preview gained a blank-fields-filled breakdown. (2) **CSV header auto-mapper
+hardened** (`ad3b529`): the import dialog recognizes many more header synonyms (normalized aliases +
+conservative fuzzy fallback). **No carried-over task** — the
 CSV-import enrich feature is complete for v1 (future overwrite/append options exist but are
 unrequested; don't build unprompted). Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`
 (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9). Nothing is pending (no Turso DDL,

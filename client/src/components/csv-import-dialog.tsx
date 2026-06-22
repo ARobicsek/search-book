@@ -57,60 +57,151 @@ const IMPORTABLE_FIELDS = [
   { value: 'reportsTo', label: 'Reports To (manager)' },
 ]
 
-// Column header aliases for auto-mapping
+// Column header aliases for auto-mapping. Keys are written naturally; they're matched
+// case- and punctuation-insensitively via normalizeHeader (so "Reports To (1-up)",
+// "reports_to", "REPORTS TO" all hit the "reports to 1 up" / "reports to" entries).
 const HEADER_ALIASES: Record<string, string> = {
-  // Name variations
-  'name': 'name',
-  'full name': 'name',
-  'contact name': 'name',
-  'first name': 'firstName',
-  'firstname': 'firstName',
-  'first': 'firstName',
-  'last name': 'lastName',
-  'lastname': 'lastName',
-  'last': 'lastName',
-  // Company
-  'company': 'companyName',
-  'company name': 'companyName',
-  'organization': 'companyName',
-  // Contact info
-  'email': 'email',
-  'email address': 'email',
-  'phone': 'phone',
-  'phone number': 'phone',
-  'mobile': 'mobile',
-  'mobile phone': 'mobile',
-  'cell': 'mobile',
-  'cell phone': 'mobile',
+  // Name
+  'name': 'name', 'full name': 'name', 'fullname': 'name', 'contact name': 'name',
+  'contact': 'name', 'person': 'name', 'person name': 'name', 'display name': 'name',
+  'first name': 'firstName', 'firstname': 'firstName', 'first': 'firstName',
+  'given name': 'firstName', 'forename': 'firstName', 'fname': 'firstName',
+  'last name': 'lastName', 'lastname': 'lastName', 'last': 'lastName',
+  'surname': 'lastName', 'family name': 'lastName', 'lname': 'lastName',
+  // Company / employer
+  'company': 'companyName', 'company name': 'companyName', 'organization': 'companyName',
+  'organisation': 'companyName', 'org': 'companyName', 'org name': 'companyName',
+  'organization name': 'companyName', 'employer': 'companyName', 'current employer': 'companyName',
+  'current company': 'companyName', 'workplace': 'companyName', 'firm': 'companyName',
+  'business': 'companyName', 'account': 'companyName', 'account name': 'companyName',
+  // Title / role
+  'title': 'title', 'job title': 'title', 'role': 'title', 'position': 'title',
+  'job': 'title', 'designation': 'title', 'current title': 'title', 'current role': 'title',
+  'job role': 'title', 'current position': 'title',
+  // Role description
+  'role description': 'roleDescription', 'role desc': 'roleDescription',
+  'role details': 'roleDescription', 'role summary': 'roleDescription',
+  'responsibilities': 'roleDescription', 'description': 'roleDescription', 'desc': 'roleDescription',
+  'job description': 'roleDescription', 'about': 'roleDescription', 'bio': 'roleDescription',
+  'biography': 'roleDescription', 'professional summary': 'roleDescription',
+  'profile summary': 'roleDescription', 'what they do': 'roleDescription',
+  // Ecosystem
+  'ecosystem': 'ecosystem', 'category': 'ecosystem', 'segment': 'ecosystem',
+  'sector': 'ecosystem', 'vertical': 'ecosystem', 'classification': 'ecosystem',
+  'contact type': 'ecosystem', 'ecosystem category': 'ecosystem',
+  // Status
+  'status': 'status', 'stage': 'status', 'contact status': 'status',
+  'relationship status': 'status', 'lead status': 'status', 'pipeline stage': 'status',
+  // Email
+  'email': 'email', 'email address': 'email', 'e mail': 'email', 'e mail address': 'email',
+  'mail': 'email', 'work email': 'email', 'business email': 'email', 'primary email': 'email',
+  'personal email': 'email', 'contact email': 'email', 'email 1': 'email',
+  // Phone / mobile
+  'phone': 'phone', 'phone number': 'phone', 'telephone': 'phone', 'tel': 'phone',
+  'work phone': 'phone', 'office phone': 'phone', 'business phone': 'phone',
+  'direct line': 'phone', 'landline': 'phone', 'contact number': 'phone', 'phone 1': 'phone',
+  'mobile': 'mobile', 'mobile phone': 'mobile', 'cell': 'mobile', 'cell phone': 'mobile',
+  'cellphone': 'mobile', 'mobile number': 'mobile', 'cell number': 'mobile', 'personal phone': 'mobile',
   // LinkedIn
-  'linkedin': 'linkedinUrl',
-  'linkedin url': 'linkedinUrl',
-  'linkedin profile': 'linkedinUrl',
-  'linkedinurl': 'linkedinUrl',
+  'linkedin': 'linkedinUrl', 'linkedin url': 'linkedinUrl', 'linkedin profile': 'linkedinUrl',
+  'linkedinurl': 'linkedinUrl', 'linkedin link': 'linkedinUrl', 'linkedin address': 'linkedinUrl',
+  'li': 'linkedinUrl', 'profile url': 'linkedinUrl', 'linkedin com': 'linkedinUrl',
   // Location
-  'location': 'location',
-  'city': 'location',
-  'address': 'location',
-  // Other
-  'title': 'title',
-  'job title': 'title',
-  'role': 'title',
-  'position': 'title',
-  'status': 'status',
-  'link': 'linkUrl',
-  'link url': 'linkUrl',
-  'website': 'linkUrl',
-  'url': 'linkUrl',
-  'notes': 'notes',
-  'ecosystem': 'ecosystem',
+  'location': 'location', 'city': 'location', 'address': 'location', 'region': 'location',
+  'geography': 'location', 'geo': 'location', 'based in': 'location', 'based': 'location',
+  'town': 'location', 'state': 'location', 'country': 'location', 'area': 'location',
+  'metro': 'location', 'market': 'location', 'locale': 'location', 'city state': 'location',
+  // Link / website
+  'link': 'linkUrl', 'link url': 'linkUrl', 'website': 'linkUrl', 'web site': 'linkUrl',
+  'website url': 'linkUrl', 'url': 'linkUrl', 'web': 'linkUrl', 'homepage': 'linkUrl',
+  'home page': 'linkUrl', 'site': 'linkUrl', 'web address': 'linkUrl', 'personal website': 'linkUrl',
+  'company website': 'linkUrl',
+  // How connected
+  'how connected': 'howConnected', 'how we connected': 'howConnected', 'how we met': 'howConnected',
+  'how known': 'howConnected', 'how we know them': 'howConnected', 'how do we know them': 'howConnected',
+  'connection context': 'howConnected', 'source of connection': 'howConnected',
+  'introduced by': 'howConnected', 'introduction': 'howConnected', 'how introduced': 'howConnected',
+  'relationship context': 'howConnected',
+  // Mutual connections
+  'mutual connections': 'mutualConnections', 'mutual connection': 'mutualConnections',
+  'mutual': 'mutualConnections', 'mutuals': 'mutualConnections', 'mutual contacts': 'mutualConnections',
+  'connections': 'mutualConnections', 'connection': 'mutualConnections',
+  'connecting people': 'mutualConnections', 'connecting person': 'mutualConnections',
+  'shared connections': 'mutualConnections', 'common connections': 'mutualConnections',
+  'connections in common': 'mutualConnections', 'people in common': 'mutualConnections',
+  'mutual friends': 'mutualConnections', 'connectors': 'mutualConnections',
+  // Where found
+  'where found': 'whereFound', 'where did you find': 'whereFound', 'where did we find': 'whereFound',
+  'found via': 'whereFound', 'found through': 'whereFound', 'found at': 'whereFound',
+  'found on': 'whereFound', 'source': 'whereFound', 'lead source': 'whereFound',
+  'referral source': 'whereFound', 'sourced from': 'whereFound', 'discovered': 'whereFound',
+  'origin': 'whereFound', 'where met': 'whereFound',
+  // Open questions
+  'open questions': 'openQuestions', 'open question': 'openQuestions', 'questions': 'openQuestions',
+  'question': 'openQuestions', 'follow up questions': 'openQuestions', 'questions to ask': 'openQuestions',
+  'to ask': 'openQuestions', 'things to ask': 'openQuestions', 'open items': 'openQuestions',
+  'outstanding questions': 'openQuestions',
+  // Personal details
+  'personal details': 'personalDetails', 'personal': 'personalDetails', 'personal notes': 'personalDetails',
+  'personal info': 'personalDetails', 'personal information': 'personalDetails', 'family': 'personalDetails',
+  'family details': 'personalDetails', 'hobbies': 'personalDetails', 'interests': 'personalDetails',
+  'personal background': 'personalDetails', 'personal life': 'personalDetails',
+  // Notes
+  'notes': 'notes', 'note': 'notes', 'comments': 'notes', 'comment': 'notes', 'remarks': 'notes',
+  'remark': 'notes', 'details': 'notes', 'detail': 'notes', 'additional notes': 'notes',
+  'additional info': 'notes', 'additional information': 'notes', 'misc': 'notes', 'memo': 'notes',
+  'general notes': 'notes', 'observations': 'notes', 'free text': 'notes',
   // Reports-To relationship (the manager's name)
-  'reports to': 'reportsTo',
-  'reports to (1-up)': 'reportsTo',
-  'reports to (1 up)': 'reportsTo',
-  'reportsto': 'reportsTo',
-  'manager': 'reportsTo',
-  '1-up': 'reportsTo',
-  'reports_to': 'reportsTo',
+  'reports to': 'reportsTo', 'reports to 1 up': 'reportsTo', 'reports to 1up': 'reportsTo',
+  'reportsto': 'reportsTo', 'reports to manager': 'reportsTo', 'reporting to': 'reportsTo',
+  'reports into': 'reportsTo', 'manager': 'reportsTo', 'manager name': 'reportsTo',
+  'direct manager': 'reportsTo', 'reporting manager': 'reportsTo', 'line manager': 'reportsTo',
+  'supervisor': 'reportsTo', 'boss': 'reportsTo', '1 up': 'reportsTo',
+}
+
+// Normalize a CSV header so matching ignores case, punctuation and separators:
+// "Reports To (1-up)" -> "reports to 1 up", "E-mail Address" -> "e mail address".
+function normalizeHeader(h: string): string {
+  return h.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+// Alias keys pre-normalized once, so lookups are a single normalized comparison.
+const NORMALIZED_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(HEADER_ALIASES).map(([k, v]) => [normalizeHeader(k), v]),
+)
+
+// Single-word field names too generic to safely infer from a substring (e.g. "name"
+// appears in "Company Name"); these only map via an explicit alias or exact match.
+const GENERIC_FIELD_WORDS = new Set(['name'])
+
+// Pick the best field for a CSV header: explicit alias → exact value/label → a
+// conservative fuzzy fallback that only commits when exactly ONE field qualifies
+// (so ambiguous headers stay unmapped rather than mis-assigned). Returns '' for no match.
+function autoMapField(header: string): string {
+  const norm = normalizeHeader(header)
+  if (!norm) return ''
+  if (NORMALIZED_ALIASES[norm]) return NORMALIZED_ALIASES[norm]
+
+  const words = new Set(norm.split(' '))
+  const candidates = new Set<string>()
+  for (const f of IMPORTABLE_FIELDS) {
+    if (f.value === 'skip') continue
+    for (const target of [normalizeHeader(f.value), normalizeHeader(f.label)]) {
+      if (!target) continue
+      if (norm === target) return f.value // exact value/label match wins outright
+      const targetWords = target.split(' ')
+      if (targetWords.length > 1) {
+        // all words of a multi-word field name present, e.g. "role description" in
+        // "current role description"
+        if (targetWords.every((w) => words.has(w))) candidates.add(f.value)
+      } else if (target.length > 3 && words.has(target) && !GENERIC_FIELD_WORDS.has(target)) {
+        // a distinctive single-word field name present as a whole word, e.g. "phone"
+        // in "office phone number"
+        candidates.add(f.value)
+      }
+    }
+  }
+  return candidates.size === 1 ? [...candidates][0] : ''
 }
 
 // Valid ecosystem values (legacy job-search terms map into the NCQA taxonomy)
@@ -298,28 +389,16 @@ export function CsvImportDialog({
       setHeaders(headerRow)
       setCsvData(dataRows)
 
-      // Auto-map columns based on header names using aliases
+      // Auto-map columns by header name (aliases → exact → conservative fuzzy). Don't
+      // map two columns to the same field — keep the first so a later generic header
+      // (e.g. a second "Notes") doesn't clobber an earlier confident match.
       const autoMap: Record<number, string> = {}
+      const usedFields = new Set<string>()
       headerRow.forEach((header, idx) => {
-        const h = header.toLowerCase().trim()
-        // First check aliases
-        if (HEADER_ALIASES[h]) {
-          autoMap[idx] = HEADER_ALIASES[h]
-          return
-        }
-        // Then try matching against field values/labels
-        const match = IMPORTABLE_FIELDS.find((f) => {
-          const fieldName = f.value.toLowerCase()
-          const labelName = f.label.toLowerCase().replace(' (full)', '')
-          return (
-            h === fieldName ||
-            h === labelName ||
-            h.includes(fieldName) ||
-            fieldName.includes(h)
-          )
-        })
-        if (match && match.value !== 'skip') {
-          autoMap[idx] = match.value
+        const field = autoMapField(header)
+        if (field && !usedFields.has(field)) {
+          autoMap[idx] = field
+          usedFields.add(field)
         }
       })
       setColumnMap(autoMap)

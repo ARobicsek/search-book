@@ -46,12 +46,39 @@ the CSV before importing, or merge the dupes afterward.
 
 ### What's Next
 
-1. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
+1. **★ PRIMARY (owner ask, 2026-06-22): any-field enrich import — "fill blanks only."** Today the
+   match-by-name path only enriches existing contacts with **email** (+ the new reports-to
+   relationship); every other mapped column is ignored for matched contacts (the no-clobber rule).
+   Extend it so a CSV can fill **any** mapped field on an existing contact — **but only when that
+   field is currently empty; never overwrite curated data** (owner decision via AskUserQuestion:
+   *fill blanks only* — NOT per-column toggles, NOT a global overwrite mode, for v1).
+   - **Server** (`POST /api/contacts/import-match`, the `matches.length === 1` branch in
+     `server/src/routes/contacts.ts`): replace the email-only merge with a **fill-blanks patch
+     builder** — for each mapped scalar field present in the row AND empty/null on the matched
+     contact, include it. Email keeps its existing additive merge (`buildEmailMerge` → primary if
+     empty else `additionalEmails`, deduped) — unchanged. Apply to the free-text/scalar set
+     (`title, roleDescription, phone, linkedinUrl, location, howConnected, mutualConnections,
+     whereFound, openQuestions, notes, personalDetails`). Patch empty → action `skip`; non-empty →
+     `update`. **Still never touches a non-empty field.**
+   - **Sub-decisions to settle next session (recommended defaults in parens):** company —
+     fill `companyId` only when the contact has **no** current employer, via `resolveCompany`
+     (don't append a 2nd employer in v1); `ecosystem`/`status` — **exclude** from fill (create-time
+     only; no real "blank" for ecosystem, and `status` blank = the `NONE` sentinel); `notes`/
+     `personalDetails` — **fill-only**, not append (append could be a later option).
+   - **Preview/UX:** the client already maps every field and `buildRowData` already sends them all,
+     so the work is mostly server + dry-run reporting. Improve the dry-run to report **which/how
+     many fields would be filled** (e.g. relabel "Add email to existing" → "Enrich existing (fill
+     blanks)" and show a blank-fields-filled count, ideally a small per-row/field breakdown). Keep
+     the 3-card shape; reports-to summary stays.
+   - **Schema-free** (same endpoint, additive logic). Verify like this session: throwaway server
+     script (fill-a-blank, leave-non-blank-untouched, idempotent re-run) + chrome-devtools desktop
+     + 390px; clean up test rows; `prepush` + full client build.
+2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
    AI ingest) on D5/D6. Don't push on those until the owner raises them.
-2. **Option B (when wanted):** attendee auto-fill via Microsoft Graph or Power Automate — implement a
+3. **Option B (when wanted):** attendee auto-fill via Microsoft Graph or Power Automate — implement a
    second `CalendarProvider`; nothing downstream changes.
-3. **@-mention follow-up (optional):** add a command-palette entry for the Mentions page. (Prep-note
+4. **@-mention follow-up (optional):** add a command-palette entry for the Mentions page. (Prep-note
    `@` and org `@` are now done.)
 
 ### Carry-over items (lower priority)
@@ -110,5 +137,10 @@ accepts a per-row `reportsTo` (manager name) and turns it into a `REPORTS_TO` re
 `subject → manager`, resolving/creating both contacts by name (idempotent; blank/"Not found"/self →
 no relationship; ambiguous manager skipped). The dialog gained a "Reports To (manager)" mapping (which
 auto-routes through the match endpoint) and an "Ecosystem for new contacts" picker. Nothing is left
-pending (no Turso DDL, no held commits). Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`
+pending (no Turso DDL, no held commits).
+
+**The agreed primary task for next session** (see "What's Next" #1): extend the same enrich import so
+a CSV can fill **any** mapped field on an existing contact — **fill blanks only, never overwrite**
+(owner decision) — not just email + the reports-to relationship. Schema-free; design + sub-decisions
+are spelled out in "What's Next." Plan of record otherwise stays `.planning/NCQA-ADAPTATION-PLAN.md`
 (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).

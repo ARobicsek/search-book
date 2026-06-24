@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import { resyncConversationMentions } from '../lib/mentions';
 
 const router = Router();
 
@@ -353,6 +354,85 @@ router.post('/merge', async (req: Request, res: Response) => {
         where: { contactId: removeId },
         data: { contactId: keepId },
       });
+
+      // ── Re-link the removed contact's meeting attendance, action ownership, and
+      // @-mentions to the kept contact. These were previously NOT migrated, and the
+      // relations' onDelete behavior silently lost data when the duplicate was
+      // deleted below: ConversationParticipant / ActionContact are onDelete: Cascade
+      // (a meeting whose *only* participant was the removed contact lost that
+      // participant — and its fallback title — entirely), and ConversationMention is
+      // onDelete: SetNull (mentions were orphaned to a dead contact id rather than
+      // pointed at the survivor).
+
+      // Meeting participants (attendees). Composite PK [conversationId, contactId],
+      // so re-point only where the kept contact isn't already a participant; carry
+      // the per-person takeaway note onto the kept row when it has none.
+      const removeParticipants = await tx.conversationParticipant.findMany({ where: { contactId: removeId } });
+      const keepParticipants = await tx.conversationParticipant.findMany({
+        where: { contactId: keepId },
+        select: { conversationId: true, note: true },
+      });
+      const keepPartNote = new Map(keepParticipants.map((p) => [p.conversationId, p.note]));
+      for (const rp of removeParticipants) {
+        if (keepPartNote.has(rp.conversationId)) {
+          if (!keepPartNote.get(rp.conversationId) && rp.note) {
+            await tx.conversationParticipant.update({
+              where: { conversationId_contactId: { conversationId: rp.conversationId, contactId: keepId } },
+              data: { note: rp.note },
+            });
+          }
+        } else {
+          await tx.conversationParticipant.create({
+            data: { conversationId: rp.conversationId, contactId: keepId, note: rp.note, ordering: rp.ordering },
+          });
+        }
+      }
+      await tx.conversationParticipant.deleteMany({ where: { contactId: removeId } });
+
+      // Action ownership junction (ActionContact). Same create-then-delete dedupe.
+      const removeActionContacts = await tx.actionContact.findMany({ where: { contactId: removeId } });
+      const keepActionContacts = await tx.actionContact.findMany({
+        where: { contactId: keepId },
+        select: { actionId: true },
+      });
+      const keepActionIds = new Set(keepActionContacts.map((x) => x.actionId));
+      for (const rec of removeActionContacts) {
+        if (!keepActionIds.has(rec.actionId)) {
+          await tx.actionContact.create({ data: { actionId: rec.actionId, contactId: keepId } });
+        }
+      }
+      await tx.actionContact.deleteMany({ where: { contactId: removeId } });
+
+      // @-mentions in meeting notes. The mention index is DERIVED from the note text
+      // on every save, so re-pointing the rows alone wouldn't stick — rewrite the
+      // link target in the text (notes / next steps / prep notes) too, then rebuild
+      // the index for each affected meeting. Use raw SQL for the rewrite so a merge
+      // re-link doesn't bump Conversation.updatedAt (matches the anchor move above —
+      // a merge must not float old meetings to the top of "Recently updated").
+      const oldMentionToken = `(/contacts/${removeId})`;
+      const newMentionToken = `(/contacts/${keepId})`;
+      const [noteConvs, prepConvs, mentionConvs] = await Promise.all([
+        tx.conversation.findMany({
+          where: { OR: [{ notes: { contains: oldMentionToken } }, { nextSteps: { contains: oldMentionToken } }] },
+          select: { id: true },
+        }),
+        tx.conversationPrepNote.findMany({ where: { content: { contains: oldMentionToken } }, select: { conversationId: true } }),
+        tx.conversationMention.findMany({ where: { contactId: removeId }, select: { conversationId: true } }),
+      ]);
+      const affectedConvIds = new Set<number>([
+        ...noteConvs.map((c) => c.id),
+        ...prepConvs.map((p) => p.conversationId),
+        ...mentionConvs.map((m) => m.conversationId),
+      ]);
+      if (affectedConvIds.size > 0) {
+        const like = `%${oldMentionToken}%`;
+        await tx.$executeRaw`UPDATE "Conversation" SET "notes" = REPLACE("notes", ${oldMentionToken}, ${newMentionToken}) WHERE "notes" LIKE ${like}`;
+        await tx.$executeRaw`UPDATE "Conversation" SET "nextSteps" = REPLACE("nextSteps", ${oldMentionToken}, ${newMentionToken}) WHERE "nextSteps" LIKE ${like}`;
+        await tx.$executeRaw`UPDATE "ConversationPrepNote" SET "content" = REPLACE("content", ${oldMentionToken}, ${newMentionToken}) WHERE "content" LIKE ${like}`;
+        for (const convId of affectedConvIds) {
+          await resyncConversationMentions(tx, convId);
+        }
+      }
 
       // Delete junction records that would cause conflicts
       // ConversationContact

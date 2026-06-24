@@ -5,58 +5,48 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Any-field enrich import "fill blanks only" (2026-06-22 s2)
+### What Was Just Completed — Preferred name / pronunciation field (2026-06-23)
 
-One owner ask (last session's agreed PRIMARY), **schema-free, verified live, pushed to `main`** (`0ac5c0b`).
-Extends the same enrich import.
+One owner ask. **SCHEMA-touching → committed locally (`e8fa48e`), PUSH HELD pending Turso DDL.**
 
-**Problem:** the name-match path on `POST /api/contacts/import-match` previously enriched a matched
-contact with **email only** (+ the reports-to relationship); every other mapped column was ignored
-for existing contacts. Owner wanted a CSV to fill **any** mapped field — **but only when that field
-is currently empty; never overwrite curated data** (owner AskUserQuestion decision: *fill blanks
-only*, not per-column toggles, not a global overwrite, for v1).
+**Problem:** the owner stored "what to call / how to pronounce" inside `Contact.name`
+(`Benjamin (Ben) Glicksberg`, `Vivek (Viv-ACHE) Garg`) — great to read, but it breaks joining in data
+keyed on the formal name (e.g. an email list's "Benjamin Glicksberg"), and had already produced a
+duplicate "Ben Glicksberg" #206 next to #208. Decided (owner AskUserQuestion): a **dedicated field**,
+displayed **inline everywhere** as "name (spoken)", as a **single combined** "Goes by / pronunciation"
+field (not split nickname/pronunciation).
 
-**Built — fill-blanks enrich on the `matches.length === 1` branch:**
-- **Server** (`server/src/routes/contacts.ts`): new `buildFillBlanksPatch` over the scalar set
-  (`title, roleDescription, phone, linkedinUrl, location, howConnected, mutualConnections, whereFound,
-  openQuestions, notes, personalDetails`) — fills a field only when the row has a value AND the
-  contact's field is empty; **non-empty fields are never touched**. Email keeps its existing additive
-  merge. **Company** fills `companyId` only when the contact has **no current employer**
-  (`currentEmployerCompanyIds` + `resolveCompany`; promotes that company to CONNECTED when the contact
-  is CONNECTED — same rule as create); no 2nd-employer append in v1. **`ecosystem`/`status` excluded.**
-  The contact index `findMany` now selects the fill fields (incl. notes/personalDetails — fine for a
-  one-shot single-user import; still no `_count`). `dryRun` predicts all of it; result adds
-  **`fieldsFilled`** + **`fieldsFilledByName`** (+ per-row `filled`).
-- **Client** (`csv-import-dialog.tsx`): relabel "Add email to existing" → **"Enrich existing (fill
-  blanks)"**; new **blank-fields-filled breakdown** ("N blank fields will be filled across M contacts"
-  + "Title ×2, Phone ×1, …"); updated checkbox/footer copy, completion summary, toast, apply-button.
+**Built (additive `Contact.preferredName String?`):**
+- **Client:** new `contactDisplayName()` helper in `lib/types.ts` recombines `name (preferredName)`;
+  wired into the **contact list** name cell + client filter, **detail header** h1, **global search**
+  result, and **command palette**. Contact form gains a full-width **"Goes by / pronunciation"** input
+  under Name (live `"Name (Spoken)"` preview helper text; Name placeholder now nudges "keep clean for
+  imports"). `ContactSearchResult.preferredName` added.
+- **Server:** list `select` + list `search` OR-clause include `preferredName`; create/update already
+  spread body fields so saves flow automatically; **global search** matches it (`contactClausesFor`
+  clause + select + `pushField(... 'goes by', 3)` + result field). Backup/restore (both paths) flow
+  the new column automatically (full-row read/write — no code change).
+- **Migration:** `server/scripts/migrate-contact-preferred-name.js` — dual-mode (local file / Turso),
+  **dry-run by default**, idempotent, never overwrites an existing `preferredName`; splits the first
+  parenthetical out of `First (Spoken) Last`. **Local dev DB applied: all 22 legacy names converted,
+  0 names still contain "("** (incl. `Stephen (Steve) J. Watt`→`Stephen J. Watt`).
 
-Verified end-to-end: two throwaway HTTP scripts (fill-a-blank + leave-non-blank-untouched +
-email-as-primary + ecosystem/status untouched + company-fill + idempotent re-run = 0 changes +
-additive 2nd email; plus a company-guard proving company is **not** filled when an employer already
-exists) — all green, test rows + companies cleaned up; full browser flow (chrome-devtools, desktop +
-**true-390px device emulation**) on a CSV matching two seeded contacts + one new name → preview
-"2 enrich / 1 new / 0 skip", "5 blank fields across 2 contacts · Title ×2, Phone ×1, Location ×1,
-Notes ×1", "2 reporting relationships" — closed without applying, seeded contacts deleted, dev DB
-clean; console clean. `prepush` + full client `vite build` green. **Schema-free** (no Turso DDL).
+Verified end-to-end via chrome-devtools (desktop + 390px): list "Benjamin Glicksberg (Ben)", detail
+h1 recombines, edit form clean Name + "Goes by"="Ben"; API round-trip (GET returns it, PUT persists,
+search "Viv-ACHE" → Vivek, reason "goes by"). `prepush` + full client `vite build` green.
 
-**Plus — CSV header auto-mapper hardened (`ad3b529`, client-only):** the import dialog now recognizes
-many more reasonable header synonyms (normalized, case/punctuation-insensitive; expanded aliases for
-every field incl. ones that had none — e.g. `mutualConnections` catches "mutual connections" /
-"connections" / "connecting people"), with a conservative single-candidate fuzzy fallback that leaves
-ambiguous headers unmapped instead of mis-assigning. Verified on a 19-column alt-header CSV.
-
-**Reminder (inherent to exact-name matching):** enrich matches names **exactly** (case-insensitive),
-so short/long name forms are different people. Normalize name forms in the CSV up front (or merge
-dupes afterward) before an enrich import.
+**⚠ [USER ACTION] before this can be pushed:** on Turso run
+`ALTER TABLE "Contact" ADD COLUMN "preferredName" TEXT;`, then the back-fill (web SQL console
+preview-SELECT → UPDATE, **or** run the script with a fresh token), then `git push origin main`
+(commit `e8fa48e` + the docs commit). **Also:** merge the #206/#208 "Ben Glicksberg" duplicate.
 
 ### What's Next
 
-1. **No carried-over primary task.** The CSV-import enrich line is feature-complete for v1
-   (de-dup → email merge → reports-to relationships → fill-blanks any-field). Possible **future**
-   enrich options the owner has *not* asked for (don't build unprompted): per-column overwrite
-   toggles, a global overwrite mode, append-vs-fill for `notes`/`personalDetails`, appending a
-   2nd employer instead of fill-only company. Surface only if the owner raises a need.
+1. **No carried-over primary task** (once `e8fa48e` is pushed). v1 display scope is the primary
+   contact surfaces; participant chips / action references / entity pickers still show bare `name` —
+   thread `contactDisplayName()` there only if the owner asks. The CSV-import enrich line remains
+   feature-complete for v1; future enrich options (per-column overwrite toggles, global overwrite,
+   append-vs-fill for notes, 2nd-employer append) stay unbuilt until requested.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
    AI ingest) on D5/D6. Don't push on those until the owner raises them.
@@ -103,9 +93,10 @@ dupes afterward) before an enrich import.
 
 ### Working branch
 
-`main` — this session adds schema-free commits pushed to `main`: the fill-blanks any-field enrich
-import (`0ac5c0b`), the CSV header auto-mapper hardening (`ad3b529`), + docs updates. **Nothing
-pending** — no Turso DDL needed, no held commits.
+`main` — this session committed the preferred-name feature (`e8fa48e`) + a docs commit **locally;
+the push is HELD** because it's schema-touching. **Pending before push:** run the Turso DDL
+(`ALTER TABLE "Contact" ADD COLUMN "preferredName" TEXT;`) + the back-fill, then `git push origin main`.
+No other commits pending.
 
 ---
 

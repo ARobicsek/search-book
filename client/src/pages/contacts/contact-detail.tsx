@@ -23,6 +23,7 @@ import {
   RELATIONSHIP_TYPE_OPTIONS,
   parseContactEmails,
   conversationDisplayName,
+  contactDisplayName,
 } from '@/lib/types'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { mentionSnippet } from '@/lib/mentions'
@@ -428,7 +429,7 @@ export function ContactDetailPage() {
                 ) : null
               })()}
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">{contact.name}</h1>
+                <h1 className="text-2xl font-bold tracking-tight">{contactDisplayName(contact)}</h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   {contact.title && (
                     <span className="text-sm text-muted-foreground">{contact.title}</span>

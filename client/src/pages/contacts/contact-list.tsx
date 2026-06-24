@@ -16,7 +16,7 @@ import { ArrowUpDown, Plus, Search, X, Download, Upload, Calendar, Flag, Chevron
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { api } from '@/lib/api'
 import type { Contact, Ecosystem, ContactStatus, DatePrecision, LinkRecord } from '@/lib/types'
-import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS } from '@/lib/types'
+import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, contactDisplayName } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -205,9 +205,9 @@ function buildColumns(
             <Link
               to={`/contacts/${row.original.id}`}
               className="font-medium text-foreground hover:underline block max-w-[150px] truncate sm:max-w-[200px]"
-              title={row.original.name}
+              title={contactDisplayName(row.original)}
             >
-              {row.original.name}
+              {contactDisplayName(row.original)}
             </Link>
             {row.original.usefulFor && row.original.usefulFor.trim() && (
               <span title={`Useful for: ${row.original.usefulFor}`} className="shrink-0">
@@ -707,6 +707,7 @@ export function ContactListPage() {
       
       const searchFields = [
         contact.name,
+        contact.preferredName,
         contact.title,
         contact.company?.name,
         contact.companyName,

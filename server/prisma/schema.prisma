@@ -12,6 +12,10 @@ datasource db {
 model Contact {
   id                Int      @id @default(autoincrement())
   name              String
+  // How to address / pronounce this person ("Ben"; "Viv-ACHE"). Kept OUT of `name`
+  // so the formal name stays clean for CSV joins/imports/exports; the UI recombines
+  // them at display time as "name (preferredName)". See contactDisplayName() client-side.
+  preferredName     String?
   title             String?
   roleDescription   String?
   companyId         Int?

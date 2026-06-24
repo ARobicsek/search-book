@@ -40,6 +40,7 @@ router.get('/', async (req: Request, res: Response) => {
       const searchTerm = search.trim();
       where.OR = [
         { name: { contains: searchTerm } },
+        { preferredName: { contains: searchTerm } },
         { title: { contains: searchTerm } },
         { company: { name: { contains: searchTerm } } },
         { companyName: { contains: searchTerm } },
@@ -73,6 +74,7 @@ router.get('/', async (req: Request, res: Response) => {
       select: {
         id: true,
         name: true,
+        preferredName: true,
         title: true,
         companyId: true,
         companyName: true,

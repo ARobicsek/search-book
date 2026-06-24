@@ -46,6 +46,7 @@ type CompanyEntry = {
 
 type FormData = {
   name: string
+  preferredName: string
   title: string
   roleDescription: string
   companyEntries: CompanyEntry[] // array of company entries with current/past indicator
@@ -70,6 +71,7 @@ type FormData = {
 
 const emptyForm: FormData = {
   name: '',
+  preferredName: '',
   title: '',
   roleDescription: '',
   companyEntries: [],
@@ -122,6 +124,7 @@ function contactToForm(contact: Contact): FormData {
 
   return {
     name: contact.name,
+    preferredName: contact.preferredName ?? '',
     title: contact.title ?? '',
     roleDescription: contact.roleDescription ?? '',
     companyEntries,
@@ -163,6 +166,7 @@ function formToPayload(form: FormData, companyEntries: { id: number; isCurrent: 
 
   return {
     name: form.name.trim(),
+    preferredName: form.preferredName.trim() || null,
     title: form.title.trim() || null,
     roleDescription: form.roleDescription.trim() || null,
     companyEntries, // Array of {id, isCurrent} - server will process
@@ -698,12 +702,25 @@ export function ContactFormPage() {
                 id="name"
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
-                placeholder="Full name"
+                placeholder="Formal name — keep it clean for imports (e.g. Benjamin Glicksberg)"
                 aria-invalid={!!errors.name}
               />
               {errors.name && (
                 <p className="text-sm text-destructive">{errors.name}</p>
               )}
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="preferredName">Goes by / pronunciation</Label>
+              <Input
+                id="preferredName"
+                value={form.preferredName}
+                onChange={(e) => set('preferredName', e.target.value)}
+                placeholder="Nickname or how to say it — e.g. Ben, or Viv-ACHE"
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown alongside the name everywhere as “{(form.name.trim() || 'Name')}{form.preferredName.trim() ? ` (${form.preferredName.trim()})` : ' (…)'}”. Keeps the formal name above clean for CSV joins and imports.
+              </p>
             </div>
 
             <div className="sm:col-span-2">

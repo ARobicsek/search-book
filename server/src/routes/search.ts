@@ -213,6 +213,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (peopleProfile) {
         clauses.push(
           { name: { contains: term } },
+          { preferredName: { contains: term } },
           { title: { contains: term } },
           { email: { contains: term } },
           { additionalEmails: { contains: term } },
@@ -256,7 +257,7 @@ router.get('/', async (req: Request, res: Response) => {
       ? prisma.contact.findMany({
         where: { AND: [...terms.map((t) => ({ OR: contactClausesFor(t) })), ...tagClause('tags')] },
         select: {
-          id: true, name: true, title: true, ecosystem: true, status: true, updatedAt: true,
+          id: true, name: true, preferredName: true, title: true, ecosystem: true, status: true, updatedAt: true,
           email: true, additionalEmails: true, phone: true, linkedinUrl: true, location: true,
           roleDescription: true, howConnected: true, whereFound: true, companyName: true,
           notes: true, personalDetails: true, openQuestions: true, usefulFor: true, mutualConnections: true,
@@ -276,6 +277,7 @@ router.get('/', async (req: Request, res: Response) => {
       const fields: FieldVal[] = [];
       if (peopleProfile) {
         pushField(fields, 'name', c.name, 3);
+        pushField(fields, 'goes by', c.preferredName, 3);
         pushField(fields, 'title', c.title, 3);
         for (const t of c.tags || []) if (t.tag.name !== FAVORITE_TAG_NAME) pushField(fields, 'tag', t.tag.name, 2);
         pushField(fields, 'email', c.email, 1);
@@ -628,6 +630,7 @@ router.get('/', async (req: Request, res: Response) => {
         const result: any = {
           id: contact.id,
           name: contact.name,
+          preferredName: contact.preferredName,
           title: contact.title,
           ecosystem: contact.ecosystem,
           status: contact.status,

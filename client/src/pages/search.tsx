@@ -14,6 +14,7 @@ import type {
   Action,
   Tag,
 } from '@/lib/types'
+import { contactDisplayName } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -336,7 +337,7 @@ function ContactSearchCard({
               to={`/contacts/${contact.id}`}
               className="font-medium hover:underline"
             >
-              <HighlightedText text={contact.name} terms={ev.terms} caseSensitive={ev.caseSensitive} />
+              <HighlightedText text={contactDisplayName(contact)} terms={ev.terms} caseSensitive={ev.caseSensitive} />
             </Link>
             {contact.title && (
               <p className="text-sm text-muted-foreground truncate">

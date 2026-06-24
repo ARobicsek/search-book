@@ -12,6 +12,7 @@ import {
 import { api } from '@/lib/api'
 import { useQuickLog } from '@/components/quick-log-dialog'
 import type { Contact, Action, Idea, SearchResult } from '@/lib/types'
+import { contactDisplayName } from '@/lib/types'
 import { toast } from 'sonner'
 import { BookUser, Building2, ListTodo, Lightbulb, Search, Loader2, MessageSquarePlus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -395,7 +396,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
                   <CommandItem key={`search-contact-${c.id}`} onSelect={() => { close(); navigate(`/contacts/${c.id}`) }}>
                     <BookUser className="mr-2 h-4 w-4" />
                     <div className="flex flex-col">
-                      <span>{c.name}</span>
+                      <span>{contactDisplayName(c)}</span>
                       {c.title && (
                         <span className="text-xs text-muted-foreground">
                           {c.title}{c.company ? ` at ${c.company.name}` : ''}

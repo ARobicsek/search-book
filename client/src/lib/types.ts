@@ -5,6 +5,9 @@ export type CompanyStatus = 'NONE' | 'RESEARCHING' | 'ENGAGED' | 'PARTNER' | 'CO
 export interface Contact {
   id: number;
   name: string;
+  /** How to address / pronounce this person ("Ben"; "Viv-ACHE"). Stored apart from
+   *  `name` so the formal name stays clean for joins/imports; displayed via contactDisplayName(). */
+  preferredName?: string | null;
   title: string | null;
   roleDescription: string | null;
   companyId: number | null;
@@ -36,6 +39,14 @@ export interface Contact {
   lastOutreachDate?: string | null;
   lastOutreachDatePrecision?: DatePrecision | null;
   employmentHistory?: EmploymentHistory[];
+}
+
+/** A contact's display name with the spoken form folded in: "Benjamin Glicksberg (Ben)".
+ *  Falls back to the bare name when there's no preferredName. Use this anywhere a
+ *  contact's name is shown to a human; keep raw `name` for joins/exports/matching. */
+export function contactDisplayName(contact: { name: string; preferredName?: string | null }): string {
+  const spoken = contact.preferredName?.trim();
+  return spoken ? `${contact.name} (${spoken})` : contact.name;
 }
 
 export function parseContactEmails(contact: Contact): string[] {
@@ -492,6 +503,7 @@ export interface RelatedContact {
 export interface ContactSearchResult {
   id: number;
   name: string;
+  preferredName?: string | null;
   title: string | null;
   ecosystem: string;
   status: string;

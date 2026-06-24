@@ -48,12 +48,15 @@ Reminders stay dormant until these are done — deploying the code alone changes
    CREATE UNIQUE INDEX "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
    ```
 2. **Generate VAPID keys**: `npx web-push generate-vapid-keys`
-3. **Vercel env vars** (use `printf 'value' | vercel env add NAME production` — no trailing newline):
-   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:ari.robicsek@gmail.com`),
-   `REMINDER_TZ` (`America/New_York`), and `CRON_SECRET` (reuse the existing backup one).
+3. **Vercel env vars**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
+   (`mailto:ari.robicsek@gmail.com`), `REMINDER_TZ` (`America/New_York`), and
+   `REMINDERS_CRON_SECRET` (a long random string you choose; keep it NON-sensitive so you can
+   read it for the cron URL). The endpoint falls back to `CRON_SECRET` if this is unset, but the
+   existing backup `CRON_SECRET` is marked Sensitive in Vercel and can't be read back — hence the
+   dedicated, readable secret.
 4. **External cron** (free): on cron-job.org create a job hitting
-   `https://searchbook-three.vercel.app/api/cron/reminders?key=<CRON_SECRET>` every 1 minute
-   (GET is fine). UptimeRobot's 5-minute monitor is an acceptable lower-precision fallback.
+   `https://searchbook-three.vercel.app/api/cron/reminders?key=<REMINDERS_CRON_SECRET>` every 1
+   minute (GET is fine). UptimeRobot's 5-minute monitor is an acceptable lower-precision fallback.
 5. **Per device**: open Settings → Notifications → "Enable on this device" (grants permission +
    subscribes). iPhone/iPad: install to Home Screen first, then enable from the installed app.
 

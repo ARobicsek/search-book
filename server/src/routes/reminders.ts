@@ -23,7 +23,9 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 // per action (sets lastNotifiedAt), and prunes any push subscription the service reports
 // as gone (404/410).
 async function handler(req: Request, res: Response) {
-  const cronSecret = process.env.CRON_SECRET;
+  // Dedicated secret for the reminders cron, so it never has to share (or expose) the
+  // backup's CRON_SECRET. Falls back to CRON_SECRET if a dedicated one isn't set.
+  const cronSecret = process.env.REMINDERS_CRON_SECRET || process.env.CRON_SECRET;
   const appPassword = process.env.APP_PASSWORD;
   const authHeader = req.header('authorization') || '';
   const queryKey = typeof req.query.key === 'string' ? req.query.key : '';

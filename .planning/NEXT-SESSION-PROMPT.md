@@ -5,53 +5,50 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Preferred name / pronunciation field (2026-06-23)
+### What Was Just Completed — Action time-of-day + opt-in Web Push reminders (2026-06-24)
 
-Two owner asks, **both shipped to `main` + deployed** (`e8fa48e` field, `d4f9c40` tooltips).
+Owner ask, **SCHEMA, deployed to `main` (`9825a3a` + a dedicated-secret follow-up) and verified
+firing live in production.** Actions can now optionally carry a **time of day** and an **opt-in
+reminder** that fires a **desktop/PWA push notification** — at **zero added cost**, and **without
+disturbing** the dominant "no times, no alerts" pattern (an action with no time and `notify=false`
+behaves exactly as before).
 
-**Problem:** the owner stored "what to call / how to pronounce" inside `Contact.name`
-(`Benjamin (Ben) Glicksberg`, `Vivek (Viv-ACHE) Garg`) — great to read, but it breaks joining in data
-keyed on the formal name (e.g. an email list's "Benjamin Glicksberg"), and had already produced a
-duplicate "Ben Glicksberg" #206 next to #208. Decided (owner AskUserQuestion): a **dedicated field**,
-displayed **inline everywhere** as "name (spoken)", as a **single combined** "Goes by / pronunciation"
-field (not split nickname/pronunciation).
+**Built (additive — `dueDate` stays date-only):**
+- **Schema:** `Action.dueTime` ("HH:MM" local), `Action.notify` (default false), `Action.lastNotifiedAt`;
+  new `PushSubscription` table (one row/device). Owner-decided (AskUserQuestion): **time and alert are
+  independent** — a time can exist with no alert; an alert with no explicit time → **09:00 America/New_York**.
+- **Server:** `lib/push.ts` (VAPID + DST-correct `zonedWallTimeToUtc`), `routes/push.ts`
+  (public-key/subscribe/unsubscribe), `routes/reminders.ts` (`GET/POST /api/cron/reminders`, secret-gated,
+  exempt from the `/api` password gate). The cron converts each due action's wall-clock moment in
+  `REMINDER_TZ` to a real instant, pushes to every subscription, sets `lastNotifiedAt` **once**, prunes
+  dead (404/410) subs. Editing date/time/notify **re-arms** (`lastNotifiedAt`→null). `web-push` dep.
+- **Client:** time input + "Remind me" bell in `action-date-select.tsx` and the action form; time/bell
+  shown in lists & detail; **Settings → Notifications** card to enable/disable push per device;
+  `public/push-sw.js` (`push` + `notificationclick`) imported into the Workbox SW via **`importScripts`**
+  (kept `generateSW` — existing `/api` NetworkOnly + `/photos` CacheFirst caching untouched).
+- **Dashboard** (owner follow-up): today's **timed** actions sort to the **top** by time, and a timed
+  action **shifts into the Overdue card** once its moment passes.
 
-**Built (additive `Contact.preferredName String?`):**
-- **Client:** new `contactDisplayName()` helper in `lib/types.ts` recombines `name (preferredName)`;
-  wired into the **contact list** name cell + client filter, **detail header** h1, **global search**
-  result, and **command palette**. Contact form gains a full-width **"Goes by / pronunciation"** input
-  under Name (live `"Name (Spoken)"` preview helper text; Name placeholder now nudges "keep clean for
-  imports"). `ContactSearchResult.preferredName` added.
-- **Server:** list `select` + list `search` OR-clause include `preferredName`; create/update already
-  spread body fields so saves flow automatically; **global search** matches it (`contactClausesFor`
-  clause + select + `pushField(... 'goes by', 3)` + result field). Backup/restore (both paths) flow
-  the new column automatically (full-row read/write — no code change).
-- **Migration:** `server/scripts/migrate-contact-preferred-name.js` — dual-mode (local file / Turso),
-  **dry-run by default**, idempotent, never overwrites an existing `preferredName`; splits the first
-  parenthetical out of `First (Spoken) Last`. **Local dev DB applied: all 22 legacy names converted,
-  0 names still contain "("** (incl. `Stephen (Steve) J. Watt`→`Stephen J. Watt`).
+**Cost = $0:** free VAPID Web Push + a **free external 1-minute cron** (cron-job.org) — no paid Vercel Cron.
 
-Verified end-to-end via chrome-devtools (desktop + 390px): list "Benjamin Glicksberg (Ben)", detail
-h1 recombines, edit form clean Name + "Goes by"="Ben"; API round-trip (GET returns it, PUT persists,
-search "Viv-ACHE" → Vivek, reason "goes by"). `prepush` + full client `vite build` green.
+**Setup (done by owner, verified):** Turso DDL applied (3 ADD COLUMN + `PushSubscription`); Vercel env
+`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`/`REMINDER_TZ` + a **dedicated `REMINDERS_CRON_SECRET`**
+(the backup `CRON_SECRET` is marked **Sensitive**/unreadable in Vercel so can't be reused in the cron URL;
+`reminders.ts` falls back to `CRON_SECRET`); cron-job.org pointed at `/api/cron/reminders?key=…` every 1 min.
+**Live reminder fired successfully** on phone (home-screen PWA) + desktop. Full runbook:
+**`.planning/ACTION-REMINDERS.md`**.
 
-**✅ DEPLOYED.** Owner ran the Turso DDL + back-fill; feature pushed (`e8fa48e` + docs). Owner
-confirmed **no current contact dups** in prod (the #206/#208 "Ben Glicksberg" pair was local-only /
-already resolved).
-
-**Follow-up shipped same day (`d4f9c40`, schema-free):** in the meeting flow, hovering a person
-(Participants combobox pills, editor participant rows, `/meetings` card badges) now shows their
-pronunciation as **"🗣 Viv-ACHE"** in the `PersonTooltip` header (full name not repeated). Threaded
-`preferredName` through `/contacts/names` + the `/meetings` participant include + the quick-log
-`contactMeta`/`optionMeta` map. Verified via chrome-devtools.
+**Two red herrings diagnosed during setup (note for future):** (1) pasting the cron URL in the *normal*
+browser shows the SPA shell because the **PWA service worker intercepts the address-bar navigation** —
+test endpoints in an **Incognito** window. (2) Early `401`s were **pre-deploy / pre-env-var** — Vercel only
+injects a newly-added env var into builds created **after** it's added, so **Redeploy** after adding env vars.
 
 ### What's Next
 
-1. **No carried-over primary task.** v1 display scope is the primary contact surfaces + meeting
-   person-hover tooltips; action references / entity pickers / other lists still show bare `name` —
-   thread `contactDisplayName()` (or the tooltip `pronunciation` prop) there only if the owner asks. The CSV-import enrich line remains
-   feature-complete for v1; future enrich options (per-column overwrite toggles, global overwrite,
-   append-vs-fill for notes, 2nd-employer append) stay unbuilt until requested.
+1. **No carried-over primary task.** Action reminders are feature-complete + live for v1. Possible
+   *opt-in* extensions if the owner asks: a snooze/"remind again" control; reminders for actions with
+   **no due date**; surfacing the reminder time/bell in more places (e.g. calendar view); a per-device
+   "test notification" button in Settings. None built until requested.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
    AI ingest) on D5/D6. Don't push on those until the owner raises them.
@@ -98,8 +95,10 @@ pronunciation as **"🗣 Viv-ACHE"** in the `PersonTooltip` header (full name no
 
 ### Working branch
 
-`main` — preferred-name feature (`e8fa48e`) + tooltip follow-up (`d4f9c40`) + docs are **pushed**.
-Turso DDL + back-fill applied by the owner. **Nothing pending** — no held commits, no DDL outstanding.
+`main` — action time-of-day + Web Push reminders (`9825a3a` merge + dedicated-secret follow-up) +
+docs are **pushed**. Turso DDL applied by the owner; Vercel env vars set; external cron live; a real
+reminder fired in prod. **Nothing pending** — no held commits, no DDL outstanding. (Feature branch
+`claude/actions-time-notifications-i013g7` is merged and can be deleted.)
 
 ---
 
@@ -110,17 +109,17 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped two owner asks around a new
-**`Contact.preferredName`** ("Goes by / pronunciation") field. (1) **The field itself** (`e8fa48e`,
-schema): holds the spoken form ("Ben", "Viv-ACHE") **apart from `name`** so `name` stays clean for CSV
-joins/imports/exports; the UI recombines as **"name (preferredName)"** at display time via
-`contactDisplayName()` (contact list, detail header, global search, command palette); editable on the
-contact form; searchable server-side (reason "goes by"). A dual-mode dry-run migration
-(`server/scripts/migrate-contact-preferred-name.js`) split the parenthetical out of legacy
-`First (Spoken) Last` names — **Turso DDL + back-fill applied by the owner; deployed.** (2) **Pronunciation
-in meeting hover tooltips** (`d4f9c40`, schema-free): `PersonTooltip` now leads with **"🗣 Viv-ACHE"**
-(no repeated full name) on the Participants combobox pills, editor participant rows, and `/meetings`
-card badges. **No carried-over task** — display scope is deliberately the primary contact surfaces +
-meeting tooltips; extend `contactDisplayName()`/the tooltip `pronunciation` prop elsewhere only on
-request. Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on
-owner" block, D5/D6/D8/D9). Nothing is pending (no Turso DDL, no held commits).
+Context for *this* upcoming session specifically: last session shipped **optional time-of-day +
+opt-in Web Push reminders for actions** (`9825a3a` + a dedicated-secret follow-up; SCHEMA; deployed +
+verified firing live in prod). Additive `Action.dueTime`/`notify`/`lastNotifiedAt` + a
+`PushSubscription` table; `dueDate` stays date-only so nothing about existing behavior changes — an
+action with no time and `notify=false` is unchanged. **Time and alert are independent** (alert w/o a
+time → 09:00 America/New_York). Delivery is **free Web Push** (VAPID) triggered by a **free external
+1-minute cron** (cron-job.org) hitting `/api/cron/reminders` (gated by a dedicated readable
+`REMINDERS_CRON_SECRET`, falling back to `CRON_SECRET`). UI: time input + "Remind me" bell in the date
+popover & action form, time/bell in lists/detail, Settings→Notifications per-device enable; SW push
+handlers in `public/push-sw.js`. Dashboard sorts today's timed actions to the top by time and shifts
+them to Overdue once past. **Setup is complete** (Turso DDL, Vercel env, external cron) — see
+`.planning/ACTION-REMINDERS.md`. **No carried-over task.** Plan of record is
+`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).
+Nothing is pending (no Turso DDL, no held commits).

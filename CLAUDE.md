@@ -96,6 +96,7 @@ api/index.ts      # Vercel serverless entry point
 - **Favorite contacts**: reserved `Favorite` tag via `ContactTag` (no dedicated column); `GET /contacts/favorites`, `PATCH /contacts/:id/favorite`
 - **Company Activity Log**: `CompanyActivity` model for company-level event tracking
 - **Status history**: `ContactStatusHistory` and `CompanyStatusHistory` for analytics transitions
+- **Action reminders**: optional `Action.dueTime` ("HH:MM" local; `dueDate` stays date-only), opt-in `Action.notify` (independent of time; default time 09:00 `REMINDER_TZ`=America/New_York), `Action.lastNotifiedAt` (cron fires once; editing date/time/notify re-arms it). `PushSubscription` table = one Web Push subscription per device (excluded from backup). Free VAPID Web Push fanned out by `/api/cron/reminders` (gated by `REMINDERS_CRON_SECRET`, falls back to `CRON_SECRET`), poked every minute by a **free external cron** (cron-job.org) — no paid Vercel Cron. SW push handlers in `client/public/push-sw.js` (imported into the Workbox SW via `importScripts`). Full runbook: `.planning/ACTION-REMINDERS.md`
 
 ## Current Status
 

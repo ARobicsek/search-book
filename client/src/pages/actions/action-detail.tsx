@@ -22,7 +22,8 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Trash2, Check, Circle, Loader2, ExternalLink, Hourglass } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Check, Circle, Loader2, ExternalLink, Hourglass, Bell } from 'lucide-react'
+import { formatActionTime } from '@/lib/action-time'
 import ReactMarkdown from 'react-markdown'
 
 const typeColors: Record<string, string> = {
@@ -260,6 +261,10 @@ export function ActionDetailPage() {
               {action.dueDate && (
                 <span className={overdue ? 'font-semibold text-red-600' : ''}>
                   {formatDate(action.dueDate)}
+                  {action.dueTime && ` at ${formatActionTime(action.dueTime)}`}
+                  {action.notify && (
+                    <Bell className="ml-1 inline h-3.5 w-3.5 align-text-bottom text-muted-foreground" />
+                  )}
                 </span>
               )}
             </Field>

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { Download, Upload, Loader2, FolderOpen, X, Cloud } from 'lucide-react'
+import { NotificationsCard } from '@/components/notifications-card'
 
 interface AutoBackup {
   name: string
@@ -204,6 +205,8 @@ export function SettingsPage() {
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage your SearchBook data</p>
       </div>
+
+      <NotificationsCard />
 
       <Card>
         <CardHeader>

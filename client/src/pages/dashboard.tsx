@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import { Check, Plus, AlertTriangle, CalendarDays, Loader2, Hourglass } from 'lucide-react'
 import { ActionDateSelect } from '@/components/action-date-select'
+import { dueTimeMinutes, isTimeOverdue } from '@/lib/action-time'
 
 const typeColors: Record<ActionType, string> = {
   EMAIL: 'bg-blue-100 text-blue-800',
@@ -150,9 +151,32 @@ export function DashboardPage() {
     }
   }
 
+  // Today's actions whose time has already passed shift into the Overdue card (below).
+  const timeOverdueToday = allPending.filter(
+    (a) => a.dueDate === today && isTimeOverdue(a.dueDate, a.dueTime),
+  )
+
+  // Today: timed actions first (earliest time at the top), then untimed by priority.
+  // Anything whose time has passed is excluded — it's shown as overdue instead.
   const todayActions = allPending
-    .filter((a) => a.dueDate === today)
-    .sort(sortByPriority)
+    .filter((a) => a.dueDate === today && !isTimeOverdue(a.dueDate, a.dueTime))
+    .sort((a, b) => {
+      const am = dueTimeMinutes(a.dueTime)
+      const bm = dueTimeMinutes(b.dueTime)
+      if (am !== bm) return am - bm
+      return sortByPriority(a, b)
+    })
+
+  // Server overdue (dueDate < today) + today's time-passed actions, oldest moment first.
+  const combinedOverdue = [...overdueActions, ...timeOverdueToday].sort((a, b) => {
+    const ad = a.dueDate ?? ''
+    const bd = b.dueDate ?? ''
+    if (ad !== bd) return ad < bd ? -1 : 1
+    const am = dueTimeMinutes(a.dueTime)
+    const bm = dueTimeMinutes(b.dueTime)
+    if (am !== bm) return am - bm
+    return sortByPriority(a, b)
+  })
 
   const upcomingActions = allPending
     .filter((a) => a.dueDate && a.dueDate > today)
@@ -202,19 +226,19 @@ export function DashboardPage() {
       </div>
 
       {/* Overdue Actions */}
-      {overdueActions.length > 0 && (
+      {combinedOverdue.length > 0 && (
         <Card className="border-red-200 bg-red-50/50">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-red-800">
               <AlertTriangle className="h-5 w-5" />
-              Overdue ({overdueActions.length})
+              Overdue ({combinedOverdue.length})
             </CardTitle>
             <CardDescription className="text-red-700/70">
               These actions are past their due date
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-1">
-            {overdueActions.sort(sortByPriority).map((action) => (
+            {combinedOverdue.map((action) => (
               <ActionRow
                 key={action.id}
                 action={action}

@@ -343,6 +343,14 @@ model Action {
   description           String?
   type                  String        @default("OTHER") // EMAIL, CALL, READ, WRITE, RESEARCH, FOLLOW_UP, INTRO, OTHER
   dueDate               String?
+  // Optional time of day for the due date, "HH:MM" 24h local (REMINDER_TZ). Null = no time (the default).
+  // Kept SEPARATE from dueDate (which stays date-only "YYYY-MM-DD" for the app-wide string comparisons/sorting).
+  dueTime               String?
+  // Opt-in reminder. Independent of dueTime: a time can be set with no alert, or an alert with no
+  // explicit time (cron defaults to 09:00 in REMINDER_TZ). Default false ⇒ existing actions never alert.
+  notify                Boolean       @default(false)
+  // ISO timestamp the cron writes when it sends the Web Push, so a reminder fires exactly once.
+  lastNotifiedAt        String?
   completed             Boolean       @default(false)
   completedDate         String?
   contactId             Int?
@@ -383,6 +391,17 @@ model ActionCompany {
   company   Company @relation("ActionCompanies", fields: [companyId], references: [id], onDelete: Cascade)
 
   @@id([actionId, companyId])
+}
+
+// ─── Web Push subscriptions ──────────────────────────────────
+// Single-user app: every row is one browser/device the owner enabled action reminders on.
+// The cron endpoint (/api/cron/reminders) fans out a Web Push to every subscription here.
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  endpoint  String   @unique
+  p256dh    String   // client public key (from PushSubscription.getKey('p256dh'))
+  auth      String   // client auth secret (from PushSubscription.getKey('auth'))
+  createdAt DateTime @default(now())
 }
 
 // ─── Ideas ───────────────────────────────────────────────────

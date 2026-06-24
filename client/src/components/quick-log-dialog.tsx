@@ -397,7 +397,6 @@ function QuickLogDialog({
   const [mentionCompanies, setMentionCompanies] = useState<{ id: number; name: string }[]>([])
   const [companyOptions, setCompanyOptions] = useState<ComboboxOption[]>([])
   const [tagOptions, setTagOptions] = useState<ComboboxOption[]>([])
-  const [lookupsLoaded, setLookupsLoaded] = useState(false)
 
   const isEdit = editId !== null
   const isDesktop = useIsDesktop()
@@ -465,25 +464,26 @@ function QuickLogDialog({
     api.get<{ id: number; name: string }[]>('/series').then(setSeriesOptions).catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
     api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => { })
-    if (!lookupsLoaded) {
-      api.get<{ id: number; name: string; preferredName?: string | null; title?: string | null; company?: { name: string } | null }[]>('/contacts/names')
-        .then((data) => {
-          setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
-          setContactMeta(new Map(data.map((c) => [c.id.toString(), { pronunciation: c.preferredName, title: c.title, employer: c.company?.name }])))
-          setMentionContacts(data.map((c) => ({ id: c.id, name: c.name, title: c.title })))
-        })
-        .catch(() => { })
-      api.get<{ id: number; name: string }[]>('/companies/names')
-        .then((data) => {
-          setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
-          setMentionCompanies(data.map((c) => ({ id: c.id, name: c.name })))
-        })
-        .catch(() => { })
-      api.get<Tag[]>('/tags')
-        .then((data) => setTagOptions(data.map((t) => ({ value: t.id.toString(), label: t.name }))))
-        .catch(() => { })
-      setLookupsLoaded(true)
-    }
+    // Refetch the contact/company/tag lookups on every open. The dialog is mounted
+    // permanently at app root, so caching these (the old `lookupsLoaded` gate) left a
+    // contact created or merged earlier this session invisible to the participant /
+    // org pickers and the @-mention autocomplete until a full page reload.
+    api.get<{ id: number; name: string; preferredName?: string | null; title?: string | null; company?: { name: string } | null }[]>('/contacts/names')
+      .then((data) => {
+        setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
+        setContactMeta(new Map(data.map((c) => [c.id.toString(), { pronunciation: c.preferredName, title: c.title, employer: c.company?.name }])))
+        setMentionContacts(data.map((c) => ({ id: c.id, name: c.name, title: c.title })))
+      })
+      .catch(() => { })
+    api.get<{ id: number; name: string }[]>('/companies/names')
+      .then((data) => {
+        setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
+        setMentionCompanies(data.map((c) => ({ id: c.id, name: c.name })))
+      })
+      .catch(() => { })
+    api.get<Tag[]>('/tags')
+      .then((data) => setTagOptions(data.map((t) => ({ value: t.id.toString(), label: t.name }))))
+      .catch(() => { })
 
     // Edit mode: load the full meeting and prefill everything
     if (editId !== null) {
@@ -555,7 +555,7 @@ function QuickLogDialog({
         .finally(() => setLoadingEdit(false))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editId, lookupsLoaded])
+  }, [open, editId])
 
   // Fetch the previous meeting in the same series (by seriesId) for the left
   // panel's "Last meeting in series" context (debounced).
@@ -752,14 +752,18 @@ function QuickLogDialog({
   // full payload (incl. follow-up actions), flushes any staged prep notes /
   // attachments, then closes. Runs through the same save chain as autosave so it
   // can't race the first POST. Never sends `contactId` → legacy anchors untouched.
-  async function handleSave() {
+  // Resolve free-text names and persist the full meeting (incl. follow-up actions,
+  // staged prep notes & attachments). Shared by the explicit Done/Log Meeting button
+  // and the silent flush-on-close. Returns true if it persisted; `silent` suppresses
+  // the validation/success toasts (a flush must never block dismissing the dialog).
+  async function finalizeMeeting({ silent }: { silent: boolean }): Promise<boolean> {
     if (!date) {
-      toast.error('Date is required')
-      return
+      if (!silent) toast.error('Date is required')
+      return false
     }
     if (!title.trim() && orgValues.length === 0 && participantIds.length === 0 && !attendeesDescription.trim()) {
-      toast.error('Add a title (or someone who was there)')
-      return
+      if (!silent) toast.error('Add a title (or someone who was there)')
+      return false
     }
     setSaving(true)
     setSaveStatus('saving')
@@ -827,15 +831,25 @@ function QuickLogDialog({
         }
       })
 
-      toast.success(isEdit ? 'Meeting updated' : 'Meeting logged')
+      if (!silent) toast.success(isEdit ? 'Meeting updated' : 'Meeting logged')
       // Pages that list meetings (e.g. /meetings) listen for this to refresh
       window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
-      onOpenChange(false)
+      return true
     } catch (err) {
       setSaveStatus('error')
-      toast.error(err instanceof Error ? err.message : 'Failed to save meeting')
+      if (!silent) toast.error(err instanceof Error ? err.message : 'Failed to save meeting')
+      throw err
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Explicit save button (Done / Log Meeting / Save Changes): finalize, then close.
+  async function handleSave() {
+    try {
+      if (await finalizeMeeting({ silent: false })) onOpenChange(false)
+    } catch {
+      /* finalizeMeeting already surfaced the error toast */
     }
   }
 
@@ -856,13 +870,47 @@ function QuickLogDialog({
     }
   }
 
-  // Closing via Cancel / X / Escape keeps whatever autosave already persisted;
-  // refresh the lists so they reflect the latest autosaved state.
+  // Is there anything not yet persisted? Drives the flush-on-close: a dirty autosave
+  // snapshot (scalar/numeric fields), free-text names autosave deliberately skips,
+  // staged prep notes / attachments, an in-progress draft note, or unsaved actions.
+  function hasUnsavedWork(): boolean {
+    if (JSON.stringify(buildAutosaveBody()) !== lastSnapshotRef.current) return true
+    if (
+      participantIds.some((v) => !/^\d+$/.test(v)) ||
+      orgValues.some((v) => !/^\d+$/.test(v)) ||
+      tagIds.some((v) => !/^\d+$/.test(v))
+    ) return true
+    if (pendingPrepNotes.length > 0 || pendingAttachments.length > 0) return true
+    if (newPrepContent.trim()) return true
+    if (actionsDirty(newActions)) return true
+    return false
+  }
+
+  // Closing via Cancel / X / Escape / click-outside keeps your work — it is NOT a
+  // discard (that's the separate Delete button). Flush any unsaved content first
+  // (incl. free-text names, which autosave skips, and content typed inside the
+  // debounce window) so nothing is lost; hold the dialog open until it resolves.
   function handleDialogOpenChange(next: boolean) {
-    if (!next && savedIdRef.current !== null) {
+    if (next) {
+      onOpenChange(true)
+      return
+    }
+    if (hasUnsavedWork()) {
+      void (async () => {
+        try {
+          await finalizeMeeting({ silent: true })
+        } catch {
+          toast.error('Some changes may not have saved')
+        } finally {
+          onOpenChange(false)
+        }
+      })()
+      return
+    }
+    if (savedIdRef.current !== null) {
       window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
     }
-    onOpenChange(next)
+    onOpenChange(false)
   }
 
   // ── Prep notes ────────────────────────────────────────────

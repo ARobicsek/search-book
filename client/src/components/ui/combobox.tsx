@@ -152,8 +152,8 @@ interface MultiComboboxProps {
   disabled?: boolean;
   className?: string;
   // Optional per-value metadata (keyed by option value) → a hover tooltip on the
-  // selected pills showing e.g. a person's title + current employer.
-  optionMeta?: Map<string, { title?: string | null; employer?: string | null }>;
+  // selected pills showing e.g. a person's pronunciation + title + current employer.
+  optionMeta?: Map<string, { pronunciation?: string | null; title?: string | null; employer?: string | null }>;
 }
 
 export function MultiCombobox({
@@ -216,7 +216,7 @@ export function MultiCombobox({
                 const meta = optionMeta?.get(val);
                 return (
                   <Badge key={val} variant="secondary" className="gap-1 pr-1 text-xs">
-                    <PersonTooltip title={meta?.title} employer={meta?.employer}>
+                    <PersonTooltip pronunciation={meta?.pronunciation} title={meta?.title} employer={meta?.employer}>
                       <span>{label}</span>
                     </PersonTooltip>
                     <span

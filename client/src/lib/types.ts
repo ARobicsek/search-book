@@ -238,7 +238,7 @@ export interface Conversation {
   series?: { id: number; name: string } | null;
   createdAt: string;
   updatedAt: string;
-  participants?: { contact: { id: number; name: string; title?: string | null; company?: { name: string } | null }; note?: string | null }[];
+  participants?: { contact: { id: number; name: string; preferredName?: string | null; title?: string | null; company?: { name: string } | null }; note?: string | null }[];
   contactsDiscussed: { contact: { id: number; name: string } }[];
   companiesDiscussed: { company: { id: number; name: string } }[];
   /** Additional orgs the meeting was with (anchor org stays in companyId). */

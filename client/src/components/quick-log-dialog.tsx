@@ -390,8 +390,8 @@ function QuickLogDialog({
   // Lookup data, fetched lazily on first open
   const [titles, setTitles] = useState<string[]>([])
   const [contactOptions, setContactOptions] = useState<ComboboxOption[]>([])
-  // Per-contact title + employer for the participant-chip hover tooltip, keyed by id string.
-  const [contactMeta, setContactMeta] = useState<Map<string, { title?: string | null; employer?: string | null }>>(new Map())
+  // Per-contact pronunciation + title + employer for the participant-chip hover tooltip, keyed by id string.
+  const [contactMeta, setContactMeta] = useState<Map<string, { pronunciation?: string | null; title?: string | null; employer?: string | null }>>(new Map())
   // Flat contact + company lists powering the notes "@mention" autocomplete.
   const [mentionContacts, setMentionContacts] = useState<{ id: number; name: string; title?: string | null }[]>([])
   const [mentionCompanies, setMentionCompanies] = useState<{ id: number; name: string }[]>([])
@@ -466,10 +466,10 @@ function QuickLogDialog({
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
     api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => { })
     if (!lookupsLoaded) {
-      api.get<{ id: number; name: string; title?: string | null; company?: { name: string } | null }[]>('/contacts/names')
+      api.get<{ id: number; name: string; preferredName?: string | null; title?: string | null; company?: { name: string } | null }[]>('/contacts/names')
         .then((data) => {
           setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
-          setContactMeta(new Map(data.map((c) => [c.id.toString(), { title: c.title, employer: c.company?.name }])))
+          setContactMeta(new Map(data.map((c) => [c.id.toString(), { pronunciation: c.preferredName, title: c.title, employer: c.company?.name }])))
           setMentionContacts(data.map((c) => ({ id: c.id, name: c.name, title: c.title })))
         })
         .catch(() => { })
@@ -1304,6 +1304,7 @@ function QuickLogDialog({
               )}
               <PersonTooltip
                 name={participantNameOf(val)}
+                pronunciation={contactMeta.get(val)?.pronunciation}
                 title={contactMeta.get(val)?.title}
                 employer={contactMeta.get(val)?.employer}
               >

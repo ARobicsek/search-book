@@ -170,7 +170,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/names', async (_req: Request, res: Response) => {
   try {
     const contacts = await prisma.contact.findMany({
-      select: { id: true, name: true, title: true, company: { select: { name: true } } },
+      select: { id: true, name: true, preferredName: true, title: true, company: { select: { name: true } } },
       orderBy: { name: 'asc' },
     });
     res.json(contacts);

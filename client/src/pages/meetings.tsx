@@ -495,6 +495,7 @@ function MeetingCard({
               {conv.participants?.map((p) => (
                 <PersonTooltip
                   key={p.contact.id}
+                  pronunciation={p.contact.preferredName}
                   title={p.contact.title}
                   employer={p.contact.company?.name}
                   note={p.note}

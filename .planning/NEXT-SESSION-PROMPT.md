@@ -5,38 +5,43 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Action time-of-day + opt-in Web Push reminders (2026-06-24)
+### What Was Just Completed — Contact-merge data-loss + meeting-dialog autosave/lookup fixes (2026-06-24)
 
-Owner ask, **SCHEMA, deployed to `main` (`9825a3a` + a dedicated-secret follow-up) and verified
-firing live in production.** Actions can now optionally carry a **time of day** and an **opt-in
-reminder** that fires a **desktop/PWA push notification** — at **zero added cost**, and **without
-disturbing** the dominant "no times, no alerts" pattern (an action with no time and `notify=false`
-behaves exactly as before).
+Owner bug report, **3 bugs diagnosed, 2 fixed, schema-free, pushed to `main` (`95cd537` merge +
+`8cbc7ee` dialog).** Trigger: the owner merged two just-created "Seth Glickman" contacts and found the
+merged Seth had vanished from a meeting he attended, the meeting's title (which falls back to its first
+participant) went blank, and he couldn't be re-added as a participant even though he was in Contacts —
+plus an earlier write-up dismissed via the dialog "×" had silently not saved.
 
-**Built (additive — `dueDate` stays date-only):**
-- **Schema:** `Action.dueTime` ("HH:MM" local), `Action.notify` (default false), `Action.lastNotifiedAt`;
-  new `PushSubscription` table (one row/device). Owner-decided (AskUserQuestion): **time and alert are
-  independent** — a time can exist with no alert; an alert with no explicit time → **09:00 America/New_York**.
-- **Server:** `lib/push.ts` (VAPID + DST-correct `zonedWallTimeToUtc`), `routes/push.ts`
-  (public-key/subscribe/unsubscribe), `routes/reminders.ts` (`GET/POST /api/cron/reminders`, secret-gated,
-  exempt from the `/api` password gate). The cron converts each due action's wall-clock moment in
-  `REMINDER_TZ` to a real instant, pushes to every subscription, sets `lastNotifiedAt` **once**, prunes
-  dead (404/410) subs. Editing date/time/notify **re-arms** (`lastNotifiedAt`→null). `web-push` dep.
-- **Client:** time input + "Remind me" bell in `action-date-select.tsx` and the action form; time/bell
-  shown in lists & detail; **Settings → Notifications** card to enable/disable push per device;
-  `public/push-sw.js` (`push` + `notificationclick`) imported into the Workbox SW via **`importScripts`**
-  (kept `generateSW` — existing `/api` NetworkOnly + `/photos` CacheFirst caching untouched).
-- **Dashboard** (owner follow-up): today's **timed** actions sort to the **top** by time, and a timed
-  action **shifts into the Overdue card** once its moment passes.
+**Fixed:**
+- **Merge silently destroyed data** (`95cd537`, `server/src/routes/duplicates.ts`): the contact merge
+  re-pointed the anchor/actions/links/prep-notes/relationships/employment but **never handled three
+  Contact relations**, so deleting the duplicate lost data via their onDelete — `ConversationParticipant`
+  (Cascade → a meeting whose only participant was the removed contact lost it *and* its fallback title),
+  `ActionContact` (Cascade → multi-select action ownership; only legacy `Action.contactId` was migrated),
+  `ConversationMention` (SetNull → orphaned to null). Now re-points all three to the kept contact before
+  the delete, composite-PK dedupe (takeaway note carried onto the kept participant row when empty); for
+  mentions it **rewrites the `(/contacts/<id>)` token** in notes/next-steps/prep-notes via raw SQL (so
+  the save-time re-derive sticks + no `Conversation.updatedAt` bump) then rebuilds the mention index per
+  affected meeting. **Invariant: any new Contact relation must be added to the merge.**
+- **Dialog close discarded work + stale lookups** (`8cbc7ee`, `client/src/components/quick-log-dialog.tsx`):
+  closing via ×/Esc/Cancel/click-outside never flushed the pending ~1.5s autosave (timer canceled on
+  close) and free-text names are excluded from the autosave body → a new participant + notes typed and
+  dismissed before autosave fired was lost. Now **flushes on close** (shared `finalizeMeeting({ silent })`
+  + `hasUnsavedWork()`; resolves free-text names like an explicit Done; closing = keep, not discard).
+  Also the contact/org/tag lookups were **cached once per session** (dialog mounted permanently at app
+  root) → a contact created/merged mid-session was invisible to the pickers + `@`-autocomplete; removed
+  the `lookupsLoaded` gate so they **refetch on every open**.
 
-**Cost = $0:** free VAPID Web Push + a **free external 1-minute cron** (cron-job.org) — no paid Vercel Cron.
+**No fix needed (#4 in the diagnosis):** the `@`-mention the owner thought was missing was a loose
+mention of a third party that *did* index fine — false alarm (owner had trouble finding it). Merge never
+touches loose mentions anyway.
 
-**Setup (done by owner, verified):** Turso DDL applied (3 ADD COLUMN + `PushSubscription`); Vercel env
-`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`/`REMINDER_TZ` + a **dedicated `REMINDERS_CRON_SECRET`**
-(the backup `CRON_SECRET` is marked **Sensitive**/unreadable in Vercel so can't be reused in the cron URL;
-`reminders.ts` falls back to `CRON_SECRET`); cron-job.org pointed at `/api/cron/reminders?key=…` every 1 min.
-**Live reminder fired successfully** on phone (home-screen PWA) + desktop. Full runbook:
-**`.planning/ACTION-REMINDERS.md`**.
+> **Also shipped 2026-06-24 (parallel/prior session):** action **time-of-day + opt-in Web Push reminders**
+> (`9825a3a` + dedicated-secret fix; SCHEMA; deployed + verified firing live in prod). Additive
+> `Action.dueTime`/`notify`/`lastNotifiedAt` + `PushSubscription`; `dueDate` stays date-only; time/alert
+> independent (alert w/o time → 09:00 ET); $0 via free VAPID + free 1-min external cron
+> (`/api/cron/reminders`, `REMINDERS_CRON_SECRET`). Full runbook: **`.planning/ACTION-REMINDERS.md`**.
 
 **Two red herrings diagnosed during setup (note for future):** (1) pasting the cron URL in the *normal*
 browser shows the SPA shell because the **PWA service worker intercepts the address-bar navigation** —
@@ -45,10 +50,13 @@ injects a newly-added env var into builds created **after** it's added, so **Red
 
 ### What's Next
 
-1. **No carried-over primary task.** Action reminders are feature-complete + live for v1. Possible
-   *opt-in* extensions if the owner asks: a snooze/"remind again" control; reminders for actions with
-   **no due date**; surfacing the reminder time/bell in more places (e.g. calendar view); a per-device
-   "test notification" button in Settings. None built until requested.
+1. **No carried-over primary task** (this was a bug-fix session). Two *optional* follow-ups from it:
+   **(a)** re-attach the merged **"Seth Glickman"** to the meeting he lost (the pre-fix merge cascade-deleted
+   his participant link) — reopen that meeting → add him; the picker now refreshes so he's selectable.
+   **(b)** a one-off **audit/repair of *earlier* contact merges** that may have similarly lost
+   `ConversationParticipant`/`ActionContact` links or orphaned `ConversationMention`s — not run (forward-fix
+   only). Action reminders (prior session) are feature-complete + live; opt-in extensions (snooze,
+   reminders for no-due-date actions, a Settings "test notification" button) stay unbuilt until asked.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
    AI ingest) on D5/D6. Don't push on those until the owner raises them.
@@ -95,10 +103,10 @@ injects a newly-added env var into builds created **after** it's added, so **Red
 
 ### Working branch
 
-`main` — action time-of-day + Web Push reminders (`9825a3a` merge + dedicated-secret follow-up) +
-docs are **pushed**. Turso DDL applied by the owner; Vercel env vars set; external cron live; a real
-reminder fired in prod. **Nothing pending** — no held commits, no DDL outstanding. (Feature branch
-`claude/actions-time-notifications-i013g7` is merged and can be deleted.)
+`main` — contact-merge data-loss fix (`95cd537`) + meeting-dialog autosave/lookup fix (`8cbc7ee`) +
+this session's docs are **pushed**. **Schema-free** — no Turso DDL outstanding, no held commits. (Both
+fixes were rebased onto the parallel reminders session and re-verified post-rebase; server + client
+typecheck + full client `vite build` green.)
 
 ---
 
@@ -109,17 +117,16 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped **optional time-of-day +
-opt-in Web Push reminders for actions** (`9825a3a` + a dedicated-secret follow-up; SCHEMA; deployed +
-verified firing live in prod). Additive `Action.dueTime`/`notify`/`lastNotifiedAt` + a
-`PushSubscription` table; `dueDate` stays date-only so nothing about existing behavior changes — an
-action with no time and `notify=false` is unchanged. **Time and alert are independent** (alert w/o a
-time → 09:00 America/New_York). Delivery is **free Web Push** (VAPID) triggered by a **free external
-1-minute cron** (cron-job.org) hitting `/api/cron/reminders` (gated by a dedicated readable
-`REMINDERS_CRON_SECRET`, falling back to `CRON_SECRET`). UI: time input + "Remind me" bell in the date
-popover & action form, time/bell in lists/detail, Settings→Notifications per-device enable; SW push
-handlers in `public/push-sw.js`. Dashboard sorts today's timed actions to the top by time and shifts
-them to Overdue once past. **Setup is complete** (Turso DDL, Vercel env, external cron) — see
-`.planning/ACTION-REMINDERS.md`. **No carried-over task.** Plan of record is
+Context for *this* upcoming session specifically: last session was a **bug-fix session** triggered by a
+contact-merge mishap. Two schema-free fixes shipped to `main`: **(1)** the **contact merge** now
+re-points `ConversationParticipant` + `ActionContact` + `ConversationMention` to the kept contact before
+deleting the loser (it previously lost those via onDelete Cascade/SetNull — destroying a meeting's only
+participant + its fallback title) — `95cd537`; **(2)** the **Quick Log / meeting dialog** now **flushes
+unsaved work on close** (×/Esc/Cancel = keep, not discard; incl. brand-new free-text participants
+autosave skips) and **refetches contact/org/tag lookups on every open** (were cached per session, hiding
+mid-session-created/merged contacts from the pickers + `@`-autocomplete) — `8cbc7ee`. *Optional* leftover:
+re-attach the lost "Seth Glickman" participant to his meeting, and/or audit earlier merges for the same
+loss. (Action time-of-day + Web Push reminders shipped the **same day** in a parallel session — `9825a3a`,
+SCHEMA, live; runbook `.planning/ACTION-REMINDERS.md`.) Plan of record is
 `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).
 Nothing is pending (no Turso DDL, no held commits).

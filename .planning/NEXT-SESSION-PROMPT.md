@@ -7,7 +7,7 @@ here.
 
 ### What Was Just Completed — Preferred name / pronunciation field (2026-06-23)
 
-One owner ask. **SCHEMA-touching → committed locally (`e8fa48e`), PUSH HELD pending Turso DDL.**
+Two owner asks, **both shipped to `main` + deployed** (`e8fa48e` field, `d4f9c40` tooltips).
 
 **Problem:** the owner stored "what to call / how to pronounce" inside `Contact.name`
 (`Benjamin (Ben) Glicksberg`, `Vivek (Viv-ACHE) Garg`) — great to read, but it breaks joining in data
@@ -47,9 +47,9 @@ pronunciation as **"🗣 Viv-ACHE"** in the `PersonTooltip` header (full name no
 
 ### What's Next
 
-1. **No carried-over primary task** (once `e8fa48e` is pushed). v1 display scope is the primary
-   contact surfaces; participant chips / action references / entity pickers still show bare `name` —
-   thread `contactDisplayName()` there only if the owner asks. The CSV-import enrich line remains
+1. **No carried-over primary task.** v1 display scope is the primary contact surfaces + meeting
+   person-hover tooltips; action references / entity pickers / other lists still show bare `name` —
+   thread `contactDisplayName()` (or the tooltip `pronunciation` prop) there only if the owner asks. The CSV-import enrich line remains
    feature-complete for v1; future enrich options (per-column overwrite toggles, global overwrite,
    append-vs-fill for notes, 2nd-employer append) stay unbuilt until requested.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
@@ -110,15 +110,17 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session shipped two schema-free owner asks.
-(1) **Any-field enrich import "fill blanks only"** (`0ac5c0b`): the name-match path on
-`POST /api/contacts/import-match` now fills **any** mapped scalar field on a matched contact when that
-field is **currently empty** (never overwriting curated data; `ecosystem`/`status` excluded; company
-fills only when there's no current employer), on top of the existing email merge + reports-to
-relationships. The preview gained a blank-fields-filled breakdown. (2) **CSV header auto-mapper
-hardened** (`ad3b529`): the import dialog recognizes many more header synonyms (normalized aliases +
-conservative fuzzy fallback). **No carried-over task** — the
-CSV-import enrich feature is complete for v1 (future overwrite/append options exist but are
-unrequested; don't build unprompted). Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`
-(Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9). Nothing is pending (no Turso DDL,
-no held commits).
+Context for *this* upcoming session specifically: last session shipped two owner asks around a new
+**`Contact.preferredName`** ("Goes by / pronunciation") field. (1) **The field itself** (`e8fa48e`,
+schema): holds the spoken form ("Ben", "Viv-ACHE") **apart from `name`** so `name` stays clean for CSV
+joins/imports/exports; the UI recombines as **"name (preferredName)"** at display time via
+`contactDisplayName()` (contact list, detail header, global search, command palette); editable on the
+contact form; searchable server-side (reason "goes by"). A dual-mode dry-run migration
+(`server/scripts/migrate-contact-preferred-name.js`) split the parenthetical out of legacy
+`First (Spoken) Last` names — **Turso DDL + back-fill applied by the owner; deployed.** (2) **Pronunciation
+in meeting hover tooltips** (`d4f9c40`, schema-free): `PersonTooltip` now leads with **"🗣 Viv-ACHE"**
+(no repeated full name) on the Participants combobox pills, editor participant rows, and `/meetings`
+card badges. **No carried-over task** — display scope is deliberately the primary contact surfaces +
+meeting tooltips; extend `contactDisplayName()`/the tooltip `pronunciation` prop elsewhere only on
+request. Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on
+owner" block, D5/D6/D8/D9). Nothing is pending (no Turso DDL, no held commits).

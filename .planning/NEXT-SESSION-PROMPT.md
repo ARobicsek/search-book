@@ -35,10 +35,15 @@ Verified end-to-end via chrome-devtools (desktop + 390px): list "Benjamin Glicks
 h1 recombines, edit form clean Name + "Goes by"="Ben"; API round-trip (GET returns it, PUT persists,
 search "Viv-ACHE" → Vivek, reason "goes by"). `prepush` + full client `vite build` green.
 
-**⚠ [USER ACTION] before this can be pushed:** on Turso run
-`ALTER TABLE "Contact" ADD COLUMN "preferredName" TEXT;`, then the back-fill (web SQL console
-preview-SELECT → UPDATE, **or** run the script with a fresh token), then `git push origin main`
-(commit `e8fa48e` + the docs commit). **Also:** merge the #206/#208 "Ben Glicksberg" duplicate.
+**✅ DEPLOYED.** Owner ran the Turso DDL + back-fill; feature pushed (`e8fa48e` + docs). Owner
+confirmed **no current contact dups** in prod (the #206/#208 "Ben Glicksberg" pair was local-only /
+already resolved).
+
+**Follow-up shipped same day (`d4f9c40`, schema-free):** in the meeting flow, hovering a person
+(Participants combobox pills, editor participant rows, `/meetings` card badges) now shows their
+pronunciation as **"🗣 Viv-ACHE"** in the `PersonTooltip` header (full name not repeated). Threaded
+`preferredName` through `/contacts/names` + the `/meetings` participant include + the quick-log
+`contactMeta`/`optionMeta` map. Verified via chrome-devtools.
 
 ### What's Next
 
@@ -93,10 +98,8 @@ preview-SELECT → UPDATE, **or** run the script with a fresh token), then `git 
 
 ### Working branch
 
-`main` — this session committed the preferred-name feature (`e8fa48e`) + a docs commit **locally;
-the push is HELD** because it's schema-touching. **Pending before push:** run the Turso DDL
-(`ALTER TABLE "Contact" ADD COLUMN "preferredName" TEXT;`) + the back-fill, then `git push origin main`.
-No other commits pending.
+`main` — preferred-name feature (`e8fa48e`) + tooltip follow-up (`d4f9c40`) + docs are **pushed**.
+Turso DDL + back-fill applied by the owner. **Nothing pending** — no held commits, no DDL outstanding.
 
 ---
 

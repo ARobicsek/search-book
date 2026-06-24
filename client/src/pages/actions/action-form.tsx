@@ -23,7 +23,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, Star, X } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, Star, X, Bell } from 'lucide-react'
+import { ensurePushForReminder } from '@/lib/push'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { cn } from '@/lib/utils'
@@ -41,6 +42,8 @@ type FormData = {
   owedByMe: boolean
   owerIds: string[]
   dueDate: string
+  dueTime: string
+  notify: boolean
   contactIds: string[]
   companyIds: string[]
   recurring: boolean
@@ -57,6 +60,8 @@ const emptyForm: FormData = {
   owedByMe: true,
   owerIds: [],
   dueDate: '',
+  dueTime: '',
+  notify: false,
   contactIds: [],
   companyIds: [],
   recurring: false,
@@ -93,6 +98,8 @@ function actionToForm(action: Action): FormData {
     owedByMe: action.owedByMe ?? true,
     owerIds: parseOwerIds(action.owerContactIds),
     dueDate: action.dueDate ?? '',
+    dueTime: action.dueTime ?? '',
+    notify: action.notify ?? false,
     contactIds,
     companyIds,
     recurring: action.recurring,
@@ -111,6 +118,8 @@ function formToPayload(form: FormData) {
     owedByMe: form.owedByMe,
     owerContactIds: form.owerIds.map((id) => parseInt(id)).filter((n) => !Number.isNaN(n)),
     dueDate: form.dueDate || null,
+    dueTime: form.dueDate ? form.dueTime || null : null,
+    notify: form.dueDate ? form.notify : false,
     contactIds: form.contactIds.map((id) => parseInt(id)),
     companyIds: form.companyIds.map((id) => parseInt(id)),
     recurring: form.recurring,
@@ -344,6 +353,8 @@ export function ActionFormPage() {
         owedByMe: form.owedByMe,
         owerContactIds: form.owerIds.map((oid) => parseInt(oid)).filter((n) => !Number.isNaN(n)),
         dueDate: form.dueDate || null,
+        dueTime: form.dueDate ? form.dueTime || null : null,
+        notify: form.dueDate ? form.notify : false,
         contactIds: finalContactIds,
         companyIds: finalCompanyIds,
         recurring: form.recurring,
@@ -625,6 +636,42 @@ export function ActionFormPage() {
                 value={form.dueDate}
                 onChange={(e) => set('dueDate', e.target.value)}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="dueTime">Time (optional)</Label>
+              <Input
+                id="dueTime"
+                type="time"
+                value={form.dueTime}
+                disabled={!form.dueDate}
+                onChange={(e) => set('dueTime', e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 sm:col-span-2">
+              <label className={cn('flex items-center gap-2 text-sm', form.dueDate ? 'cursor-pointer' : 'opacity-50')}>
+                <input
+                  type="checkbox"
+                  checked={form.notify}
+                  disabled={!form.dueDate}
+                  onChange={async (e) => {
+                    const next = e.target.checked
+                    set('notify', next)
+                    if (next) {
+                      const ok = await ensurePushForReminder()
+                      if (!ok) {
+                        toast.message('Reminder set', {
+                          description: 'Enable notifications in Settings to get alerts on this device.',
+                        })
+                      }
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Bell className="h-3.5 w-3.5" />
+                Remind me{form.dueTime ? '' : ' (defaults to 9:00 AM)'}
+              </label>
             </div>
 
             <div className="flex items-end space-x-2 pb-0.5">

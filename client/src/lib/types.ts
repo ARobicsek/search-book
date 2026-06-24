@@ -119,6 +119,9 @@ export interface Action {
   description: string | null;
   type: ActionType;
   dueDate: string | null;
+  dueTime: string | null; // optional "HH:MM" 24h local time-of-day for the due date
+  notify: boolean; // opt-in reminder (Web Push); independent of dueTime
+  lastNotifiedAt: string | null; // ISO; set by the reminders cron once it has sent
   completed: boolean;
   completedDate: string | null;
   contactId: number | null;

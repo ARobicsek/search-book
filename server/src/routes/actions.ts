@@ -5,6 +5,16 @@ import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE, assertNotSta
 
 const router = Router();
 
+// `dueTime` is an optional "HH:MM" 24h string (or null to clear). Reject anything else
+// so a malformed value can't poison the cron's timezone math. Returns an error string or null.
+function validateDueTime(body: Record<string, unknown>): string | null {
+  if (body.dueTime === undefined || body.dueTime === null || body.dueTime === '') return null;
+  if (typeof body.dueTime !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.dueTime)) {
+    return 'dueTime must be "HH:MM" (24h) or null';
+  }
+  return null;
+}
+
 const actionIncludes = {
   contact: { select: { id: true, name: true, company: { select: { name: true } }, companyName: true } },
   company: { select: { id: true, name: true } },
@@ -203,6 +213,12 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Title is required' });
       return;
     }
+    const dueTimeError = validateDueTime(req.body);
+    if (dueTimeError) {
+      res.status(400).json({ error: dueTimeError });
+      return;
+    }
+    if (rest.dueTime === '') rest.dueTime = null; // store "no time" as null, not ""
     const owers = resolveOwers({ owedByMe, owerContactIds, direction });
     const action = await prisma.action.create({
       data: {
@@ -234,6 +250,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Action not found' });
       return;
     }
+    const dueTimeError = validateDueTime(req.body);
+    if (dueTimeError) {
+      res.status(400).json({ error: dueTimeError });
+      return;
+    }
     if (req.body.title !== undefined) {
       if (typeof req.body.title !== 'string' || req.body.title.trim().length === 0) {
         res.status(400).json({ error: 'Title cannot be empty' });
@@ -243,6 +264,16 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     const { contactIds, companyIds, _expectedUpdatedAt, owedByMe, owerContactIds, direction, ...rest } = req.body;
+    if (rest.dueTime === '') rest.dueTime = null; // store "no time" as null, not ""
+    // Re-arm the reminder when the schedule or the notify flag changes: clearing lastNotifiedAt
+    // lets the cron fire again at the new moment (rescheduling a past reminder should re-alert).
+    // Skipped if the caller set lastNotifiedAt explicitly (e.g. the cron itself).
+    if (
+      rest.lastNotifiedAt === undefined &&
+      (rest.dueDate !== undefined || rest.dueTime !== undefined || rest.notify !== undefined)
+    ) {
+      rest.lastNotifiedAt = null;
+    }
     // Task 8: optimistic-concurrency guard (only when the client sends _expectedUpdatedAt).
     const expectedUpdatedAt = parseExpectedUpdatedAt(_expectedUpdatedAt);
     // Task 3: derive owedByMe/owerContactIds/direction together (null = client sent none → leave untouched).

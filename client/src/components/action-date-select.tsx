@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarDays, ChevronDown, X } from 'lucide-react'
+import { CalendarDays, ChevronDown, X, Bell, BellOff } from 'lucide-react'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { Action } from '@/lib/types'
+import { formatActionTime } from '@/lib/action-time'
+import { ensurePushForReminder } from '@/lib/push'
 
 interface ActionDateSelectProps {
   action: Action
@@ -28,13 +30,54 @@ export function ActionDateSelect({ action, onUpdate, showLabel = true, className
       return
     }
 
+    // Clearing the date drops the time and any reminder with it.
+    const payload = newDate
+      ? { dueDate: newDate }
+      : { dueDate: null, dueTime: null, notify: false }
+
     try {
-      await api.put(`/actions/${action.id}`, { dueDate: newDate })
+      await api.put(`/actions/${action.id}`, payload)
       toast.success('Due date updated')
       onUpdate?.()
       setOpen(false)
     } catch (err) {
       toast.error('Failed to update due date')
+    }
+  }
+
+  async function updateTime(newTime: string) {
+    const value = newTime || null
+    if (value === (action.dueTime ?? null)) return
+    try {
+      await api.put(`/actions/${action.id}`, { dueTime: value })
+      onUpdate?.()
+    } catch (err) {
+      toast.error('Failed to update time')
+    }
+  }
+
+  async function toggleNotify() {
+    const next = !action.notify
+    try {
+      // Turning a reminder on: make sure this device is subscribed to push first
+      // (requests permission). Best-effort — saving still proceeds either way.
+      if (next) {
+        const ok = await ensurePushForReminder()
+        if (!ok) {
+          toast.message('Reminder set', {
+            description: 'Enable notifications in Settings to get alerts on this device.',
+          })
+        }
+      }
+      await api.put(`/actions/${action.id}`, { notify: next })
+      if (next) {
+        toast.success('Reminder on')
+      } else {
+        toast.success('Reminder off')
+      }
+      onUpdate?.()
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update reminder')
     }
   }
 
@@ -78,8 +121,11 @@ export function ActionDateSelect({ action, onUpdate, showLabel = true, className
         >
           <CalendarDays className="mr-2 h-3.5 w-3.5" />
           <span className={cn("truncate", !showLabel && "sr-only")}>
-            {action.dueDate ? formatDateDisplay(action.dueDate) : 'No Date'}
+            {action.dueDate
+              ? formatDateDisplay(action.dueDate) + (action.dueTime ? ` · ${formatActionTime(action.dueTime)}` : '')
+              : 'No Date'}
           </span>
+          {action.notify && <Bell className="ml-1 h-3 w-3 opacity-70" />}
           {showLabel && <ChevronDown className="ml-1 h-3 w-3 opacity-50" />}
         </Button>
       </PopoverTrigger>
@@ -125,6 +171,34 @@ export function ActionDateSelect({ action, onUpdate, showLabel = true, className
               onChange={(e) => updateDate(e.target.value)}
             />
           </div>
+
+          {action.dueDate && (
+            <>
+              <div className="px-2 py-1.5">
+                <span className="text-xs text-muted-foreground mb-1 block">Time (optional)</span>
+                <Input
+                  type="time"
+                  className="h-8 text-xs"
+                  value={action.dueTime || ''}
+                  onChange={(e) => updateTime(e.target.value)}
+                />
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="justify-start font-normal"
+                onClick={toggleNotify}
+              >
+                {action.notify ? (
+                  <Bell className="mr-2 h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <BellOff className="mr-2 h-3.5 w-3.5" />
+                )}
+                {action.notify ? 'Reminder on' : 'Remind me'}
+              </Button>
+            </>
+          )}
 
           {action.dueDate && (
             <>

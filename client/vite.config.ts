@@ -44,6 +44,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Web Push + notificationclick handlers live in public/push-sw.js and are
+        // imported into the generated SW. Kept separate so the heavy Workbox caching
+        // config below stays untouched (lower risk than switching to injectManifest).
+        importScripts: ['/push-sw.js'],
         runtimeCaching: [
           {
             // Task 15: API responses are NEVER cached. A stale cached record fed

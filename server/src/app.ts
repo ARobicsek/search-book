@@ -34,6 +34,8 @@ import companyActivitiesRouter from './routes/company-activities';
 import linkedinRouter from './routes/linkedin';
 import calendarRouter from './routes/calendar';
 import undoRouter from './routes/undo';
+import pushRouter from './routes/push';
+import remindersRouter from './routes/reminders';
 
 const app = express();
 
@@ -154,6 +156,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.APP_PASSWORD) {
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();        // open for uptime monitor (Task 5)
   if (req.path === '/backup/cron') return next();   // CRON_SECRET-gated instead (Task 4)
+  if (req.path === '/cron/reminders') return next(); // CRON_SECRET-gated instead (action reminders)
   const expected = process.env.APP_PASSWORD;
   if (!expected) return next();                     // dev convenience when unset
   const provided = req.header('x-app-password') || '';
@@ -210,6 +213,8 @@ app.use('/api/company-activities', companyActivitiesRouter);
 app.use('/api/linkedin', linkedinRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/undo', undoRouter);
+app.use('/api/push', pushRouter);
+app.use('/api/cron', remindersRouter);
 
 // Task 17: Sentry must capture errors after the routes are mounted. Most route
 // handlers catch their own errors, so this primarily reports uncaught throws.

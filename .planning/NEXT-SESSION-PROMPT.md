@@ -26,10 +26,13 @@ trip Prisma validation. **`PushSubscription`** (device keys) + **`DeletedSnapsho
 confirmed *deliberately* excluded as ephemeral. Verified against local SQLite: all 30 user tables
 accounted for, 0 unaccounted-for. Typecheck (client+server) + full client `vite build` green.
 
-> **Standing invariant (now twice-burned):** any **new Prisma model** that holds user content MUST be
+> **Standing invariant (now auto-enforced):** any **new Prisma model** that holds user content MUST be
 > added to **both** backup paths (`server/src/routes/backup.ts` export + `/import`; `client/src/lib/backup.ts`
 > `TABLES_PARENT_FIRST`) — parent-before-child for inserts. Only `PushSubscription` + `DeletedSnapshot`
-> are exempt.
+> are exempt. **A guard now enforces this:** `server/scripts/check-backup-coverage.mjs` (in `npm run prepush`
+> **and** the Vercel `build:vercel`) parses the schema + all three enumerations and **fails the build** if a
+> model is uncovered — so this can no longer be silently forgotten. Add new models to the backup, or to the
+> guard's `EXEMPT` set.
 
 ### Previously Completed — Time-of-day auto-enables "Remind me" (2026-06-24)
 

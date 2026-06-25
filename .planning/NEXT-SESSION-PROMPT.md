@@ -5,7 +5,33 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Time-of-day auto-enables "Remind me" (2026-06-24)
+### What Was Just Completed — Backup coverage fix: `Series` + `IdeaTag` were missing (2026-06-25)
+
+Owner asked to confirm backups (automated **and** manual) still fully restore everything after the
+recent additions. Audited all **32 Prisma models** against both backup enumerations — the server
+`buildExport` (cron→Vercel Blob + `/export`) **and** the browser-direct Turso `TABLES_PARENT_FIRST`
+(plus the matching `/import` + `importViaTurso` restore orderings). They covered only **28 of 30**
+user-data tables. **Two tables shipped after the list was last touched and were silently omitted:**
+- **`Series`** (recurring-meeting series; `Conversation.seriesId → Series.id`). A restore into a fresh
+  DB lost all series names and left conversations with a dangling `seriesId` → under FK enforcement
+  that **aborts the entire restore transaction**.
+- **`IdeaTag`** (tags-on-ideas junction). Ideas silently lost their non-legacy tag links on restore.
+
+Fix (`2dcd3b8`, **schema-free** — both tables already exist in Turso, no DDL): added both to the
+browser-direct list (`Series` before `Conversation` so inserts stay FK-safe + the reverse deletes it
+after; `IdeaTag` after Idea+Tag), to the server export, and to the `/import` delete+insert ordering;
+bumped backup `_meta.version` 6→7 in both paths. Also added `notify`/`owedByMe`/`archived` to
+`/import`'s `BOOLEAN_FIELDS` (booleans added since) so a browser-export → local-dev import doesn't
+trip Prisma validation. **`PushSubscription`** (device keys) + **`DeletedSnapshot`** (undo stack) are
+confirmed *deliberately* excluded as ephemeral. Verified against local SQLite: all 30 user tables
+accounted for, 0 unaccounted-for. Typecheck (client+server) + full client `vite build` green.
+
+> **Standing invariant (now twice-burned):** any **new Prisma model** that holds user content MUST be
+> added to **both** backup paths (`server/src/routes/backup.ts` export + `/import`; `client/src/lib/backup.ts`
+> `TABLES_PARENT_FIRST`) — parent-before-child for inserts. Only `PushSubscription` + `DeletedSnapshot`
+> are exempt.
+
+### Previously Completed — Time-of-day auto-enables "Remind me" (2026-06-24)
 
 Tiny owner ask, **schema-free, pushed to `main`.** Picking a time of day on an action now defaults
 its **"Remind me"** reminder to **ON** — implemented in both editing surfaces: the inline
@@ -60,12 +86,13 @@ injects a newly-added env var into builds created **after** it's added, so **Red
 
 ### What's Next
 
-1. **No carried-over primary task** (this was a bug-fix session). Two *optional* follow-ups from it:
-   **(a)** re-attach the merged **"Seth Glickman"** to the meeting he lost (the pre-fix merge cascade-deleted
-   his participant link) — reopen that meeting → add him; the picker now refreshes so he's selectable.
-   **(b)** a one-off **audit/repair of *earlier* contact merges** that may have similarly lost
-   `ConversationParticipant`/`ActionContact` links or orphaned `ConversationMention`s — not run (forward-fix
-   only). Action reminders (prior session) are feature-complete + live; opt-in extensions (snooze,
+1. **No carried-over primary task** (this was a maintenance/backup-integrity session). *Optional*
+   leftovers still open from the prior merge bug-fix session: **(a)** re-attach the merged
+   **"Seth Glickman"** to the meeting he lost (the pre-fix merge cascade-deleted his participant link)
+   — reopen that meeting → add him; the picker now refreshes so he's selectable. **(b)** a one-off
+   **audit/repair of *earlier* contact merges** that may have similarly lost
+   `ConversationParticipant`/`ActionContact` links or orphaned `ConversationMention`s — not run
+   (forward-fix only). Action reminders are feature-complete + live; opt-in extensions (snooze,
    reminders for no-due-date actions, a Settings "test notification" button) stay unbuilt until asked.
 2. Plan of record is **`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+)**. Check the **"⏳ Waiting on
    owner"** block — **D5/D6/D8/D9**. Phase 3 (stakeholder intel) is gated on D8/D9; Phase 4 (Copilot
@@ -113,10 +140,10 @@ injects a newly-added env var into builds created **after** it's added, so **Red
 
 ### Working branch
 
-`main` — contact-merge data-loss fix (`95cd537`) + meeting-dialog autosave/lookup fix (`8cbc7ee`) +
-this session's docs are **pushed**. **Schema-free** — no Turso DDL outstanding, no held commits. (Both
-fixes were rebased onto the parallel reminders session and re-verified post-rebase; server + client
-typecheck + full client `vite build` green.)
+`main` — backup coverage fix (`2dcd3b8`, adds `Series` + `IdeaTag` to both backup/restore paths) +
+this session's docs are **pushed**. **Schema-free** — no Turso DDL outstanding, no held commits.
+Server + client typecheck + full client `vite build` green. (The pre-existing unrelated
+`server/package-lock.json` churn from a prior `npm install` was left unstaged to keep the commit atomic.)
 
 ---
 

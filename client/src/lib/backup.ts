@@ -1,6 +1,11 @@
 import { createClient, type Client, type Transaction } from '@libsql/client/web';
 
-/** All tables in the backup, ordered parent-first for inserts. */
+/**
+ * All tables in the backup, ordered parent-first for inserts.
+ * INVARIANT: every user-content Prisma model must be listed here (and in the server
+ * paths in routes/backup.ts). Enforced by server/scripts/check-backup-coverage.mjs,
+ * which runs in `npm run prepush` and the Vercel build — it fails if a model is missing.
+ */
 const TABLES_PARENT_FIRST = [
   // Series is a parent of Conversation (Conversation.seriesId → Series.id), so it
   // must appear before Conversation here (and be deleted after it in the reverse).

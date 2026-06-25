@@ -51,7 +51,7 @@ api/index.ts      # Vercel serverless entry point
 - **Auto-save pattern**: `useAutoSave` hook with debounced saves (1.5-2s)
 - **Pagination**: Server returns `{ data: [...], pagination: { total, limit, offset, hasMore } }`
 - **Server-side filters**: `/contacts` accepts `ecosystem`, `status`, `flagged`, `search`, `sortBy`, `sortDir`
-- **Backup**: Browser-direct Turso queries (bypasses Vercel 30s timeout)
+- **Backup**: Browser-direct Turso queries (bypasses Vercel 30s timeout). **Every user-content Prisma model must be in both backup paths** (server `routes/backup.ts` export + `/import`; client `lib/backup.ts` `TABLES_PARENT_FIRST`); only `PushSubscription`/`DeletedSnapshot` are exempt (ephemeral). A guard (`server/scripts/check-backup-coverage.mjs`, run by `prepush` + the Vercel build) **fails the build** if a model is missing — add new models to the backup, or to the guard's `EXEMPT` set.
 - **Toast notifications**: Use `sonner` (not react-hot-toast)
 - **Markdown rendering**: Use `ReactMarkdown` with `prep-note-markdown` CSS class
 

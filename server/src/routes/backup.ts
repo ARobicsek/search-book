@@ -24,6 +24,9 @@ function bigintReplacer(_key: string, value: unknown): unknown {
 // Build the full 30-table export object. Shared by /export and /cron.
 // (PushSubscription = per-device push keys and DeletedSnapshot = undo stack are
 // deliberately omitted — both are ephemeral, not user content.)
+// INVARIANT: every user-content model must appear here, in /import below, and in the
+// client's TABLES_PARENT_FIRST. Enforced by server/scripts/check-backup-coverage.mjs
+// (runs in `npm run prepush` + the Vercel build) — it fails the build on any gap.
 async function buildExport() {
   const [
     contacts, companies, employmentHistory, tags, contactTags, companyTags,

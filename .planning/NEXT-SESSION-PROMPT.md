@@ -5,7 +5,17 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Contact-merge data-loss + meeting-dialog autosave/lookup fixes (2026-06-24)
+### What Was Just Completed — Time-of-day auto-enables "Remind me" (2026-06-24)
+
+Tiny owner ask, **schema-free, pushed to `main`.** Picking a time of day on an action now defaults
+its **"Remind me"** reminder to **ON** — implemented in both editing surfaces: the inline
+`ActionDateSelect` popover (`updateTime`) and the full action form's time `<Input>`. Auto-enables only
+when `notify` is currently off (won't fight a deliberate later toggle-off within the same edit), and
+runs the same `ensurePushForReminder()` device-subscribe + Settings-fallback toast as the manual bell.
+Toggle-off still works; clearing the date still drops time+notify. Runbook note added to
+`.planning/ACTION-REMINDERS.md`. Typecheck (client+server) + full client `vite build` green.
+
+### Previously Completed — Contact-merge data-loss + meeting-dialog autosave/lookup fixes (2026-06-24)
 
 Owner bug report, **3 bugs diagnosed, 2 fixed, schema-free, pushed to `main` (`95cd537` merge +
 `8cbc7ee` dialog).** Trigger: the owner merged two just-created "Seth Glickman" contacts and found the

@@ -48,8 +48,22 @@ export function ActionDateSelect({ action, onUpdate, showLabel = true, className
   async function updateTime(newTime: string) {
     const value = newTime || null
     if (value === (action.dueTime ?? null)) return
+    // Picking a time of day defaults the reminder ON (only when it's currently
+    // off) — mirrors toggleNotify: subscribe this device to push first.
+    const autoEnableNotify = !!value && !action.notify
     try {
-      await api.put(`/actions/${action.id}`, { dueTime: value })
+      if (autoEnableNotify) {
+        const ok = await ensurePushForReminder()
+        if (!ok) {
+          toast.message('Reminder set', {
+            description: 'Enable notifications in Settings to get alerts on this device.',
+          })
+        }
+      }
+      await api.put(
+        `/actions/${action.id}`,
+        autoEnableNotify ? { dueTime: value, notify: true } : { dueTime: value },
+      )
       onUpdate?.()
     } catch (err) {
       toast.error('Failed to update time')

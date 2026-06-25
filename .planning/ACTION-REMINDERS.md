@@ -17,7 +17,9 @@ default pattern of use — no times, no alerts — is completely unchanged: an a
   changes.
 - **Client**: time input + "Remind me" bell in `action-date-select.tsx` and `action-form.tsx`;
   time/bell shown in lists/detail; `lib/push.ts` (subscribe flow); Settings → Notifications card;
-  `public/push-sw.js` (push + notificationclick) imported into the Workbox SW.
+  `public/push-sw.js` (push + notificationclick) imported into the Workbox SW. **Picking a time of
+  day auto-enables `notify`** (only when it's currently off; subscribes the device to push) — the
+  reminder can still be toggled back off afterward.
 - **Dashboard**: today's **timed** actions sort to the top by time; once a timed action's moment
   passes it moves into the **Overdue** card.
 

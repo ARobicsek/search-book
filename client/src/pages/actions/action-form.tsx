@@ -645,7 +645,25 @@ export function ActionFormPage() {
                 type="time"
                 value={form.dueTime}
                 disabled={!form.dueDate}
-                onChange={(e) => set('dueTime', e.target.value)}
+                onChange={async (e) => {
+                  const next = e.target.value
+                  // Picking a time of day defaults "Remind me" ON (only when
+                  // it's currently off) — subscribe this device to push.
+                  const autoEnableNotify = !!next && !form.notify
+                  setForm((prev) => ({
+                    ...prev,
+                    dueTime: next,
+                    notify: autoEnableNotify ? true : prev.notify,
+                  }))
+                  if (autoEnableNotify) {
+                    const ok = await ensurePushForReminder()
+                    if (!ok) {
+                      toast.message('Reminder set', {
+                        description: 'Enable notifications in Settings to get alerts on this device.',
+                      })
+                    }
+                  }
+                }}
               />
             </div>
 

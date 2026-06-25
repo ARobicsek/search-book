@@ -2,12 +2,15 @@ import { createClient, type Client, type Transaction } from '@libsql/client/web'
 
 /** All tables in the backup, ordered parent-first for inserts. */
 const TABLES_PARENT_FIRST = [
-  'Company', 'Contact', 'Tag', 'Idea',
+  // Series is a parent of Conversation (Conversation.seriesId → Series.id), so it
+  // must appear before Conversation here (and be deleted after it in the reverse).
+  'Company', 'Contact', 'Tag', 'Idea', 'Series',
   'EmploymentHistory', 'Conversation', 'Action',
   'ContactTag', 'CompanyTag',
   'ConversationContact', 'ConversationCompany',
   'ActionContact', 'ActionCompany',
-  'IdeaContact', 'IdeaCompany',
+  // IdeaTag = tags-on-ideas junction (parents Idea + Tag appear earlier)
+  'IdeaContact', 'IdeaCompany', 'IdeaTag',
   'Link', 'PrepNote', 'Relationship',
   // Task 3: leaf children of Company/Contact/Conversation — safe to append
   // (parents already appear earlier, so inserts stay FK-safe; reverse handles deletes)
@@ -64,7 +67,7 @@ async function readAllTables(
   onProgress?: (progress: BackupProgress) => void
 ): Promise<Record<string, unknown>> {
   const data: Record<string, unknown> = {
-    _meta: { exportedAt: new Date().toISOString(), version: 6 },
+    _meta: { exportedAt: new Date().toISOString(), version: 7 },
   };
 
   for (let i = 0; i < TABLES_PARENT_FIRST.length; i++) {

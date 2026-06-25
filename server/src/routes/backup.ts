@@ -21,7 +21,9 @@ function bigintReplacer(_key: string, value: unknown): unknown {
   return typeof value === 'bigint' ? Number(value) : value;
 }
 
-// Build the full 28-table export object. Shared by /export and /cron.
+// Build the full 30-table export object. Shared by /export and /cron.
+// (PushSubscription = per-device push keys and DeletedSnapshot = undo stack are
+// deliberately omitted — both are ephemeral, not user content.)
 async function buildExport() {
   const [
     contacts, companies, employmentHistory, tags, contactTags, companyTags,
@@ -31,7 +33,7 @@ async function buildExport() {
     contactStatusHistory, companyStatusHistory, companyActivities,
     companyPrepNotes, conversationParticipants, conversationTags,
     conversationPrepNotes, conversationAttachments, conversationOrgs,
-    conversationMentions,
+    conversationMentions, series, ideaTags,
   ] = await Promise.all([
     prisma.contact.findMany(),
     prisma.company.findMany(),
@@ -61,10 +63,12 @@ async function buildExport() {
     prisma.conversationAttachment.findMany(),
     prisma.conversationOrg.findMany(),
     prisma.conversationMention.findMany(),
+    prisma.series.findMany(),
+    prisma.ideaTag.findMany(),
   ]);
 
   return {
-    _meta: { exportedAt: new Date().toISOString(), version: 6 },
+    _meta: { exportedAt: new Date().toISOString(), version: 7 },
     Contact: contacts,
     Company: companies,
     EmploymentHistory: employmentHistory,
@@ -98,6 +102,10 @@ async function buildExport() {
     ConversationOrg: conversationOrgs,
     // @-mentions of people inside meeting notes (derived index over the note text)
     ConversationMention: conversationMentions,
+    // Recurring-meeting series (parent of Conversation.seriesId)
+    Series: series,
+    // Tags-on-ideas junction (shares the app-wide Tag entity)
+    IdeaTag: ideaTags,
   };
 }
 
@@ -375,7 +383,7 @@ router.post('/save-local', (req: Request, res: Response) => {
 // - Raw SQLite strings: "2026-02-08 15:39:27"
 // Booleans come as integers (0/1) instead of true/false.
 const DATETIME_FIELDS = new Set(['createdAt', 'updatedAt']);
-const BOOLEAN_FIELDS = new Set(['flagged', 'completed', 'recurring']);
+const BOOLEAN_FIELDS = new Set(['flagged', 'completed', 'recurring', 'notify', 'owedByMe', 'archived']);
 
 function toDate(value: unknown): Date {
   if (typeof value === 'number') return new Date(value);
@@ -431,6 +439,7 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.companyTag.deleteMany();
       await tx.ideaContact.deleteMany();
       await tx.ideaCompany.deleteMany();
+      await tx.ideaTag.deleteMany();
       await tx.link.deleteMany();
       await tx.prepNote.deleteMany();
       await tx.relationship.deleteMany();
@@ -438,6 +447,8 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.actionCompany.deleteMany();
       await tx.action.deleteMany();
       await tx.conversation.deleteMany();
+      // Series is a parent of Conversation.seriesId — delete it AFTER conversations.
+      await tx.series.deleteMany();
       await tx.employmentHistory.deleteMany();
       await tx.idea.deleteMany();
       await tx.tag.deleteMany();
@@ -466,6 +477,8 @@ router.post('/import', async (req: Request, res: Response) => {
       if (data.Tag?.length) await tx.tag.createMany({ data: transformRecords(data.Tag) });
       if (data.Idea?.length) await tx.idea.createMany({ data: transformRecords(data.Idea) });
       if (data.EmploymentHistory?.length) await tx.employmentHistory.createMany({ data: transformRecords(data.EmploymentHistory) });
+      // Series must be inserted before Conversation (Conversation.seriesId → Series.id)
+      if (data.Series?.length) await tx.series.createMany({ data: transformRecords(data.Series) });
       if (data.Conversation?.length) await tx.conversation.createMany({ data: transformRecords(data.Conversation) });
       if (data.Action?.length) await tx.action.createMany({ data: transformRecords(data.Action) });
       if (data.ActionContact?.length) await tx.actionContact.createMany({ data: transformRecords(data.ActionContact) });
@@ -476,6 +489,8 @@ router.post('/import', async (req: Request, res: Response) => {
       if (data.ConversationCompany?.length) await tx.conversationCompany.createMany({ data: transformRecords(data.ConversationCompany) });
       if (data.IdeaContact?.length) await tx.ideaContact.createMany({ data: transformRecords(data.IdeaContact) });
       if (data.IdeaCompany?.length) await tx.ideaCompany.createMany({ data: transformRecords(data.IdeaCompany) });
+      // Tags-on-ideas junction (parents Idea + Tag already inserted)
+      if (data.IdeaTag?.length) await tx.ideaTag.createMany({ data: transformRecords(data.IdeaTag) });
       if (data.Link?.length) await tx.link.createMany({ data: transformRecords(data.Link) });
       if (data.PrepNote?.length) await tx.prepNote.createMany({ data: transformRecords(data.PrepNote) });
       if (data.Relationship?.length) await tx.relationship.createMany({ data: transformRecords(data.Relationship) });

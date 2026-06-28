@@ -51,9 +51,14 @@ router.get('/', async (req: Request, res: Response) => {
 
     const sortDescending = sortDir !== 'asc'; // default desc
     const sortByLastOutreach = sortBy === 'lastOutreachDate';
+    // Company sort needs post-query sorting because the display name is
+    // coalesce(company.name, companyName) — spanning a relation + a text field.
+    const sortByCompany = sortBy === 'company';
+    // Any sort that requires post-query computation must fetch all rows first.
+    const postQuerySort = sortByLastOutreach || sortByCompany;
 
     let prismaOrderBy: any = undefined;
-    if (!sortByLastOutreach && sortBy) {
+    if (!postQuerySort && sortBy) {
       const dir = sortDescending ? 'desc' : 'asc';
       if (sortBy === 'name') prismaOrderBy = { name: dir };
       else if (sortBy === 'title') prismaOrderBy = { title: dir };
@@ -61,14 +66,13 @@ router.get('/', async (req: Request, res: Response) => {
       else if (sortBy === 'status') prismaOrderBy = { status: dir };
       else if (sortBy === 'location') prismaOrderBy = { location: dir };
       else if (sortBy === 'updatedAt') prismaOrderBy = { updatedAt: dir };
-      else if (sortBy === 'company') prismaOrderBy = { companyName: dir };
       else prismaOrderBy = { updatedAt: 'desc' };
-    } else if (!sortByLastOutreach) {
+    } else if (!postQuerySort) {
       prismaOrderBy = { updatedAt: 'desc' };
     }
 
-    // When sorting by lastOutreachDate, we need to fetch all contacts first,
-    // compute lastOutreachDate, sort, then paginate
+    // When sorting by lastOutreachDate or company, we need to fetch all contacts
+    // first, compute the derived value, sort, then paginate
     const contacts = await prisma.contact.findMany({
       where,
       select: {
@@ -88,9 +92,9 @@ router.get('/', async (req: Request, res: Response) => {
         createdAt: true,
         updatedAt: true,
       },
-      orderBy: sortByLastOutreach ? undefined : prismaOrderBy,
-      take: sortByLastOutreach ? undefined : take,
-      skip: sortByLastOutreach ? undefined : skip,
+      orderBy: postQuerySort ? undefined : prismaOrderBy,
+      take: postQuerySort ? undefined : take,
+      skip: postQuerySort ? undefined : skip,
     });
 
     // Get last outreach dates for contacts
@@ -145,6 +149,24 @@ router.get('/', async (req: Request, res: Response) => {
           ? b.lastOutreachDate.localeCompare(a.lastOutreachDate)
           : a.lastOutreachDate.localeCompare(b.lastOutreachDate);
       });
+    }
+
+    // Sort by effective company display name: coalesce(company.name, companyName)
+    if (sortByCompany) {
+      result.sort((a, b) => {
+        const aName = (a.company?.name || a.companyName || '').toLowerCase();
+        const bName = (b.company?.name || b.companyName || '').toLowerCase();
+        // Empties sort last regardless of direction
+        if (!aName && !bName) return 0;
+        if (!aName) return 1;
+        if (!bName) return -1;
+        return sortDescending
+          ? bName.localeCompare(aName)
+          : aName.localeCompare(bName);
+      });
+    }
+
+    if (postQuerySort) {
       const total = result.length;
       result = result.slice(skip, skip + take);
       res.json({

@@ -139,13 +139,17 @@ export function IdeaListPage() {
       return // truly not found
     }
     highlightId.current = null // consume — only auto-expand once
-    setExpandedId(hId)
-    // Clear the ?id= param so refreshing doesn't re-scroll
+    
+    // Auto-open the edit modal for the deep-linked idea
+    openEdit(found)
+    
+    // Clear the ?id= param so refreshing doesn't re-trigger
     setSearchParams((prev) => { prev.delete('id'); return prev }, { replace: true })
     // Scroll after React renders the expanded card
     requestAnimationFrame(() => {
       document.getElementById(`idea-${hId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ideas, loading, archiveFilter, setSearchParams])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)

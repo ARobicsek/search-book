@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { Idea, Contact, Company, Tag } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -119,6 +120,35 @@ export function IdeaListPage() {
   // Click-to-expand: collapsed cards/rows clamp the description to 4 lines; expanded
   // shows the full markdown (incl. pasted screenshots) without opening the editor.
   const [expandedId, setExpandedId] = useState<number | null>(null)
+
+  // Deep-link: /ideas?id=123 expands + scrolls to that idea.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const highlightId = useRef<number | null>(() => {
+    const raw = searchParams.get('id')
+    return raw ? parseInt(raw, 10) || null : null
+  })
+  // Once ideas load, expand the deep-linked idea and scroll to it.
+  useEffect(() => {
+    const hId = highlightId.current
+    if (!hId || loading || ideas.length === 0) return
+    // If the idea is archived but we're viewing active-only, widen the filter.
+    const found = ideas.find((i) => i.id === hId)
+    if (!found) {
+      if (archiveFilter === 'active') {
+        setArchiveFilter('all') // triggers a reload
+        return
+      }
+      return // truly not found
+    }
+    highlightId.current = null // consume — only auto-expand once
+    setExpandedId(hId)
+    // Clear the ?id= param so refreshing doesn't re-scroll
+    setSearchParams((prev) => { prev.delete('id'); return prev }, { replace: true })
+    // Scroll after React renders the expanded card
+    requestAnimationFrame(() => {
+      document.getElementById(`idea-${hId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [ideas, loading, archiveFilter, setSearchParams])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
@@ -703,6 +733,7 @@ export function IdeaListPage() {
             return (
               <div
                 key={idea.id}
+                id={`idea-${idea.id}`}
                 className={cn(
                   'cursor-pointer px-3 py-2 transition-colors hover:bg-muted/40',
                   idx > 0 && 'border-t',
@@ -757,6 +788,7 @@ export function IdeaListPage() {
             return (
             <Card
               key={idea.id}
+              id={`idea-${idea.id}`}
               className={cn(
                 'flex cursor-pointer flex-col gap-2 py-3 transition-colors hover:border-primary/40',
                 idea.archived && 'opacity-70'

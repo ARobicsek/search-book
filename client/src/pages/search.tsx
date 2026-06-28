@@ -291,7 +291,7 @@ function IdeaSearchCard({ idea, ev, onTagClick }: { idea: SearchResult['ideas'][
   return (
     <Card className="mb-2">
       <CardContent className="p-3">
-        <Link to="/ideas" className="font-medium hover:underline">
+        <Link to={`/ideas?id=${idea.id}`} className="font-medium hover:underline">
           <HighlightedText text={idea.title} terms={ev.terms} caseSensitive={ev.caseSensitive} />
         </Link>
         {idea.description && (
@@ -438,7 +438,7 @@ function ContactSearchCard({
                     <ul className="space-y-1">
                       {related.ideas.map((idea) => (
                         <li key={idea.id} className="text-sm">
-                          <Link to="/ideas" className="hover:underline">
+                          <Link to={`/ideas?id=${idea.id}`} className="hover:underline">
                             {idea.title}
                           </Link>
                         </li>
@@ -578,7 +578,7 @@ function CompanySearchCard({
                     <ul className="space-y-1">
                       {related.ideas.map((idea) => (
                         <li key={idea.id} className="text-sm">
-                          <Link to="/ideas" className="hover:underline">
+                          <Link to={`/ideas?id=${idea.id}`} className="hover:underline">
                             {idea.title}
                           </Link>
                         </li>

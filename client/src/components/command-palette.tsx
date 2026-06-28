@@ -443,7 +443,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
             {searchResults.ideas.length > 0 && (
               <CommandGroup heading="Ideas">
                 {searchResults.ideas.map((idea) => (
-                  <CommandItem key={`search-idea-${idea.id}`} onSelect={() => { close(); navigate('/ideas') }}>
+                  <CommandItem key={`search-idea-${idea.id}`} onSelect={() => { close(); navigate(`/ideas?id=${idea.id}`) }}>
                     <Lightbulb className="mr-2 h-4 w-4" />
                     <span>{idea.title}</span>
                   </CommandItem>

@@ -123,10 +123,8 @@ export function IdeaListPage() {
 
   // Deep-link: /ideas?id=123 expands + scrolls to that idea.
   const [searchParams, setSearchParams] = useSearchParams()
-  const highlightId = useRef<number | null>(() => {
-    const raw = searchParams.get('id')
-    return raw ? parseInt(raw, 10) || null : null
-  })
+  const highlightIdParam = searchParams.get('id')
+  const highlightId = useRef<number | null>(highlightIdParam ? parseInt(highlightIdParam, 10) || null : null)
   // Once ideas load, expand the deep-linked idea and scroll to it.
   useEffect(() => {
     const hId = highlightId.current

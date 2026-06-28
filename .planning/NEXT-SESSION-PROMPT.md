@@ -5,6 +5,14 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Contact company-sort and Idea deep-links (2026-06-28)
+
+Owner reported two UX bugs, both fixed and pushed to `main`.
+1. **Contact Sorting by Company:** The Contacts list `sortBy === 'company'` was broken because the display company is dynamically resolved (`company.name ?? companyName`). Fixed in `server/src/routes/contacts.ts` by checking if the sort is 'company', and if so, fetching all unpaginated matching contacts, computing the display name in JS (unified lowercase comparison, pushing empties to the end), and then paginating the sorted array.
+2. **Idea Deep-Linking from Global Search:** Clicking an idea in `/search` just took the user to the `/ideas` homepage. Added support for `/ideas?id=N` deep-linking. Updated `search.tsx` and `command-palette.tsx` to link with the param. In `idea-list.tsx`, read the param on mount, auto-expand the target idea, and scroll it into view. Added a temporary visual highlight (`ring-2 ring-primary` or similar via Tailwind `highlightedId` state) so it's obvious which card was targeted even if the description is short. Fixed a bug where `useRef` was incorrectly passed a lazy initializer function.
+
+
+
 ### What Was Just Completed — Backup coverage fix: `Series` + `IdeaTag` were missing (2026-06-25)
 
 Owner asked to confirm backups (automated **and** manual) still fully restore everything after the
@@ -44,48 +52,6 @@ runs the same `ensurePushForReminder()` device-subscribe + Settings-fallback toa
 Toggle-off still works; clearing the date still drops time+notify. Runbook note added to
 `.planning/ACTION-REMINDERS.md`. Typecheck (client+server) + full client `vite build` green.
 
-### Previously Completed — Contact-merge data-loss + meeting-dialog autosave/lookup fixes (2026-06-24)
-
-Owner bug report, **3 bugs diagnosed, 2 fixed, schema-free, pushed to `main` (`95cd537` merge +
-`8cbc7ee` dialog).** Trigger: the owner merged two just-created "Seth Glickman" contacts and found the
-merged Seth had vanished from a meeting he attended, the meeting's title (which falls back to its first
-participant) went blank, and he couldn't be re-added as a participant even though he was in Contacts —
-plus an earlier write-up dismissed via the dialog "×" had silently not saved.
-
-**Fixed:**
-- **Merge silently destroyed data** (`95cd537`, `server/src/routes/duplicates.ts`): the contact merge
-  re-pointed the anchor/actions/links/prep-notes/relationships/employment but **never handled three
-  Contact relations**, so deleting the duplicate lost data via their onDelete — `ConversationParticipant`
-  (Cascade → a meeting whose only participant was the removed contact lost it *and* its fallback title),
-  `ActionContact` (Cascade → multi-select action ownership; only legacy `Action.contactId` was migrated),
-  `ConversationMention` (SetNull → orphaned to null). Now re-points all three to the kept contact before
-  the delete, composite-PK dedupe (takeaway note carried onto the kept participant row when empty); for
-  mentions it **rewrites the `(/contacts/<id>)` token** in notes/next-steps/prep-notes via raw SQL (so
-  the save-time re-derive sticks + no `Conversation.updatedAt` bump) then rebuilds the mention index per
-  affected meeting. **Invariant: any new Contact relation must be added to the merge.**
-- **Dialog close discarded work + stale lookups** (`8cbc7ee`, `client/src/components/quick-log-dialog.tsx`):
-  closing via ×/Esc/Cancel/click-outside never flushed the pending ~1.5s autosave (timer canceled on
-  close) and free-text names are excluded from the autosave body → a new participant + notes typed and
-  dismissed before autosave fired was lost. Now **flushes on close** (shared `finalizeMeeting({ silent })`
-  + `hasUnsavedWork()`; resolves free-text names like an explicit Done; closing = keep, not discard).
-  Also the contact/org/tag lookups were **cached once per session** (dialog mounted permanently at app
-  root) → a contact created/merged mid-session was invisible to the pickers + `@`-autocomplete; removed
-  the `lookupsLoaded` gate so they **refetch on every open**.
-
-**No fix needed (#4 in the diagnosis):** the `@`-mention the owner thought was missing was a loose
-mention of a third party that *did* index fine — false alarm (owner had trouble finding it). Merge never
-touches loose mentions anyway.
-
-> **Also shipped 2026-06-24 (parallel/prior session):** action **time-of-day + opt-in Web Push reminders**
-> (`9825a3a` + dedicated-secret fix; SCHEMA; deployed + verified firing live in prod). Additive
-> `Action.dueTime`/`notify`/`lastNotifiedAt` + `PushSubscription`; `dueDate` stays date-only; time/alert
-> independent (alert w/o time → 09:00 ET); $0 via free VAPID + free 1-min external cron
-> (`/api/cron/reminders`, `REMINDERS_CRON_SECRET`). Full runbook: **`.planning/ACTION-REMINDERS.md`**.
-
-**Two red herrings diagnosed during setup (note for future):** (1) pasting the cron URL in the *normal*
-browser shows the SPA shell because the **PWA service worker intercepts the address-bar navigation** —
-test endpoints in an **Incognito** window. (2) Early `401`s were **pre-deploy / pre-env-var** — Vercel only
-injects a newly-added env var into builds created **after** it's added, so **Redeploy** after adding env vars.
 
 ### What's Next
 

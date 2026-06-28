@@ -120,6 +120,7 @@ export function IdeaListPage() {
   // Click-to-expand: collapsed cards/rows clamp the description to 4 lines; expanded
   // shows the full markdown (incl. pasted screenshots) without opening the editor.
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [highlightedId, setHighlightedId] = useState<number | null>(null)
 
   // Deep-link: /ideas?id=123 expands + scrolls to that idea.
   const [searchParams, setSearchParams] = useSearchParams()
@@ -140,8 +141,9 @@ export function IdeaListPage() {
     }
     highlightId.current = null // consume — only auto-expand once
     
-    // Auto-open the edit modal for the deep-linked idea
-    openEdit(found)
+    // Auto-expand the deep-linked idea
+    setExpandedId(hId)
+    setHighlightedId(hId)
     
     // Clear the ?id= param so refreshing doesn't re-trigger
     setSearchParams((prev) => { prev.delete('id'); return prev }, { replace: true })
@@ -739,9 +741,13 @@ export function IdeaListPage() {
                 className={cn(
                   'cursor-pointer px-3 py-2 transition-colors hover:bg-muted/40',
                   idx > 0 && 'border-t',
-                  idea.archived && 'opacity-70'
+                  idea.archived && 'opacity-70',
+                  highlightedId === idea.id && 'bg-primary/5'
                 )}
-                onClick={() => setExpandedId(expanded ? null : idea.id)}
+                onClick={() => {
+                  setExpandedId(expanded ? null : idea.id)
+                  if (highlightedId) setHighlightedId(null)
+                }}
               >
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
@@ -793,9 +799,13 @@ export function IdeaListPage() {
               id={`idea-${idea.id}`}
               className={cn(
                 'flex cursor-pointer flex-col gap-2 py-3 transition-colors hover:border-primary/40',
-                idea.archived && 'opacity-70'
+                idea.archived && 'opacity-70',
+                highlightedId === idea.id && 'border-primary shadow-sm'
               )}
-              onClick={() => setExpandedId(expanded ? null : idea.id)}
+              onClick={() => {
+                setExpandedId(expanded ? null : idea.id)
+                if (highlightedId) setHighlightedId(null)
+              }}
             >
               <CardHeader className="gap-1 pb-0">
                 <div className="flex items-start justify-between gap-2">

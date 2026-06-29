@@ -516,7 +516,7 @@ function normalizeCompanyPunctuation(name: string): string {
   n = n.normalize('NFD').replace(/[\u0300-\u036F]/g, ''); // strip diacritics
   n = n.replace(/&/g, ' and ');
   n = n.replace(/['\u2018\u2019]/g, '');                  // drop apostrophes
-  n = n.replace(/\./g, '');                               // \"Inc.\" -> \"inc\", \"L.P.\" -> \"lp\"
+  n = n.replace(/\./g, '');                               // "Inc." -> "inc", "L.P." -> "lp"
   n = n.replace(/[-/,]/g, ' ');                           // hyphen / slash / comma -> space
   return n.replace(/\s+/g, ' ').trim();
 }

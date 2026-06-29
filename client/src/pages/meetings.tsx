@@ -94,6 +94,24 @@ function getLabel(value: string, options: { value: string; label: string }[]) {
   return options.find((o) => o.value === value)?.label ?? value
 }
 
+// Local "today" (YYYY-MM-DD) + "now" (HH:MM), in the same shapes as a meeting's
+// stored date/startTime, so they can be compared with plain string comparisons.
+function nowParts() {
+  const now = new Date()
+  const today = now.toLocaleDateString('en-CA') // YYYY-MM-DD, local
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  return { today, hhmm }
+}
+
+// A meeting is "upcoming" if it hasn't started yet: a future date, or today with a
+// start time still ahead. An untimed meeting dated today counts as upcoming all day
+// (we can't know when in the day it falls). Works in the PWA — pure date math, no deps.
+function isUpcomingMeeting(conv: Conversation, today: string, hhmm: string): boolean {
+  if (conv.date > today) return true
+  if (conv.date < today) return false
+  return conv.startTime ? conv.startTime > hhmm : true
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value)
   useEffect(() => {
@@ -304,6 +322,7 @@ const COLLAPSED_MAX_PX = 168
 function MeetingCard({
   conv,
   qTerm,
+  upcoming,
   onEdit,
   onDelete,
   onSeriesClick,
@@ -312,6 +331,7 @@ function MeetingCard({
 }: {
   conv: Conversation
   qTerm: string
+  upcoming: boolean
   onEdit: () => void
   onDelete: () => void
   onSeriesClick: (seriesId: number) => void
@@ -344,7 +364,7 @@ function MeetingCard({
   const clamped = !expanded && overflowing
 
   return (
-    <Card>
+    <Card className={upcoming ? 'border-l-4 border-l-sky-500' : undefined}>
       <CardContent
         className={`p-4 ${clamped ? 'cursor-pointer' : ''}`}
         onClick={(e) => {
@@ -365,6 +385,15 @@ function MeetingCard({
                 {getLabel(conv.type, CONVERSATION_TYPE_OPTIONS)}
               </Badge>
               <MeetingDateSelect conv={conv} onUpdate={onUpdate} />
+              {upcoming && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700"
+                  title="This meeting is in the future"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                  Upcoming
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-1">
                 <Button
                   variant="ghost"
@@ -913,6 +942,10 @@ export function MeetingsPage() {
   // term is highlighted only in the card heading — handled inside MeetingCard.
   const qTerm = qFilter.trim()
 
+  // "Now" snapshot for flagging upcoming meetings — computed once per render so all
+  // cards agree on the same instant (and refreshes on every reload/navigation).
+  const { today: todayStr, hhmm: nowHHMM } = nowParts()
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1113,6 +1146,7 @@ export function MeetingsPage() {
                 key={conv.id}
                 conv={conv}
                 qTerm={qTerm}
+                upcoming={isUpcomingMeeting(conv, todayStr, nowHHMM)}
                 onEdit={() => quickLog.openEdit(conv.id)}
                 onDelete={() => setDeleteId(conv.id)}
                 onSeriesClick={(id) => setParam('seriesId', id.toString())}

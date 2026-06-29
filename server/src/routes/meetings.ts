@@ -116,10 +116,15 @@ router.get('/', async (req: Request, res: Response) => {
 
     const where = AND.length ? { AND } : {};
 
-    // Resolve the sort order (default: meeting date, newest first).
+    // Resolve the sort order (default: meeting date, newest first). When sorting by
+    // meeting date, break ties with startTime so same-day meetings order by time of
+    // day. startTime is a zero-padded "HH:MM" string (sorts correctly); SQLite ranks
+    // NULL as the smallest value (first when asc, last when desc), so untimed meetings
+    // behave like start-of-day — a stable, intuitive position within the day.
     const sortField = SORT_FIELDS.has(sortBy as string) ? (sortBy as string) : 'date';
-    const dir = sortDir === 'asc' ? 'asc' : 'desc';
-    const orderBy = { [sortField]: dir } as Record<string, 'asc' | 'desc'>;
+    const dir: 'asc' | 'desc' = sortDir === 'asc' ? 'asc' : 'desc';
+    const orderBy: Record<string, 'asc' | 'desc'>[] =
+      sortField === 'date' ? [{ date: dir }, { startTime: dir }] : [{ [sortField]: dir }];
 
     const [total, data] = await Promise.all([
       prisma.conversation.count({ where }),

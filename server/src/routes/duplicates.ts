@@ -508,15 +508,15 @@ router.post('/merge', async (req: Request, res: Response) => {
 });
 
 // Punctuation/symbol normalization shared by the "core" form and the token-subset
-// form: lowercase, &->and, hyphen/slash->space, drop apostrophes/diacritics/periods/
+  n = n.replace(/['\u2018\u2019]/g, '');                  // drop apostrophes
 // zero-width chars, collapse whitespace. Catches "&" vs "and" (#2) and hyphen vs
 // space (#4 Dana-Farber) and apostrophes (#3 Children's).
 function normalizeCompanyPunctuation(name: string): string {
-  let n = name.replace(/[​-‍﻿]/g, ‘’).toLowerCase();
-  n = n.normalize(‘NFD’).replace(/[̀-ͯ]/g, ‘’); // strip diacritics
-  n = n.replace(/&/g, ‘ and ‘);
-  n = n.replace(/[‘‘’]/g, ‘’);                  // drop apostrophes
-  n = n.replace(/\./g, '');                               // "Inc." -> "inc", "L.P." -> "lp"
+  let n = name.replace(/[\u200B-\u200D\uFEFF]/g, '').toLowerCase();
+  n = n.normalize('NFD').replace(/[\u0300-\u036F]/g, ''); // strip diacritics
+  n = n.replace(/&/g, ' and ');
+  n = n.replace(/['\u2018\u2019]/g, '');                  // drop apostrophes
+  n = n.replace(/\./g, '');                               // \"Inc.\" -> \"inc\", \"L.P.\" -> \"lp\"
   n = n.replace(/[-/,]/g, ' ');                           // hyphen / slash / comma -> space
   return n.replace(/\s+/g, ' ').trim();
 }

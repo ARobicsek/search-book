@@ -154,6 +154,11 @@ interface MultiComboboxProps {
   // Optional per-value metadata (keyed by option value) → a hover tooltip on the
   // selected pills showing e.g. a person's pronunciation + title + current employer.
   optionMeta?: Map<string, { pronunciation?: string | null; title?: string | null; employer?: string | null }>;
+  // When set, pasting a multi-entry list (separators or `<email>` tokens) into the
+  // search box is intercepted and handed off here instead of typed in — lets callers
+  // bulk-add (e.g. paste a whole meeting attendee list). Single plain values paste
+  // normally so the user can still type-then-Add one at a time.
+  onBulkPaste?: (text: string) => void;
 }
 
 export function MultiCombobox({
@@ -167,6 +172,7 @@ export function MultiCombobox({
   disabled = false,
   className,
   optionMeta,
+  onBulkPaste,
 }: MultiComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -252,6 +258,21 @@ export function MultiCombobox({
             placeholder={searchPlaceholder}
             value={search}
             onValueChange={setSearch}
+            onPaste={
+              onBulkPaste
+                ? (e) => {
+                    const text = e.clipboardData.getData('text')
+                    // Only hijack a paste that's clearly a *list* — multiple entries
+                    // (`;` / newline) or an `<email>` token. A plain single name still
+                    // pastes into the box so type-then-Add keeps working.
+                    if (/[;\n]/.test(text) || /<[^>]*@[^>]*>/.test(text)) {
+                      e.preventDefault()
+                      setSearch('')
+                      onBulkPaste(text)
+                    }
+                  }
+                : undefined
+            }
           />
           <CommandList>
             <CommandEmpty>

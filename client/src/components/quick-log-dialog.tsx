@@ -334,6 +334,14 @@ function QuickLogDialog({
   // contact page). A seeded participant alone must NOT auto-create a meeting —
   // we wait for real content first.
   const seededParticipantCountRef = useRef(0)
+  // Free-text participant names currently being turned into real Contact records
+  // (see handleParticipantsChange) — guards against a second onChange double-creating
+  // the same name before the first POST resolves.
+  const creatingParticipantsRef = useRef<Set<string>>(new Set())
+  // Contact ids we created *in this dialog session* by adding them as a participant
+  // (typed-in or pasted). If one is removed again before it's gained any other info,
+  // it was an accidental/abandoned add and is deleted (auto-cleanup).
+  const autoCreatedParticipantsRef = useRef<Set<number>>(new Set())
   const recordExists = savedId !== null
 
   // Prep notes & attachments. In edit mode these are live records; in create
@@ -445,6 +453,8 @@ function QuickLogDialog({
     lastSnapshotRef.current = null
     saveChainRef.current = Promise.resolve()
     seededParticipantCountRef.current = editId === null && prefill?.participant ? 1 : 0
+    creatingParticipantsRef.current = new Set()
+    autoCreatedParticipantsRef.current = new Set()
 
     // Prefill a new meeting opened from a contact/company context (e.g. the
     // contact page seeds the originating person as a Participant).
@@ -746,6 +756,177 @@ function QuickLogDialog({
       }
     }
     return { resolvedOrgIds, participants, resolvedTagIds }
+  }
+
+  // Delete a contact we auto-created in this picker once it's removed again with no
+  // other info attached (its only footprint was this meeting's participant row, which
+  // cascade-deletes). Best-effort — a failure just leaves the contact in place.
+  async function cleanupAutoCreatedContact(id: number) {
+    try {
+      await api.delete(`/contacts/${id}`)
+    } catch {
+      return
+    }
+    const idStr = id.toString()
+    setContactOptions((prev) => prev.filter((o) => o.value !== idStr))
+    setContactMeta((prev) => {
+      if (!prev.has(idStr)) return prev
+      const next = new Map(prev)
+      next.delete(idStr)
+      return next
+    })
+    setMentionContacts((prev) => prev.filter((c) => c.id !== id))
+    setParticipantNotes((prev) => {
+      if (!(idStr in prev)) return prev
+      const next = { ...prev }
+      delete next[idStr]
+      return next
+    })
+  }
+
+  // Participant picker onChange. Two jobs:
+  //  • Removal cleanup — any contact we auto-created here (tracked) that's now removed
+  //    is deleted (it never gained info beyond this meeting; see cleanupAutoCreatedContact).
+  //  • New typed name → a real Contact immediately, so it has an id the moment it's added:
+  //    clickable to its card, included in autosave, never lost. The free-text value is
+  //    swapped for the new id in place (carrying over any takeaway note). If creation
+  //    fails the free-text value is left as-is and resolveWho() still creates it on finalize.
+  async function handleParticipantsChange(newValues: string[]) {
+    // Auto-cleanup contacts we created here that are being removed now.
+    for (const v of participantIds) {
+      if (newValues.includes(v)) continue
+      const idNum = Number(v)
+      if (/^\d+$/.test(v) && autoCreatedParticipantsRef.current.has(idNum)) {
+        autoCreatedParticipantsRef.current.delete(idNum)
+        void cleanupAutoCreatedContact(idNum)
+      }
+    }
+    // Reflect the selection (incl. the just-typed name) right away.
+    setParticipantIds(newValues)
+    for (const val of newValues) {
+      if (/^\d+$/.test(val)) continue
+      if (creatingParticipantsRef.current.has(val)) continue
+      creatingParticipantsRef.current.add(val)
+      try {
+        const created = await api.post<{
+          id: number
+          name: string
+          preferredName?: string | null
+          title?: string | null
+          company?: { name: string } | null
+        }>('/contacts', { name: val, status: 'CONNECTED', ecosystem: 'NETWORK' })
+        const idStr = created.id.toString()
+        autoCreatedParticipantsRef.current.add(created.id)
+        // Swap free-text → new id everywhere it's referenced.
+        setParticipantIds((prev) => prev.map((v) => (v === val ? idStr : v)))
+        setContactOptions((prev) =>
+          prev.some((o) => o.value === idStr) ? prev : [{ value: idStr, label: created.name }, ...prev]
+        )
+        setContactMeta((prev) => {
+          const next = new Map(prev)
+          next.set(idStr, { pronunciation: created.preferredName, title: created.title, employer: created.company?.name })
+          return next
+        })
+        setMentionContacts((prev) =>
+          prev.some((c) => c.id === created.id) ? prev : [...prev, { id: created.id, name: created.name, title: created.title }]
+        )
+        // Carry over a takeaway note typed against the free-text key.
+        setParticipantNotes((prev) => {
+          if (!(val in prev)) return prev
+          const next = { ...prev }
+          next[idStr] = next[val]
+          delete next[val]
+          return next
+        })
+        toast.success(`Created contact "${created.name}"`)
+      } catch {
+        toast.error(`Couldn't create contact "${val}" yet — it'll be saved when you finish`)
+      } finally {
+        creatingParticipantsRef.current.delete(val)
+      }
+    }
+  }
+
+  // Bulk-add participants from a pasted recipient list (e.g. copied out of Outlook):
+  //   "Tricia Elliott <telliott@ncqa.org>; Sarah Shih <sshih@ncqa.org>; Kathryn Connor"
+  // Each entry is resolved server-side to an existing contact (by email then name) or a
+  // newly-created one; the ids are merged into the participant list (deduped). Brand-new
+  // contacts are tracked so they auto-clean up if removed (same as a typed-in add).
+  function parsePastedPeople(text: string): { name: string; email: string }[] {
+    return text
+      .split(/[;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        // "Name <email>" or "Name (email)"
+        const tagged = entry.match(/^(.*?)[<(]\s*([^>)\s]+@[^>)\s]+)\s*[>)]?\s*$/)
+        if (tagged) {
+          return { name: tagged[1].replace(/["']/g, '').trim(), email: tagged[2].trim() }
+        }
+        // bare email
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entry)) {
+          return { name: '', email: entry }
+        }
+        // bare name
+        return { name: entry.replace(/["']/g, '').trim(), email: '' }
+      })
+      .filter((p) => p.name || p.email)
+  }
+
+  async function handleBulkPasteParticipants(text: string) {
+    const people = parsePastedPeople(text)
+    if (people.length === 0) return
+    const toastId = toast.loading(`Adding ${people.length} participant${people.length === 1 ? '' : 's'}…`)
+    try {
+      const { results } = await api.post<{
+        results: {
+          id: number
+          name: string
+          preferredName?: string | null
+          title?: string | null
+          company?: { id: number; name: string } | null
+          created: boolean
+        }[]
+      }>('/contacts/resolve-participants', { people })
+      if (results.length === 0) {
+        toast.error('Could not read any participants from that paste', { id: toastId })
+        return
+      }
+      setParticipantIds((prev) => {
+        const next = [...prev]
+        for (const r of results) {
+          const idStr = r.id.toString()
+          if (!next.includes(idStr)) next.push(idStr)
+        }
+        return next
+      })
+      setContactOptions((prev) => {
+        const map = new Map(prev.map((o) => [o.value, o]))
+        for (const r of results) map.set(r.id.toString(), { value: r.id.toString(), label: r.name })
+        return Array.from(map.values())
+      })
+      setContactMeta((prev) => {
+        const next = new Map(prev)
+        for (const r of results) {
+          next.set(r.id.toString(), { pronunciation: r.preferredName, title: r.title, employer: r.company?.name })
+        }
+        return next
+      })
+      setMentionContacts((prev) => {
+        const seen = new Set(prev.map((c) => c.id))
+        const add = results.filter((r) => !seen.has(r.id)).map((r) => ({ id: r.id, name: r.name, title: r.title }))
+        return add.length ? [...prev, ...add] : prev
+      })
+      for (const r of results) if (r.created) autoCreatedParticipantsRef.current.add(r.id)
+      const createdCount = results.filter((r) => r.created).length
+      const matchedCount = results.length - createdCount
+      const parts = [`Added ${results.length} participant${results.length === 1 ? '' : 's'}`]
+      if (matchedCount) parts.push(`${matchedCount} already in contacts`)
+      if (createdCount) parts.push(`${createdCount} new`)
+      toast.success(parts.join(' · '), { id: toastId })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add participants', { id: toastId })
+    }
   }
 
   // Finalize ("Done"): resolves free-text names into real records, persists the
@@ -1322,12 +1503,16 @@ function QuickLogDialog({
         <MultiCombobox
           options={contactOptions}
           values={participantIds}
-          onChange={setParticipantIds}
+          onChange={handleParticipantsChange}
           optionMeta={contactMeta}
           placeholder="Named people in the meeting..."
-          searchPlaceholder="Search or type new name..."
+          searchPlaceholder="Search, type a new name, or paste a list…"
           allowFreeText={true}
+          onBulkPaste={handleBulkPasteParticipants}
         />
+        <p className="text-xs text-muted-foreground">
+          Tip: paste a list like <span className="font-mono">Name &lt;email&gt;; Name &lt;email&gt;</span> to add everyone at once — matched to existing contacts, creating any that are new.
+        </p>
         {participantIds.map((val) => {
           const isExisting = /^\d+$/.test(val)
           const isFav = isExisting && favorites.some((f) => f.id === Number(val))
@@ -1356,9 +1541,22 @@ function QuickLogDialog({
                 title={contactMeta.get(val)?.title}
                 employer={contactMeta.get(val)?.employer}
               >
-                <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">
-                  {participantNameOf(val)}
-                </span>
+                {isExisting ? (
+                  // Jump to the contact's card (works for people just created on add,
+                  // since they now have an id). Flush + close the dialog on the way.
+                  <Link
+                    to={`/contacts/${val}`}
+                    onClick={() => handleDialogOpenChange(false)}
+                    className="w-28 shrink-0 truncate text-xs text-primary hover:underline"
+                    title={`Open ${participantNameOf(val)}'s card`}
+                  >
+                    {participantNameOf(val)}
+                  </Link>
+                ) : (
+                  <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">
+                    {participantNameOf(val)}
+                  </span>
+                )}
               </PersonTooltip>
               <Input
                 value={participantNotes[val] || ''}

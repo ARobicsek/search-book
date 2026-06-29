@@ -428,6 +428,111 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/contacts/resolve-participants — bulk-resolve a pasted recipient list
+// (e.g. "Tricia Elliott <telliott@x.org>; Sarah Shih <sshih@x.org>; …") into contact
+// ids for the meeting participant picker. Each entry is matched to an existing contact
+// by email (primary OR additionalEmails, case-insensitive) then by exact name
+// (case-insensitive); unmatched entries are created (status CONNECTED, ecosystem
+// NETWORK, email saved). Returns one row per input, in order, each carrying the
+// resolved { id, name, preferredName, title, company, created }. `created: true` flags
+// the brand-new contacts so the client can auto-clean them up if they're removed again.
+router.post('/resolve-participants', async (req: Request, res: Response) => {
+  try {
+    const raw = Array.isArray(req.body?.people) ? req.body.people : [];
+    const people = raw
+      .map((p: any) => ({
+        name: typeof p?.name === 'string' ? p.name.trim() : '',
+        email: typeof p?.email === 'string' ? p.email.trim() : '',
+      }))
+      .filter((p: { name: string; email: string }) => p.name || p.email);
+    if (people.length === 0) {
+      res.status(400).json({ error: 'No participants to resolve' });
+      return;
+    }
+
+    // Single-user app — load a lightweight id/name/email index once and match in memory.
+    const all = await prisma.contact.findMany({
+      select: {
+        id: true, name: true, preferredName: true, title: true,
+        email: true, additionalEmails: true,
+        company: { select: { id: true, name: true } },
+      },
+    });
+    type Cand = (typeof all)[number];
+    const byEmail = new Map<string, Cand>();
+    const byName = new Map<string, Cand>();
+    const indexContact = (c: Cand) => {
+      if (c.email) {
+        const k = c.email.trim().toLowerCase();
+        if (k && !byEmail.has(k)) byEmail.set(k, c);
+      }
+      if (c.additionalEmails) {
+        try {
+          const extra = JSON.parse(c.additionalEmails);
+          if (Array.isArray(extra)) {
+            for (const e of extra) {
+              if (typeof e === 'string' && e.trim()) {
+                const k = e.trim().toLowerCase();
+                if (!byEmail.has(k)) byEmail.set(k, c);
+              }
+            }
+          }
+        } catch { /* ignore malformed additionalEmails JSON */ }
+      }
+      const nk = c.name.trim().toLowerCase();
+      if (nk && !byName.has(nk)) byName.set(nk, c);
+    };
+    for (const c of all) indexContact(c);
+
+    const shape = (c: Cand, created: boolean) => ({
+      id: c.id,
+      name: c.name,
+      preferredName: c.preferredName ?? null,
+      title: c.title ?? null,
+      company: c.company ? { id: c.company.id, name: c.company.name } : null,
+      created,
+    });
+
+    const results: ReturnType<typeof shape>[] = [];
+    for (const p of people) {
+      const emailKey = p.email.toLowerCase();
+      const nameKey = p.name.toLowerCase();
+      let match: Cand | undefined;
+      if (emailKey) match = byEmail.get(emailKey);
+      if (!match && nameKey) match = byName.get(nameKey);
+      if (match) {
+        results.push(shape(match, false));
+        continue;
+      }
+      // No match — create. Derive a name from the email local-part if only an email
+      // was pasted (so the contact isn't nameless).
+      const newName = (p.name || (p.email ? p.email.split('@')[0] : '')).trim();
+      if (!newName) continue; // nothing usable
+      const createdContact = await prisma.$transaction(async (tx) => {
+        const c = await tx.contact.create({
+          data: { name: newName, email: p.email || null, status: 'CONNECTED', ecosystem: 'NETWORK' } as any,
+          select: {
+            id: true, name: true, preferredName: true, title: true,
+            email: true, additionalEmails: true,
+            company: { select: { id: true, name: true } },
+          },
+        });
+        await tx.contactStatusHistory.create({
+          data: { contactId: c.id, oldStatus: null, newStatus: 'CONNECTED' },
+        });
+        return c;
+      });
+      indexContact(createdContact as Cand); // a duplicate later in the same paste now matches
+      results.push(shape(createdContact as Cand, true));
+    }
+
+    res.json({ results });
+  } catch (error) {
+    console.error('Error resolving participants:', error);
+    res.status(500).json({ error: 'Failed to resolve participants' });
+  }
+});
+
 // POST /api/contacts/import-match — bulk CSV import with name-based de-duplication.
 //  • A row whose name matches exactly one existing contact (case-insensitive) ENRICHES that
 //    contact "fill blanks only": its email is merged additively (primary if empty, else

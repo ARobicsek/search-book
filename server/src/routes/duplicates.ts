@@ -508,7 +508,7 @@ router.post('/merge', async (req: Request, res: Response) => {
 });
 
 // Punctuation/symbol normalization shared by the "core" form and the token-subset
-  n = n.replace(/['\u2018\u2019]/g, '');                  // drop apostrophes
+// form: lowercase, &->and, hyphen/slash->space, drop apostrophes/diacritics/periods/
 // zero-width chars, collapse whitespace. Catches "&" vs "and" (#2) and hyphen vs
 // space (#4 Dana-Farber) and apostrophes (#3 Children's).
 function normalizeCompanyPunctuation(name: string): string {

@@ -116,30 +116,21 @@ function ContactsTab() {
   const [loadingManualMerge, setLoadingManualMerge] = useState(false)
   const [loadingMergeDetails, setLoadingMergeDetails] = useState(false)
 
-  const [dismissed, setDismissed] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('searchbook_dismissed_contact_dupes')
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    } catch {
-      return new Set()
-    }
-  })
-
-  function handleDismiss(id1: number, id2: number) {
-    const key = `${Math.min(id1, id2)}-${Math.max(id1, id2)}`
-    setDismissed(prev => {
-      const next = new Set(prev)
-      next.add(key)
-      localStorage.setItem('searchbook_dismissed_contact_dupes', JSON.stringify(Array.from(next)))
-      return next
-    })
+  function handleDismiss(name1: string, name2: string) {
+    api.post('/duplicates/dismiss', { name1, name2 }).catch(() => {})
+    setDuplicates(prev => prev.filter(d => d.contact1.name !== name1 || d.contact2.name !== name2).filter(d => d.contact1.name !== name2 || d.contact2.name !== name1))
   }
 
   const loadDuplicates = useCallback(() => {
     setLoading(true)
     api
-      .get<DuplicatePair[]>('/duplicates')
-      .then(setDuplicates)
+      .get<{ pairs: DuplicatePair[]; autoMergedCount: number }>('/duplicates')
+      .then(({ pairs, autoMergedCount }) => {
+        setDuplicates(pairs)
+        if (autoMergedCount > 0) {
+          toast.info(`Auto-merged ${autoMergedCount} pair${autoMergedCount !== 1 ? 's' : ''} based on prior merge history`)
+        }
+      })
       .catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to scan'))
       .finally(() => setLoading(false))
   }, [])
@@ -260,17 +251,12 @@ function ContactsTab() {
     return MULTI_VALUE_FIELDS.includes(field as typeof MULTI_VALUE_FIELDS[number])
   }
 
-  const visibleDuplicates = duplicates.filter(dup => {
-    const key = `${Math.min(dup.contact1.id, dup.contact2.id)}-${Math.max(dup.contact1.id, dup.contact2.id)}`
-    return !dismissed.has(key)
-  })
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {loading ? 'Scanning...' : `${visibleDuplicates.length} potential duplicate${visibleDuplicates.length !== 1 ? 's' : ''} found${duplicates.length > visibleDuplicates.length ? ` (${duplicates.length - visibleDuplicates.length} dismissed)` : ''}`}
+            {loading ? 'Scanning...' : `${duplicates.length} potential duplicate${duplicates.length !== 1 ? 's' : ''} found`}
           </p>
         </div>
         <Button variant="outline" onClick={loadDuplicates} disabled={loading}>
@@ -338,7 +324,7 @@ function ContactsTab() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : visibleDuplicates.length === 0 ? (
+      ) : duplicates.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Users className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -347,7 +333,7 @@ function ContactsTab() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {visibleDuplicates.map((dup, idx) => (
+          {duplicates.map((dup, idx) => (
             <Card key={idx}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -387,7 +373,7 @@ function ContactsTab() {
                     {loadingMergeDetails ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
                     Merge (keep {truncate(dup.contact2.name, 15)})
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground ml-auto" onClick={() => handleDismiss(dup.contact1.id, dup.contact2.id)}>
+                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground ml-auto" onClick={() => handleDismiss(dup.contact1.name, dup.contact2.name)}>
                     Dismiss
                   </Button>
                 </div>
@@ -506,30 +492,21 @@ function CompaniesTab() {
   const [loadingManualMerge, setLoadingManualMerge] = useState(false)
   const [loadingMergeDetails, setLoadingMergeDetails] = useState(false)
 
-  const [dismissed, setDismissed] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('searchbook_dismissed_company_dupes')
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    } catch {
-      return new Set()
-    }
-  })
-
-  function handleDismiss(id1: number, id2: number) {
-    const key = `${Math.min(id1, id2)}-${Math.max(id1, id2)}`
-    setDismissed(prev => {
-      const next = new Set(prev)
-      next.add(key)
-      localStorage.setItem('searchbook_dismissed_company_dupes', JSON.stringify(Array.from(next)))
-      return next
-    })
+  function handleDismiss(name1: string, name2: string) {
+    api.post('/duplicates/companies/dismiss', { name1, name2 }).catch(() => {})
+    setDuplicates(prev => prev.filter(d => d.company1.name !== name1 || d.company2.name !== name2).filter(d => d.company1.name !== name2 || d.company2.name !== name1))
   }
 
   const loadDuplicates = useCallback(() => {
     setLoading(true)
     api
-      .get<DuplicateCompanyPair[]>('/duplicates/companies')
-      .then(setDuplicates)
+      .get<{ pairs: DuplicateCompanyPair[]; autoMergedCount: number }>('/duplicates/companies')
+      .then(({ pairs, autoMergedCount }) => {
+        setDuplicates(pairs)
+        if (autoMergedCount > 0) {
+          toast.info(`Auto-merged ${autoMergedCount} company pair${autoMergedCount !== 1 ? 's' : ''} based on prior merge history`)
+        }
+      })
       .catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to scan companies'))
       .finally(() => setLoading(false))
   }, [])
@@ -631,17 +608,12 @@ function CompaniesTab() {
     return COMPANY_MULTI_VALUE_FIELDS.includes(field as typeof COMPANY_MULTI_VALUE_FIELDS[number])
   }
 
-  const visibleDuplicates = duplicates.filter(dup => {
-    const key = `${Math.min(dup.company1.id, dup.company2.id)}-${Math.max(dup.company1.id, dup.company2.id)}`
-    return !dismissed.has(key)
-  })
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {loading ? 'Scanning...' : `${visibleDuplicates.length} potential duplicate${visibleDuplicates.length !== 1 ? 's' : ''} found${duplicates.length > visibleDuplicates.length ? ` (${duplicates.length - visibleDuplicates.length} dismissed)` : ''}`}
+            {loading ? 'Scanning...' : `${duplicates.length} potential duplicate${duplicates.length !== 1 ? 's' : ''} found`}
           </p>
         </div>
         <Button variant="outline" onClick={loadDuplicates} disabled={loading}>
@@ -699,7 +671,7 @@ function CompaniesTab() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : visibleDuplicates.length === 0 ? (
+      ) : duplicates.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Building2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -708,7 +680,7 @@ function CompaniesTab() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {visibleDuplicates.map((dup, idx) => (
+          {duplicates.map((dup, idx) => (
             <Card key={idx}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -746,7 +718,7 @@ function CompaniesTab() {
                     {loadingMergeDetails ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitMerge className="mr-2 h-4 w-4" />}
                     Merge (keep {truncate(dup.company2.name, 15)})
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground ml-auto" onClick={() => handleDismiss(dup.company1.id, dup.company2.id)}>
+                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground ml-auto" onClick={() => handleDismiss(dup.company1.name, dup.company2.name)}>
                     Dismiss
                   </Button>
                 </div>

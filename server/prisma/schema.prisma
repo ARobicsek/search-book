@@ -510,6 +510,31 @@ model Relationship {
 // destroyed/mutated (cascade rows to re-insert, SetNull'd FKs to restore, JSON-array
 // scrubs to re-add). Rows form a small stack — `POST /api/undo` pops the most recent
 // and replays it. Pruned to the last ~25 on each delete. See server/src/lib/undo.ts.
+// Dismissed duplicate pairs — keyed by normalized name so dismissals survive re-imports
+// with new IDs. type: "contact" | "company". nameKey1 <= nameKey2 alphabetically.
+model DismissedDuplicate {
+  id        Int      @id @default(autoincrement())
+  type      String   // "contact" | "company"
+  nameKey1  String
+  nameKey2  String
+  createdAt DateTime @default(now())
+
+  @@unique([type, nameKey1, nameKey2])
+}
+
+// Merge rules — when A was merged into B, future reimports of A auto-merge into B.
+// type: "contact" | "company". removedKey: normalized name of the deleted entity.
+// keptKey: normalized name of the surviving entity.
+model DuplicateMergeRule {
+  id          Int      @id @default(autoincrement())
+  type        String   // "contact" | "company"
+  removedKey  String   // normalized name that was deleted
+  keptKey     String   // normalized name that survived
+  createdAt   DateTime @default(now())
+
+  @@unique([type, removedKey])
+}
+
 model DeletedSnapshot {
   id         Int      @id @default(autoincrement())
   entityType String   // delegate name: 'contact' | 'company' | 'conversation' | 'action' | ...

@@ -37,6 +37,7 @@ async function buildExport() {
     companyPrepNotes, conversationParticipants, conversationTags,
     conversationPrepNotes, conversationAttachments, conversationOrgs,
     conversationMentions, series, ideaTags,
+    dismissedDuplicates, duplicateMergeRules,
   ] = await Promise.all([
     prisma.contact.findMany(),
     prisma.company.findMany(),
@@ -68,6 +69,8 @@ async function buildExport() {
     prisma.conversationMention.findMany(),
     prisma.series.findMany(),
     prisma.ideaTag.findMany(),
+    prisma.dismissedDuplicate.findMany(),
+    prisma.duplicateMergeRule.findMany(),
   ]);
 
   return {
@@ -109,6 +112,9 @@ async function buildExport() {
     Series: series,
     // Tags-on-ideas junction (shares the app-wide Tag entity)
     IdeaTag: ideaTags,
+    // Duplicate-management preferences
+    DismissedDuplicate: dismissedDuplicates,
+    DuplicateMergeRule: duplicateMergeRules,
   };
 }
 
@@ -461,6 +467,9 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.company.deleteMany();
       // Undo snapshots reference rows that no longer exist after a wipe — clear them.
       await tx.deletedSnapshot.deleteMany();
+      // Duplicate management preferences (no FK deps)
+      await tx.dismissedDuplicate.deleteMany();
+      await tx.duplicateMergeRule.deleteMany();
 
       // Insert in parent-first order (transformRecords handles date/boolean conversion)
       if (data.Company?.length) await tx.company.createMany({ data: transformRecords(data.Company) });
@@ -512,6 +521,9 @@ router.post('/import', async (req: Request, res: Response) => {
       if (data.ConversationOrg?.length) await tx.conversationOrg.createMany({ data: transformRecords(data.ConversationOrg) });
       // @-mentions (parents Conversation + Contact already inserted)
       if (data.ConversationMention?.length) await tx.conversationMention.createMany({ data: transformRecords(data.ConversationMention) });
+      // Duplicate management preferences (no FK deps — safe to insert anytime)
+      if (data.DismissedDuplicate?.length) await tx.dismissedDuplicate.createMany({ data: transformRecords(data.DismissedDuplicate) });
+      if (data.DuplicateMergeRule?.length) await tx.duplicateMergeRule.createMany({ data: transformRecords(data.DuplicateMergeRule) });
     });
 
     res.json({ message: 'Import completed successfully' });

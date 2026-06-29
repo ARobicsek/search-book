@@ -30,6 +30,8 @@ const TABLES_PARENT_FIRST = [
   'ConversationOrg',
   // @-mentions of people in meeting notes (parents Conversation + Contact appear earlier)
   'ConversationMention',
+  // Duplicate-management preferences (no FK dependencies — safe to append last)
+  'DismissedDuplicate', 'DuplicateMergeRule',
 ] as const;
 
 /** Reverse order for deletes (children first). */

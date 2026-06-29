@@ -74,6 +74,16 @@ function tokensMatch(a: string[], b: string[]): boolean {
   return aSubsetB || bSubsetA;
 }
 
+// Normalized key for contact dismissal / merge-rule lookup
+function contactNameKey(name: string): string {
+  return normalizeName(name).toLowerCase();
+}
+
+// Return [a, b] sorted so a <= b — canonical form for pair storage
+function orderedPair(a: string, b: string): [string, string] {
+  return a <= b ? [a, b] : [b, a];
+}
+
 // GET /api/duplicates — find potential duplicate contacts
 router.get('/', async (_req: Request, res: Response) => {
   try {
@@ -175,10 +185,90 @@ router.get('/', async (_req: Request, res: Response) => {
 
     duplicates.sort((a, b) => b.score - a.score);
     console.log(`[duplicates] Total: ${Date.now() - t0}ms, ${candidates.size} candidates, ${duplicates.length} duplicates`);
-    res.json(duplicates);
+
+    // Load server-side dismissals and merge rules
+    const [dismissals, mergeRules] = await Promise.all([
+      prisma.dismissedDuplicate.findMany({ where: { type: 'contact' } }),
+      prisma.duplicateMergeRule.findMany({ where: { type: 'contact' } }),
+    ]);
+
+    const dismissedSet = new Set(dismissals.map(d => `${d.nameKey1}|${d.nameKey2}`));
+    // removedKey → keptKey
+    const mergeRuleMap = new Map(mergeRules.map(r => [r.removedKey, r.keptKey]));
+
+    // Partition into auto-mergeable, dismissed, and pairs needing review
+    const reviewPairs: typeof duplicates = [];
+    const toAutoMerge: Array<{ keepId: number; removeId: number }> = [];
+
+    for (const dup of duplicates) {
+      const key1 = contactNameKey(dup.contact1.name);
+      const key2 = contactNameKey(dup.contact2.name);
+      const [k1, k2] = orderedPair(key1, key2);
+      const pairKey = `${k1}|${k2}`;
+
+      if (dismissedSet.has(pairKey)) continue; // silently suppressed
+
+      const keptFor1 = mergeRuleMap.get(key1);
+      const keptFor2 = mergeRuleMap.get(key2);
+
+      if (keptFor1 === key2) {
+        // contact1.name was previously deleted; contact2.name is the survivor
+        toAutoMerge.push({ keepId: dup.contact2.id, removeId: dup.contact1.id });
+      } else if (keptFor2 === key1) {
+        // contact2.name was previously deleted; contact1.name is the survivor
+        toAutoMerge.push({ keepId: dup.contact1.id, removeId: dup.contact2.id });
+      } else {
+        reviewPairs.push(dup);
+      }
+    }
+
+    // Auto-merge applicable pairs (reimported entities with prior merge rules)
+    let autoMergedCount = 0;
+    for (const { keepId, removeId } of toAutoMerge) {
+      try {
+        const [keep, remove] = await Promise.all([
+          prisma.contact.findUnique({ where: { id: keepId } }),
+          prisma.contact.findUnique({ where: { id: removeId } }),
+        ]);
+        if (!keep || !remove) continue;
+        await runContactMerge(keepId, removeId, keep, remove);
+        autoMergedCount++;
+        console.log(`[duplicates] Auto-merged contact ${removeId} into ${keepId} (merge rule match)`);
+      } catch (err) {
+        console.error('[duplicates] Auto-merge failed for contact pair', keepId, removeId, err);
+        // Fall back: show the pair for manual review
+        const dup = toAutoMerge.length > 0
+          ? duplicates.find(d => (d.contact1.id === keepId && d.contact2.id === removeId) || (d.contact1.id === removeId && d.contact2.id === keepId))
+          : undefined;
+        if (dup) reviewPairs.push(dup);
+      }
+    }
+
+    res.json({ pairs: reviewPairs, autoMergedCount });
   } catch (error) {
     console.error('Error finding duplicates:', error);
     res.status(500).json({ error: 'Failed to find duplicates' });
+  }
+});
+
+// POST /api/duplicates/dismiss — persist a dismissed contact pair by normalized name
+router.post('/dismiss', async (req: Request, res: Response) => {
+  try {
+    const { name1, name2 } = req.body as { name1: string; name2: string };
+    if (!name1 || !name2) {
+      res.status(400).json({ error: 'name1 and name2 are required' });
+      return;
+    }
+    const [k1, k2] = orderedPair(contactNameKey(name1), contactNameKey(name2));
+    await prisma.dismissedDuplicate.upsert({
+      where: { type_nameKey1_nameKey2: { type: 'contact', nameKey1: k1, nameKey2: k2 } },
+      update: {},
+      create: { type: 'contact', nameKey1: k1, nameKey2: k2 },
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error dismissing contact pair:', error);
+    res.status(500).json({ error: 'Failed to dismiss' });
   }
 });
 
@@ -219,6 +309,153 @@ function unionUsefulFor(keepVal: string | null, removeVal: string | null): strin
   return `${keepText}\n\n${removeText}`;              // both differ → keep both
 }
 
+// Shared contact merge logic — called by both the POST /merge endpoint and the auto-merge
+// path in GET /. No field selections = keep all of the "keep" contact's fields as-is.
+async function runContactMerge(
+  keepId: number,
+  removeId: number,
+  keep: { usefulFor: string | null; [key: string]: unknown },
+  remove: { usefulFor: string | null; [key: string]: unknown },
+  fieldSelections?: FieldSelections,
+) {
+  const contact1 = keepId < removeId ? keep : remove;
+  const contact2 = keepId < removeId ? remove : keep;
+
+  await prisma.$transaction(async (tx) => {
+    if (fieldSelections) {
+      const updateData: Record<string, unknown> = {};
+
+      const selectableFields = [
+        'name', 'email', 'phone', 'title', 'linkedinUrl', 'ecosystem',
+        'status', 'location', 'howConnected', 'personalDetails',
+        'roleDescription', 'notes', 'photoFile', 'photoUrl',
+        'mutualConnections', 'whereFound', 'openQuestions', 'flagged'
+      ] as const;
+
+      for (const field of selectableFields) {
+        const selection = fieldSelections[field];
+        if (!selection) continue;
+
+        if (field === 'email' && selection === 'both') {
+          const getAllEmails = (contact: typeof contact1): string[] => {
+            const emails: string[] = [];
+            const c = contact as Record<string, unknown>;
+            if (c.email) emails.push(c.email as string);
+            if (c.additionalEmails) {
+              try {
+                const additional = JSON.parse(c.additionalEmails as string) as string[];
+                emails.push(...additional);
+              } catch { /* ignore */ }
+            }
+            return emails;
+          };
+          const allEmails = [...new Set([...getAllEmails(contact1), ...getAllEmails(contact2)])];
+          if (allEmails.length > 0) {
+            updateData.email = allEmails[0];
+            updateData.additionalEmails = allEmails.length > 1 ? JSON.stringify(allEmails.slice(1)) : null;
+          }
+        } else if (field === 'phone' && selection === 'both') {
+          const c1 = contact1 as Record<string, unknown>;
+          const c2 = contact2 as Record<string, unknown>;
+          const phones = [c1.phone, c2.phone].filter(Boolean) as string[];
+          const unique = [...new Set(phones)];
+          updateData.phone = unique.join(' | ') || null;
+        } else if (selection === 1 || selection === 2) {
+          const sourceContact = (selection === 1 ? contact1 : contact2) as Record<string, unknown>;
+          updateData[field] = sourceContact[field];
+        }
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.contact.update({ where: { id: keepId }, data: updateData });
+      }
+    }
+
+    const mergedUsefulFor = unionUsefulFor(keep.usefulFor, remove.usefulFor);
+    if (mergedUsefulFor !== (keep.usefulFor ?? null)) {
+      await tx.contact.update({ where: { id: keepId }, data: { usefulFor: mergedUsefulFor } });
+    }
+
+    // Move conversations (anchor contact). Raw SQL on purpose: a merge is a
+    // re-link, not a content edit, so it must NOT bump Conversation.updatedAt
+    // (Prisma's @updatedAt would, sending old meetings to the top of the
+    // "Recently updated" sort — exactly the surprise the owner reported).
+    await tx.$executeRaw`UPDATE "Conversation" SET "contactId" = ${keepId} WHERE "contactId" = ${removeId}`;
+
+    await tx.action.updateMany({ where: { contactId: removeId }, data: { contactId: keepId } });
+    await tx.relationship.updateMany({ where: { fromContactId: removeId }, data: { fromContactId: keepId } });
+    await tx.relationship.updateMany({ where: { toContactId: removeId }, data: { toContactId: keepId } });
+    await tx.link.updateMany({ where: { contactId: removeId }, data: { contactId: keepId } });
+    await tx.prepNote.updateMany({ where: { contactId: removeId }, data: { contactId: keepId } });
+    await tx.employmentHistory.updateMany({ where: { contactId: removeId }, data: { contactId: keepId } });
+
+    // Meeting participants (attendees). Composite PK [conversationId, contactId],
+    // so re-point only where the kept contact isn't already a participant; carry
+    // the per-person takeaway note onto the kept row when it has none.
+    const removeParticipants = await tx.conversationParticipant.findMany({ where: { contactId: removeId } });
+    const keepParticipants = await tx.conversationParticipant.findMany({
+      where: { contactId: keepId },
+      select: { conversationId: true, note: true },
+    });
+    const keepPartNote = new Map(keepParticipants.map((p) => [p.conversationId, p.note]));
+    for (const rp of removeParticipants) {
+      if (keepPartNote.has(rp.conversationId)) {
+        if (!keepPartNote.get(rp.conversationId) && rp.note) {
+          await tx.conversationParticipant.update({
+            where: { conversationId_contactId: { conversationId: rp.conversationId, contactId: keepId } },
+            data: { note: rp.note },
+          });
+        }
+      } else {
+        await tx.conversationParticipant.create({
+          data: { conversationId: rp.conversationId, contactId: keepId, note: rp.note, ordering: rp.ordering },
+        });
+      }
+    }
+    await tx.conversationParticipant.deleteMany({ where: { contactId: removeId } });
+
+    const removeActionContacts = await tx.actionContact.findMany({ where: { contactId: removeId } });
+    const keepActionContacts = await tx.actionContact.findMany({ where: { contactId: keepId }, select: { actionId: true } });
+    const keepActionIds = new Set(keepActionContacts.map((x) => x.actionId));
+    for (const rec of removeActionContacts) {
+      if (!keepActionIds.has(rec.actionId)) {
+        await tx.actionContact.create({ data: { actionId: rec.actionId, contactId: keepId } });
+      }
+    }
+    await tx.actionContact.deleteMany({ where: { contactId: removeId } });
+
+    const oldMentionToken = `(/contacts/${removeId})`;
+    const newMentionToken = `(/contacts/${keepId})`;
+    const [noteConvs, prepConvs, mentionConvs] = await Promise.all([
+      tx.conversation.findMany({
+        where: { OR: [{ notes: { contains: oldMentionToken } }, { nextSteps: { contains: oldMentionToken } }] },
+        select: { id: true },
+      }),
+      tx.conversationPrepNote.findMany({ where: { content: { contains: oldMentionToken } }, select: { conversationId: true } }),
+      tx.conversationMention.findMany({ where: { contactId: removeId }, select: { conversationId: true } }),
+    ]);
+    const affectedConvIds = new Set<number>([
+      ...noteConvs.map((c) => c.id),
+      ...prepConvs.map((p) => p.conversationId),
+      ...mentionConvs.map((m) => m.conversationId),
+    ]);
+    if (affectedConvIds.size > 0) {
+      const like = `%${oldMentionToken}%`;
+      await tx.$executeRaw`UPDATE "Conversation" SET "notes" = REPLACE("notes", ${oldMentionToken}, ${newMentionToken}) WHERE "notes" LIKE ${like}`;
+      await tx.$executeRaw`UPDATE "Conversation" SET "nextSteps" = REPLACE("nextSteps", ${oldMentionToken}, ${newMentionToken}) WHERE "nextSteps" LIKE ${like}`;
+      await tx.$executeRaw`UPDATE "ConversationPrepNote" SET "content" = REPLACE("content", ${oldMentionToken}, ${newMentionToken}) WHERE "content" LIKE ${like}`;
+      for (const convId of affectedConvIds) {
+        await resyncConversationMentions(tx, convId);
+      }
+    }
+
+    await tx.conversationContact.deleteMany({ where: { contactId: removeId } });
+    await tx.contactTag.deleteMany({ where: { contactId: removeId } });
+    await tx.ideaContact.deleteMany({ where: { contactId: removeId } });
+    await tx.contact.delete({ where: { id: removeId } });
+  });
+}
+
 // POST /api/duplicates/merge — merge two contacts with field selection
 router.post('/merge', async (req: Request, res: Response) => {
   try {
@@ -242,217 +479,26 @@ router.post('/merge', async (req: Request, res: Response) => {
       return;
     }
 
-    // Determine which contact is "1" and which is "2" based on IDs
-    // Contact 1 = lower ID, Contact 2 = higher ID (consistent with frontend)
-    const contact1 = keepId < removeId ? keep : remove;
-    const contact2 = keepId < removeId ? remove : keep;
+    await runContactMerge(keepId, removeId, keep, remove, fieldSelections);
 
-    await prisma.$transaction(async (tx) => {
-      // If fieldSelections provided, update the kept contact with selected field values
-      if (fieldSelections) {
-        const updateData: Record<string, unknown> = {};
-
-        const selectableFields = [
-          'name', 'email', 'phone', 'title', 'linkedinUrl', 'ecosystem',
-          'status', 'location', 'howConnected', 'personalDetails',
-          'roleDescription', 'notes', 'photoFile', 'photoUrl',
-          'mutualConnections', 'whereFound', 'openQuestions', 'flagged'
-        ] as const;
-
-        for (const field of selectableFields) {
-          const selection = fieldSelections[field];
-          if (!selection) continue;
-
-          // Special handling for email with 'both' option
-          if (field === 'email' && selection === 'both') {
-            // Combine all emails from both contacts
-            const getAllEmails = (contact: typeof contact1): string[] => {
-              const emails: string[] = [];
-              if (contact.email) emails.push(contact.email);
-              if (contact.additionalEmails) {
-                try {
-                  const additional = JSON.parse(contact.additionalEmails) as string[];
-                  emails.push(...additional);
-                } catch {
-                  // ignore parse errors
-                }
-              }
-              return emails;
-            };
-
-            const allEmails = [...new Set([...getAllEmails(contact1), ...getAllEmails(contact2)])];
-            if (allEmails.length > 0) {
-              updateData.email = allEmails[0];
-              updateData.additionalEmails = allEmails.length > 1 ? JSON.stringify(allEmails.slice(1)) : null;
-            }
-          } else if (field === 'phone' && selection === 'both') {
-            // Combine phone numbers with separator
-            const phones = [contact1.phone, contact2.phone].filter(Boolean);
-            const unique = [...new Set(phones)];
-            updateData.phone = unique.join(' | ') || null;
-          } else if (selection === 1 || selection === 2) {
-            // Get value from selected contact (1 or 2)
-            const sourceContact = selection === 1 ? contact1 : contact2;
-            updateData[field] = sourceContact[field];
-          }
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await tx.contact.update({
-            where: { id: keepId },
-            data: updateData,
-          });
-        }
-      }
-
-      // "Useful For" carries over regardless of the field selections: if the
-      // removed contact has useful notes the kept one lacks (or different ones),
-      // union them onto the kept contact so a useful person survives the merge.
-      const mergedUsefulFor = unionUsefulFor(keep.usefulFor, remove.usefulFor);
-      if (mergedUsefulFor !== (keep.usefulFor ?? null)) {
-        await tx.contact.update({ where: { id: keepId }, data: { usefulFor: mergedUsefulFor } });
-      }
-
-      // Move conversations (anchor contact). Raw SQL on purpose: a merge is a
-      // re-link, not a content edit, so it must NOT bump Conversation.updatedAt
-      // (Prisma's @updatedAt would, sending old meetings to the top of the
-      // "Recently updated" sort — exactly the surprise the owner reported).
-      await tx.$executeRaw`UPDATE "Conversation" SET "contactId" = ${keepId} WHERE "contactId" = ${removeId}`;
-
-      // Move actions
-      await tx.action.updateMany({
-        where: { contactId: removeId },
-        data: { contactId: keepId },
+    // Record merge rule so future reimports of the removed contact auto-merge
+    const removedKey = contactNameKey(remove.name);
+    const keptKey = contactNameKey(keep.name);
+    if (removedKey !== keptKey) {
+      await prisma.duplicateMergeRule.upsert({
+        where: { type_removedKey: { type: 'contact', removedKey } },
+        update: { keptKey },
+        create: { type: 'contact', removedKey, keptKey },
       });
+    }
 
-      // Move relationships (from)
-      await tx.relationship.updateMany({
-        where: { fromContactId: removeId },
-        data: { fromContactId: keepId },
-      });
-
-      // Move relationships (to)
-      await tx.relationship.updateMany({
-        where: { toContactId: removeId },
-        data: { toContactId: keepId },
-      });
-
-      // Move links
-      await tx.link.updateMany({
-        where: { contactId: removeId },
-        data: { contactId: keepId },
-      });
-
-      // Move prep notes
-      await tx.prepNote.updateMany({
-        where: { contactId: removeId },
-        data: { contactId: keepId },
-      });
-
-      // Move employment history
-      await tx.employmentHistory.updateMany({
-        where: { contactId: removeId },
-        data: { contactId: keepId },
-      });
-
-      // ── Re-link the removed contact's meeting attendance, action ownership, and
-      // @-mentions to the kept contact. These were previously NOT migrated, and the
-      // relations' onDelete behavior silently lost data when the duplicate was
-      // deleted below: ConversationParticipant / ActionContact are onDelete: Cascade
-      // (a meeting whose *only* participant was the removed contact lost that
-      // participant — and its fallback title — entirely), and ConversationMention is
-      // onDelete: SetNull (mentions were orphaned to a dead contact id rather than
-      // pointed at the survivor).
-
-      // Meeting participants (attendees). Composite PK [conversationId, contactId],
-      // so re-point only where the kept contact isn't already a participant; carry
-      // the per-person takeaway note onto the kept row when it has none.
-      const removeParticipants = await tx.conversationParticipant.findMany({ where: { contactId: removeId } });
-      const keepParticipants = await tx.conversationParticipant.findMany({
-        where: { contactId: keepId },
-        select: { conversationId: true, note: true },
-      });
-      const keepPartNote = new Map(keepParticipants.map((p) => [p.conversationId, p.note]));
-      for (const rp of removeParticipants) {
-        if (keepPartNote.has(rp.conversationId)) {
-          if (!keepPartNote.get(rp.conversationId) && rp.note) {
-            await tx.conversationParticipant.update({
-              where: { conversationId_contactId: { conversationId: rp.conversationId, contactId: keepId } },
-              data: { note: rp.note },
-            });
-          }
-        } else {
-          await tx.conversationParticipant.create({
-            data: { conversationId: rp.conversationId, contactId: keepId, note: rp.note, ordering: rp.ordering },
-          });
-        }
-      }
-      await tx.conversationParticipant.deleteMany({ where: { contactId: removeId } });
-
-      // Action ownership junction (ActionContact). Same create-then-delete dedupe.
-      const removeActionContacts = await tx.actionContact.findMany({ where: { contactId: removeId } });
-      const keepActionContacts = await tx.actionContact.findMany({
-        where: { contactId: keepId },
-        select: { actionId: true },
-      });
-      const keepActionIds = new Set(keepActionContacts.map((x) => x.actionId));
-      for (const rec of removeActionContacts) {
-        if (!keepActionIds.has(rec.actionId)) {
-          await tx.actionContact.create({ data: { actionId: rec.actionId, contactId: keepId } });
-        }
-      }
-      await tx.actionContact.deleteMany({ where: { contactId: removeId } });
-
-      // @-mentions in meeting notes. The mention index is DERIVED from the note text
-      // on every save, so re-pointing the rows alone wouldn't stick — rewrite the
-      // link target in the text (notes / next steps / prep notes) too, then rebuild
-      // the index for each affected meeting. Use raw SQL for the rewrite so a merge
-      // re-link doesn't bump Conversation.updatedAt (matches the anchor move above —
-      // a merge must not float old meetings to the top of "Recently updated").
-      const oldMentionToken = `(/contacts/${removeId})`;
-      const newMentionToken = `(/contacts/${keepId})`;
-      const [noteConvs, prepConvs, mentionConvs] = await Promise.all([
-        tx.conversation.findMany({
-          where: { OR: [{ notes: { contains: oldMentionToken } }, { nextSteps: { contains: oldMentionToken } }] },
-          select: { id: true },
-        }),
-        tx.conversationPrepNote.findMany({ where: { content: { contains: oldMentionToken } }, select: { conversationId: true } }),
-        tx.conversationMention.findMany({ where: { contactId: removeId }, select: { conversationId: true } }),
-      ]);
-      const affectedConvIds = new Set<number>([
-        ...noteConvs.map((c) => c.id),
-        ...prepConvs.map((p) => p.conversationId),
-        ...mentionConvs.map((m) => m.conversationId),
-      ]);
-      if (affectedConvIds.size > 0) {
-        const like = `%${oldMentionToken}%`;
-        await tx.$executeRaw`UPDATE "Conversation" SET "notes" = REPLACE("notes", ${oldMentionToken}, ${newMentionToken}) WHERE "notes" LIKE ${like}`;
-        await tx.$executeRaw`UPDATE "Conversation" SET "nextSteps" = REPLACE("nextSteps", ${oldMentionToken}, ${newMentionToken}) WHERE "nextSteps" LIKE ${like}`;
-        await tx.$executeRaw`UPDATE "ConversationPrepNote" SET "content" = REPLACE("content", ${oldMentionToken}, ${newMentionToken}) WHERE "content" LIKE ${like}`;
-        for (const convId of affectedConvIds) {
-          await resyncConversationMentions(tx, convId);
-        }
-      }
-
-      // Delete junction records that would cause conflicts
-      // ConversationContact
-      await tx.conversationContact.deleteMany({
-        where: { contactId: removeId },
-      });
-
-      // ContactTag
-      await tx.contactTag.deleteMany({
-        where: { contactId: removeId },
-      });
-
-      // IdeaContact
-      await tx.ideaContact.deleteMany({
-        where: { contactId: removeId },
-      });
-
-      // Delete the duplicate contact
-      await tx.contact.delete({ where: { id: removeId } });
-    });
+    // Also dismiss this pair by name so it never appears again if the rule doesn't fire
+    const [k1, k2] = orderedPair(removedKey, keptKey);
+    await prisma.dismissedDuplicate.upsert({
+      where: { type_nameKey1_nameKey2: { type: 'contact', nameKey1: k1, nameKey2: k2 } },
+      update: {},
+      create: { type: 'contact', nameKey1: k1, nameKey2: k2 },
+    }).catch(() => { /* ignore if same keys */ });
 
     res.json({ message: 'Contacts merged successfully' });
   } catch (error) {
@@ -466,10 +512,10 @@ router.post('/merge', async (req: Request, res: Response) => {
 // zero-width chars, collapse whitespace. Catches "&" vs "and" (#2) and hyphen vs
 // space (#4 Dana-Farber) and apostrophes (#3 Children's).
 function normalizeCompanyPunctuation(name: string): string {
-  let n = name.replace(/[\u200B-\u200D\uFEFF]/g, '').toLowerCase();
-  n = n.normalize('NFD').replace(/[\u0300-\u036F]/g, ''); // strip diacritics
-  n = n.replace(/&/g, ' and ');
-  n = n.replace(/['\u2018\u2019]/g, '');                  // drop apostrophes
+  let n = name.replace(/[​-‍﻿]/g, ‘’).toLowerCase();
+  n = n.normalize(‘NFD’).replace(/[̀-ͯ]/g, ‘’); // strip diacritics
+  n = n.replace(/&/g, ‘ and ‘);
+  n = n.replace(/[‘‘’]/g, ‘’);                  // drop apostrophes
   n = n.replace(/\./g, '');                               // "Inc." -> "inc", "L.P." -> "lp"
   n = n.replace(/[-/,]/g, ' ');                           // hyphen / slash / comma -> space
   return n.replace(/\s+/g, ' ').trim();
@@ -502,7 +548,12 @@ export function normalizeCompanyNameForDedupe(name: string): string {
   return tokens.join(' ');
 }
 
-// Token list with punctuation normalization but NO descriptor stripping \u2014 used for the
+// Company name key for dismissal / merge-rule lookup (same as core dedupe form)
+function companyNameKey(name: string): string {
+  return normalizeCompanyNameForDedupe(name);
+}
+
+// Token list with punctuation normalization but NO descriptor stripping — used for the
 // subset test so "Boston Children's Hospital" tokens are a subset of "...Hospital CHIP"
 // (#3) while "Mass General Hospital" vs "Mass General Brigham" (divergent tails) is NOT.
 function companyTokensForSubset(name: string): string[] {
@@ -585,10 +636,85 @@ router.get('/companies', async (_req: Request, res: Response) => {
     }
 
     duplicates.sort((a, b) => b.score - a.score);
-    res.json(duplicates);
+
+    // Load server-side dismissals and merge rules
+    const [dismissals, mergeRules] = await Promise.all([
+      prisma.dismissedDuplicate.findMany({ where: { type: 'company' } }),
+      prisma.duplicateMergeRule.findMany({ where: { type: 'company' } }),
+    ]);
+
+    const dismissedSet = new Set(dismissals.map(d => `${d.nameKey1}|${d.nameKey2}`));
+    const mergeRuleMap = new Map(mergeRules.map(r => [r.removedKey, r.keptKey]));
+
+    const reviewPairs: typeof duplicates = [];
+    const toAutoMerge: Array<{ keepId: number; removeId: number }> = [];
+
+    for (const dup of duplicates) {
+      const key1 = companyNameKey(dup.company1.name);
+      const key2 = companyNameKey(dup.company2.name);
+      const [k1, k2] = orderedPair(key1, key2);
+      const pairKey = `${k1}|${k2}`;
+
+      if (dismissedSet.has(pairKey)) continue;
+
+      const keptFor1 = mergeRuleMap.get(key1);
+      const keptFor2 = mergeRuleMap.get(key2);
+
+      if (keptFor1 === key2) {
+        toAutoMerge.push({ keepId: dup.company2.id, removeId: dup.company1.id });
+      } else if (keptFor2 === key1) {
+        toAutoMerge.push({ keepId: dup.company1.id, removeId: dup.company2.id });
+      } else {
+        reviewPairs.push(dup);
+      }
+    }
+
+    let autoMergedCount = 0;
+    for (const { keepId, removeId } of toAutoMerge) {
+      try {
+        const [keep, remove] = await Promise.all([
+          prisma.company.findUnique({ where: { id: keepId } }),
+          prisma.company.findUnique({ where: { id: removeId } }),
+        ]);
+        if (!keep || !remove) continue;
+        await runCompanyMerge(keepId, removeId, keep, remove);
+        autoMergedCount++;
+        console.log(`[duplicates] Auto-merged company ${removeId} into ${keepId} (merge rule match)`);
+      } catch (err) {
+        console.error('[duplicates] Auto-merge failed for company pair', keepId, removeId, err);
+        const dup = duplicates.find(d =>
+          (d.company1.id === keepId && d.company2.id === removeId) ||
+          (d.company1.id === removeId && d.company2.id === keepId)
+        );
+        if (dup) reviewPairs.push(dup);
+      }
+    }
+
+    res.json({ pairs: reviewPairs, autoMergedCount });
   } catch (error) {
     console.error('Error finding company duplicates:', error);
     res.status(500).json({ error: 'Failed to find company duplicates' });
+  }
+});
+
+// POST /api/duplicates/companies/dismiss — persist a dismissed company pair by normalized name
+router.post('/companies/dismiss', async (req: Request, res: Response) => {
+  try {
+    const { name1, name2 } = req.body as { name1: string; name2: string };
+    if (!name1 || !name2) {
+      res.status(400).json({ error: 'name1 and name2 are required' });
+      return;
+    }
+    const [k1, k2] = orderedPair(companyNameKey(name1), companyNameKey(name2));
+    await prisma.dismissedDuplicate.upsert({
+      where: { type_nameKey1_nameKey2: { type: 'company', nameKey1: k1, nameKey2: k2 } },
+      update: {},
+      create: { type: 'company', nameKey1: k1, nameKey2: k2 },
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error dismissing company pair:', error);
+    res.status(500).json({ error: 'Failed to dismiss' });
   }
 });
 
@@ -600,6 +726,156 @@ interface CompanyFieldSelections {
   hqLocation?: FieldSelection;
   status?: FieldSelection;
   notes?: FieldSelection;
+}
+
+// Shared company merge logic
+async function runCompanyMerge(
+  keepId: number,
+  removeId: number,
+  keep: Record<string, unknown>,
+  remove: Record<string, unknown>,
+  fieldSelections?: CompanyFieldSelections,
+) {
+  const company1 = keepId < removeId ? keep : remove;
+  const company2 = keepId < removeId ? remove : keep;
+
+  await prisma.$transaction(async (tx) => {
+    if (fieldSelections) {
+      const updateData: Record<string, unknown> = {};
+      const selectableFields = ['name', 'industry', 'size', 'website', 'hqLocation', 'status', 'notes'] as const;
+
+      for (const field of selectableFields) {
+        const selection = fieldSelections[field];
+        if (!selection) continue;
+
+        if (field === 'notes' && selection === 'both') {
+          const notes = [company1.notes, company2.notes].filter(Boolean);
+          updateData.notes = notes.join('\n\n---\n\n') || null;
+        } else if (selection === 1 || selection === 2) {
+          const sourceCompany = selection === 1 ? company1 : company2;
+          updateData[field] = sourceCompany[field];
+        }
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.company.update({ where: { id: keepId }, data: updateData });
+      }
+    }
+
+    await tx.contact.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+
+    const contactsWithJson = await tx.contact.findMany({
+      where: {
+        OR: [
+          { additionalCompanyIds: { contains: `${removeId}` } },
+          { connectedCompanyIds: { contains: `${removeId}` } }
+        ]
+      }
+    });
+
+    for (const c of contactsWithJson) {
+      let updated = false;
+      const data: Record<string, unknown> = {};
+
+      if (c.additionalCompanyIds) {
+        try {
+          const parsed = JSON.parse(c.additionalCompanyIds);
+          if (Array.isArray(parsed)) {
+            let changed = false;
+            const newArr = parsed.map((item: unknown) => {
+              if (typeof item === 'object' && item !== null && (item as Record<string, unknown>).id === removeId) {
+                changed = true;
+                return { ...(item as object), id: keepId };
+              } else if (item === removeId) {
+                changed = true;
+                return keepId;
+              }
+              return item;
+            });
+            if (changed) {
+              const dedupedObjIds = new Set();
+              const finalArr = [];
+              for (const item of newArr) {
+                const cid = typeof item === 'object' && item !== null ? (item as Record<string, unknown>).id : item;
+                if (!dedupedObjIds.has(cid)) {
+                  dedupedObjIds.add(cid);
+                  finalArr.push(item);
+                }
+              }
+              data.additionalCompanyIds = JSON.stringify(finalArr);
+              updated = true;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (c.connectedCompanyIds) {
+        try {
+          const parsed = JSON.parse(c.connectedCompanyIds);
+          if (Array.isArray(parsed)) {
+            const idx = parsed.indexOf(removeId);
+            if (idx !== -1) {
+              parsed[idx] = keepId;
+              data.connectedCompanyIds = JSON.stringify([...new Set(parsed)]);
+              updated = true;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (updated) {
+        await tx.contact.update({ where: { id: c.id }, data });
+      }
+    }
+
+    const removeActionCos = await tx.actionCompany.findMany({ where: { companyId: removeId } });
+    const keepActionCos = await tx.actionCompany.findMany({ where: { companyId: keepId } });
+    const keepActionIds = new Set(keepActionCos.map(x => x.actionId));
+    for (const rec of removeActionCos) {
+      if (!keepActionIds.has(rec.actionId)) {
+        await tx.actionCompany.create({ data: { actionId: rec.actionId, companyId: keepId } });
+      }
+    }
+    await tx.actionCompany.deleteMany({ where: { companyId: removeId } });
+
+    const removeConvCos = await tx.conversationCompany.findMany({ where: { companyId: removeId } });
+    const keepConvCos = await tx.conversationCompany.findMany({ where: { companyId: keepId } });
+    const keepConvIds = new Set(keepConvCos.map(x => x.conversationId));
+    for (const rec of removeConvCos) {
+      if (!keepConvIds.has(rec.conversationId)) {
+        await tx.conversationCompany.create({ data: { conversationId: rec.conversationId, companyId: keepId } });
+      }
+    }
+    await tx.conversationCompany.deleteMany({ where: { companyId: removeId } });
+
+    const removeIdeaCos = await tx.ideaCompany.findMany({ where: { companyId: removeId } });
+    const keepIdeaCos = await tx.ideaCompany.findMany({ where: { companyId: keepId } });
+    const keepIdeaIds = new Set(keepIdeaCos.map(x => x.ideaId));
+    for (const rec of removeIdeaCos) {
+      if (!keepIdeaIds.has(rec.ideaId)) {
+        await tx.ideaCompany.create({ data: { ideaId: rec.ideaId, companyId: keepId } });
+      }
+    }
+    await tx.ideaCompany.deleteMany({ where: { companyId: removeId } });
+
+    const removeTagCos = await tx.companyTag.findMany({ where: { companyId: removeId } });
+    const keepTagCos = await tx.companyTag.findMany({ where: { companyId: keepId } });
+    const keepTagIds = new Set(keepTagCos.map(x => x.tagId));
+    for (const rec of removeTagCos) {
+      if (!keepTagIds.has(rec.tagId)) {
+        await tx.companyTag.create({ data: { tagId: rec.tagId, companyId: keepId } });
+      }
+    }
+    await tx.companyTag.deleteMany({ where: { companyId: removeId } });
+
+    await tx.employmentHistory.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+    await tx.companyActivity.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+    await tx.companyPrepNote.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+    await tx.companyStatusHistory.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+    await tx.link.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
+
+    await tx.company.delete({ where: { id: removeId } });
+  });
 }
 
 // POST /api/duplicates/companies/merge — merge two companies with field selection
@@ -625,163 +901,26 @@ router.post('/companies/merge', async (req: Request, res: Response) => {
       return;
     }
 
-    const company1 = keepId < removeId ? keep : remove;
-    const company2 = keepId < removeId ? remove : keep;
+    await runCompanyMerge(keepId, removeId, keep as Record<string, unknown>, remove as Record<string, unknown>, fieldSelections);
 
-    await prisma.$transaction(async (tx) => {
-      // 1. Update Core Fields
-      if (fieldSelections) {
-        const updateData: Record<string, unknown> = {};
-        const selectableFields = ['name', 'industry', 'size', 'website', 'hqLocation', 'status', 'notes'] as const;
-
-        for (const field of selectableFields) {
-          const selection = fieldSelections[field];
-          if (!selection) continue;
-
-          if (field === 'notes' && selection === 'both') {
-            const notes = [company1.notes, company2.notes].filter(Boolean);
-            updateData.notes = notes.join('\n\n---\n\n') || null;
-          } else if (selection === 1 || selection === 2) {
-            const sourceCompany = selection === 1 ? company1 : company2;
-            updateData[field] = sourceCompany[field];
-          }
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await tx.company.update({
-            where: { id: keepId },
-            data: updateData,
-          });
-        }
-      }
-
-      // 2. Relational Migrations
-      
-      // Contact.companyId
-      await tx.contact.updateMany({
-        where: { companyId: removeId },
-        data: { companyId: keepId },
+    // Record merge rule so future reimports of the removed company auto-merge
+    const removedKey = companyNameKey(remove.name);
+    const keptKey = companyNameKey(keep.name);
+    if (removedKey !== keptKey) {
+      await prisma.duplicateMergeRule.upsert({
+        where: { type_removedKey: { type: 'company', removedKey } },
+        update: { keptKey },
+        create: { type: 'company', removedKey, keptKey },
       });
+    }
 
-      // Contact JSON Arrays (additionalCompanyIds, connectedCompanyIds)
-      const contactsWithJson = await tx.contact.findMany({
-        where: {
-          OR: [
-            { additionalCompanyIds: { contains: `${removeId}` } },
-            { connectedCompanyIds: { contains: `${removeId}` } }
-          ]
-        }
-      });
-
-      for (const c of contactsWithJson) {
-        let updated = false;
-        const data: any = {};
-        
-        if (c.additionalCompanyIds) {
-          try {
-            const parsed = JSON.parse(c.additionalCompanyIds);
-            if (Array.isArray(parsed)) {
-              let changed = false;
-              const newArr = parsed.map(item => {
-                if (typeof item === 'object' && item.id === removeId) {
-                  changed = true;
-                  return { ...item, id: keepId };
-                } else if (item === removeId) {
-                  changed = true;
-                  return keepId;
-                }
-                return item;
-              });
-              if (changed) {
-                const dedupedObjIds = new Set();
-                const finalArr = [];
-                for (const item of newArr) {
-                   const cid = typeof item === 'object' ? item.id : item;
-                   if (!dedupedObjIds.has(cid)) {
-                     dedupedObjIds.add(cid);
-                     finalArr.push(item);
-                   }
-                }
-                data.additionalCompanyIds = JSON.stringify(finalArr);
-                updated = true;
-              }
-            }
-          } catch {}
-        }
-        
-        if (c.connectedCompanyIds) {
-          try {
-            const parsed = JSON.parse(c.connectedCompanyIds);
-            if (Array.isArray(parsed)) {
-               const idx = parsed.indexOf(removeId);
-               if (idx !== -1) {
-                  parsed[idx] = keepId;
-                  data.connectedCompanyIds = JSON.stringify([...new Set(parsed)]);
-                  updated = true;
-               }
-            }
-          } catch {}
-        }
-        
-        if (updated) {
-          await tx.contact.update({ where: { id: c.id }, data });
-        }
-      }
-
-      // ActionCompany
-      const removeActionCos = await tx.actionCompany.findMany({ where: { companyId: removeId }});
-      const keepActionCos = await tx.actionCompany.findMany({ where: { companyId: keepId }});
-      const keepActionIds = new Set(keepActionCos.map(x => x.actionId));
-      for (const rec of removeActionCos) {
-        if (!keepActionIds.has(rec.actionId)) {
-          await tx.actionCompany.create({ data: { actionId: rec.actionId, companyId: keepId } });
-        }
-      }
-      await tx.actionCompany.deleteMany({ where: { companyId: removeId } });
-
-      // ConversationCompany
-      const removeConvCos = await tx.conversationCompany.findMany({ where: { companyId: removeId }});
-      const keepConvCos = await tx.conversationCompany.findMany({ where: { companyId: keepId }});
-      const keepConvIds = new Set(keepConvCos.map(x => x.conversationId));
-      for (const rec of removeConvCos) {
-        if (!keepConvIds.has(rec.conversationId)) {
-          await tx.conversationCompany.create({ data: { conversationId: rec.conversationId, companyId: keepId } });
-        }
-      }
-      await tx.conversationCompany.deleteMany({ where: { companyId: removeId } });
-      
-      // IdeaCompany
-      const removeIdeaCos = await tx.ideaCompany.findMany({ where: { companyId: removeId }});
-      const keepIdeaCos = await tx.ideaCompany.findMany({ where: { companyId: keepId }});
-      const keepIdeaIds = new Set(keepIdeaCos.map(x => x.ideaId));
-      for (const rec of removeIdeaCos) {
-        if (!keepIdeaIds.has(rec.ideaId)) {
-          await tx.ideaCompany.create({ data: { ideaId: rec.ideaId, companyId: keepId } });
-        }
-      }
-      await tx.ideaCompany.deleteMany({ where: { companyId: removeId } });
-
-      // CompanyTag
-      const removeTagCos = await tx.companyTag.findMany({ where: { companyId: removeId }});
-      const keepTagCos = await tx.companyTag.findMany({ where: { companyId: keepId }});
-      const keepTagIds = new Set(keepTagCos.map(x => x.tagId));
-      for (const rec of removeTagCos) {
-        if (!keepTagIds.has(rec.tagId)) {
-          await tx.companyTag.create({ data: { tagId: rec.tagId, companyId: keepId } });
-        }
-      }
-      await tx.companyTag.deleteMany({ where: { companyId: removeId } });
-
-      // Flat relational tables safely bulk updated
-      await tx.employmentHistory.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
-      await tx.companyActivity.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
-      await tx.companyPrepNote.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
-      await tx.companyStatusHistory.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
-      await tx.link.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
-
-      // Finally, delete the duplicate company
-      await tx.company.delete({ where: { id: removeId } });
-    });
+    // Dismiss the pair by name too
+    const [k1, k2] = orderedPair(removedKey, keptKey);
+    await prisma.dismissedDuplicate.upsert({
+      where: { type_nameKey1_nameKey2: { type: 'company', nameKey1: k1, nameKey2: k2 } },
+      update: {},
+      create: { type: 'company', nameKey1: k1, nameKey2: k2 },
+    }).catch(() => { /* ignore if same keys */ });
 
     res.json({ message: 'Companies merged successfully' });
   } catch (error) {

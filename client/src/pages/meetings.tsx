@@ -94,22 +94,39 @@ function getLabel(value: string, options: { value: string; label: string }[]) {
   return options.find((o) => o.value === value)?.label ?? value
 }
 
-// Local "today" (YYYY-MM-DD) + "now" (HH:MM), in the same shapes as a meeting's
-// stored date/startTime, so they can be compared with plain string comparisons.
-function nowParts() {
-  const now = new Date()
-  const today = now.toLocaleDateString('en-CA') // YYYY-MM-DD, local
-  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  return { today, hhmm }
+// Current Eastern-time "today" (YYYY-MM-DD) + "now" (HH:MM, 24h), in the same shapes
+// as a meeting's stored date/startTime so they compare with plain string comparisons.
+// Meeting dates/start times are stored in the app's Eastern timezone and the upcoming
+// rule keys off 5 PM ET, so anchor to America/New_York regardless of the browser's
+// zone (handles DST automatically). Works in the PWA — pure Intl, no deps.
+function easternNowParts() {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  const p: Record<string, string> = {}
+  for (const part of fmt.formatToParts(new Date())) p[part.type] = part.value
+  const hour = p.hour === '24' ? '00' : p.hour // some engines emit '24' at midnight
+  return { today: `${p.year}-${p.month}-${p.day}`, hhmm: `${hour}:${p.minute}` }
 }
 
-// A meeting is "upcoming" if it hasn't started yet: a future date, or today with a
-// start time still ahead. An untimed meeting dated today counts as upcoming all day
-// (we can't know when in the day it falls). Works in the PWA — pure date math, no deps.
+// End-of-business cutoff for untimed meetings dated today (5 PM Eastern).
+const END_OF_BUSINESS = '17:00'
+
+// A meeting is "upcoming" if either:
+//  (a) its date/time is in the future — a future date, or today with a start time
+//      still ahead of now; or
+//  (b) it's today, has no start time, the current time is before end of business
+//      (5 PM ET), AND nothing has been written up yet (no summary / notes / next
+//      steps — prep notes don't count, since they're written *before* the meeting).
 function isUpcomingMeeting(conv: Conversation, today: string, hhmm: string): boolean {
   if (conv.date > today) return true
   if (conv.date < today) return false
-  return conv.startTime ? conv.startTime > hhmm : true
+  // Same day:
+  if (conv.startTime) return conv.startTime > hhmm
+  const documented = !!(conv.summary?.trim() || conv.notes?.trim() || conv.nextSteps?.trim())
+  return hhmm < END_OF_BUSINESS && !documented
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -942,9 +959,9 @@ export function MeetingsPage() {
   // term is highlighted only in the card heading — handled inside MeetingCard.
   const qTerm = qFilter.trim()
 
-  // "Now" snapshot for flagging upcoming meetings — computed once per render so all
-  // cards agree on the same instant (and refreshes on every reload/navigation).
-  const { today: todayStr, hhmm: nowHHMM } = nowParts()
+  // "Now" snapshot (Eastern) for flagging upcoming meetings — computed once per render
+  // so all cards agree on the same instant (and refreshes on every reload/navigation).
+  const { today: todayStr, hhmm: nowHHMM } = easternNowParts()
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

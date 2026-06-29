@@ -35,6 +35,10 @@ of every doc.
 - **Schema changes need manual Turso DDL before pushing schema-touching code to `main`** — follow
   the procedure at the top of `.planning/NCQA-ADAPTATION-PLAN.md`. (The committed `server/.env` rw
   token is stale — apply DDL via the Turso web SQL console.)
+- **Every new user-content Prisma model must be added to both backup paths** (server
+  `routes/backup.ts` export + `/import`; client `lib/backup.ts` `TABLES_PARENT_FIRST`) — or to the
+  `EXEMPT` set if ephemeral. The `check-backup-coverage.mjs` guard (in `prepush` + the Vercel build)
+  fails the build otherwise. Details in `CLAUDE.md`.
 - **Re-test mobile (390px)** for any UI change, plus desktop.
 - Run a full `vite build` / `tsc -b` (not just `npm run prepush`) before pushing — it catches
   unused imports the typecheck misses.

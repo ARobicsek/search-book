@@ -5,6 +5,31 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Meetings list: time-aware sort + "Upcoming" flag + "Hide upcoming" toggle (2026-06-29 s3)
+
+Three **schema-free** owner asks for the `/meetings` **list** view, each pushed to `main` on its own commit.
+1. **Time-aware Date sort** (`131a503`): sorting by date now breaks ties on `startTime` so same-day
+   meetings order by time of day — server `orderBy: [{date},{startTime}]`. SQLite/libsql ranks a NULL
+   `startTime` as smallest (first asc / last desc) → untimed meetings behave as start-of-day, no `nulls`
+   clause needed. (`startTime` is zero-padded "HH:MM", so string ordering is correct.)
+2. **"Upcoming" indicator** (`131a503`, rule refined in `bbdaccd`): future meetings get a sky
+   left-border + an "Upcoming" pill (dot **and** label → not color-only, PWA-safe). `isUpcomingMeeting` =
+   future date, OR today with a `startTime` still ahead of now, OR today & untimed & before **5 PM ET**
+   & nothing written up yet (`summary`/`notes`/`nextSteps`; **prep notes excluded**, they're pre-meeting).
+   "Now" is computed in **America/New_York** (`easternNowParts`, DST-aware) since meeting dates/times are
+   stored ET — not the browser zone.
+3. **"Hide upcoming" toggle** (`070a651`): a Switch by the sort control (added the missing shadcn
+   `client/src/components/ui/switch.tsx`; unified `radix-ui` pkg was already installed), persisted
+   `?hideUpcoming=1`, list-view only. Filtering is **server-side** so the paged `total`/`hasMore` stay
+   correct — the client sends its ET `today`+`now`; the server's `notUpcomingClause` is the **exact
+   complement** of `isUpcomingMeeting` (traced all four buckets), so it hides precisely the flagged set.
+   Skips the filter if `today`/`now` are missing/malformed (no server clock guess).
+
+Client+server typecheck, `prepush` (backup guard — 32 tables), and full client `vite build` + server `tsc`
+all green. **Mobile (390px) NOT visually re-tested this session** — the changes are a border accent, a small
+pill, and a header Switch (controls row made `flex-wrap` so it wraps on narrow screens); no dialog/layout
+changes, so low-risk, but eyeball it if convenient.
+
 ### What Was Just Completed — Duplicate dismissals + auto-merge now persist (2026-06-29 s2)
 
 Owner reported that **dismissed duplicate matches kept coming back** (on a return visit / another
@@ -146,14 +171,12 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` — duplicate dismissals + auto-merge persistence is **merged and pushed** (dev branch
-`claude/duplicate-dismissals-persistence-9bo1l3`, fast-forwarded into `main`). **Turso DDL for the 2
-new tables (`DismissedDuplicate`, `DuplicateMergeRule`) was applied by the owner** — no DDL
-outstanding, no held commits. Backup-coverage guard green (32 tables). **Caveat:** the typecheck +
-full `vite build` were **not run locally this session** (npm registry unreachable from the container,
-`ECONNRESET`) — verified structurally via the dep-free backup guard + a dependency-less `tsc` pass
-(zero lexer/scope errors); **Vercel's `build:vercel` is the real gate** — confirm that deploy went
-green. Prior meeting-participant UX (`ce9f306`) + lockfile chore (`c0abed3`) still in `main`.
+`main` — meetings-list **time-aware sort + "Upcoming" flag + "Hide upcoming" toggle** are **merged and
+pushed** (tip `070a651`; the three commits `131a503` / `bbdaccd` / `070a651`). **Schema-free** — no Turso
+DDL outstanding, no held commits. Client+server typecheck + `prepush` (backup guard, 32 tables) + full
+client `vite build` + server `tsc` all run **locally and green** this session. Prior in `main`: duplicate
+dismissals + auto-merge persistence (`DismissedDuplicate` / `DuplicateMergeRule`, DDL already applied by
+owner) and meeting-participant UX (`ce9f306`).
 
 ---
 

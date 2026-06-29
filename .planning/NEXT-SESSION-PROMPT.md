@@ -5,6 +5,17 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Meeting-participant UX (2026-06-29)
+
+Five owner asks for the Quick Log / meeting editor, **schema-free**, pushed to `main` (`ce9f306`; lockfile chore `c0abed3`).
+1. **Create-on-add:** adding a participant (typed-in free text or pasted) now **creates the Contact immediately** (`handleParticipantsChange` POSTs `/contacts`, swaps free-text→id in place) instead of deferring to "Done" — it has an id at once.
+2. **Click-through:** participant names in the editor are now **links to `/contacts/:id`** (flush + close the dialog on the way); meetings-list pills already linked.
+3. **Contacts default sort** ("most-recently-updated on top") was **already correct** — verified live (create-via-API lands on top, then deleted; net-zero). No code change.
+4. **Auto-cleanup:** a contact created via the participant field that's **removed again before gaining other info is deleted** (`autoCreatedParticipantsRef` per dialog session; `ConversationParticipant` is onDelete Cascade; matched/pre-existing contacts never tracked).
+5. **Bulk paste:** paste an Outlook recipient list (`Name <email>; Name <email>; bare name`) into the Participants field → new **`POST /api/contacts/resolve-participants`** matches each by email (primary/`additionalEmails`, case-insensitive) → exact name → else creates (CONNECTED/NETWORK). `MultiCombobox` gained opt-in `onBulkPaste` (intercepts only `;`/newline/`<email>`-shaped pastes); ids merged deduped, new ones tracked for auto-cleanup, toast summarizes "added / already in contacts / new". Verified the endpoint live (create, in-paste dedup, name-match, case-insensitive email-match) with all test rows deleted after. Typecheck (client+server) + full client `vite build` + `prepush` backup guard green.
+
+Known small edge: a **name-only** paste written "Last, First" with no email won't match a "First Last" contact → creates a new one (emails sidestep it).
+
 ### What Was Just Completed — Contact company-sort and Idea deep-links (2026-06-28)
 
 Owner reported two UX bugs, both fixed and pushed to `main`.
@@ -109,10 +120,10 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` — backup coverage fix (`2dcd3b8`, adds `Series` + `IdeaTag` to both backup/restore paths) +
-this session's docs are **pushed**. **Schema-free** — no Turso DDL outstanding, no held commits.
-Server + client typecheck + full client `vite build` green. (The pre-existing unrelated
-`server/package-lock.json` churn from a prior `npm install` was left unstaged to keep the commit atomic.)
+`main` — meeting-participant UX (`ce9f306`: create-on-add, click-through, bulk paste, auto-cleanup)
++ lockfile chore (`c0abed3`) + this session's docs are **pushed**. **Schema-free** — no Turso DDL
+outstanding, no held commits. Server + client typecheck + full client `vite build` + `prepush`
+backup guard green.
 
 ---
 

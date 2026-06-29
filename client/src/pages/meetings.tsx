@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import {
   Popover,
@@ -762,6 +763,9 @@ export function MeetingsPage() {
   // Default sort: most-recently-updated first (owner preference).
   const sortBy = searchParams.get('sortBy') || 'updatedAt'
   const sortDir = searchParams.get('sortDir') || 'desc'
+  // "Hide upcoming" toggle — drops not-yet-happened meetings (server-side, so counts
+  // and pagination stay correct). Persisted in the URL like the other filters.
+  const hideUpcoming = searchParams.get('hideUpcoming') === '1'
   // Series view (seriesFilter) is inherently a chronological list, so the
   // calendar toggle is hidden there and the view is forced back to list.
   const view = !seriesFilter && searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
@@ -835,12 +839,20 @@ export function MeetingsPage() {
     if (toFilter) params.set('to', toFilter)
     if (qFilter) params.set('q', qFilter)
     if (idFilter) params.set('id', idFilter)
+    // Hiding upcoming meetings needs the client's Eastern wall clock so the server
+    // applies the same cutoff as the "Upcoming" badge.
+    if (hideUpcoming) {
+      const { today, hhmm } = easternNowParts()
+      params.set('hideUpcoming', '1')
+      params.set('today', today)
+      params.set('now', hhmm)
+    }
     params.set('sortBy', sortBy)
     params.set('sortDir', sortDir)
     params.set('limit', PAGE_SIZE.toString())
     params.set('offset', offset.toString())
     return params.toString()
-  }, [seriesFilter, companyFilter, tagFilter, typeFilter, fromFilter, toFilter, qFilter, idFilter, sortBy, sortDir])
+  }, [seriesFilter, companyFilter, tagFilter, typeFilter, fromFilter, toFilter, qFilter, idFilter, hideUpcoming, sortBy, sortDir])
 
   const loadMeetings = useCallback(async () => {
     setLoading(true)
@@ -1000,7 +1012,7 @@ export function MeetingsPage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {view === 'list' && (
             <Select value={sortValue} onValueChange={setSort}>
               <SelectTrigger className="h-8 w-[170px]" title="Sort meetings">
@@ -1013,6 +1025,19 @@ export function MeetingsPage() {
                 <SelectItem value="createdAt:desc">Recently logged</SelectItem>
               </SelectContent>
             </Select>
+          )}
+          {view === 'list' && (
+            <label
+              className="flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border px-2 text-sm text-muted-foreground"
+              title="Hide meetings that haven't happened yet"
+            >
+              <Switch
+                checked={hideUpcoming}
+                onCheckedChange={(c) => setParam('hideUpcoming', c ? '1' : '')}
+                aria-label="Hide upcoming meetings"
+              />
+              Hide upcoming
+            </label>
           )}
           {!seriesFilter && (
             <div className="inline-flex rounded-md border p-0.5">

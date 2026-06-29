@@ -206,8 +206,9 @@ router.get('/', async (_req: Request, res: Response) => {
       const [k1, k2] = orderedPair(key1, key2);
       const pairKey = `${k1}|${k2}`;
 
-      if (dismissedSet.has(pairKey)) continue; // silently suppressed
-
+      // Merge rules outrank dismissals: an explicit "combine these" is a stronger
+      // signal than "ignore this pair", so check rules FIRST. (If the user once
+      // dismissed a pair and later merged it, the merge wins.)
       const keptFor1 = mergeRuleMap.get(key1);
       const keptFor2 = mergeRuleMap.get(key2);
 
@@ -217,6 +218,8 @@ router.get('/', async (_req: Request, res: Response) => {
       } else if (keptFor2 === key1) {
         // contact2.name was previously deleted; contact1.name is the survivor
         toAutoMerge.push({ keepId: dup.contact1.id, removeId: dup.contact2.id });
+      } else if (dismissedSet.has(pairKey)) {
+        continue; // explicitly dismissed — silently suppress
       } else {
         reviewPairs.push(dup);
       }
@@ -481,7 +484,7 @@ router.post('/merge', async (req: Request, res: Response) => {
 
     await runContactMerge(keepId, removeId, keep, remove, fieldSelections);
 
-    // Record merge rule so future reimports of the removed contact auto-merge
+    // Record merge rule so future reimports of the removed contact auto-merge.
     const removedKey = contactNameKey(remove.name);
     const keptKey = contactNameKey(keep.name);
     if (removedKey !== keptKey) {
@@ -490,15 +493,14 @@ router.post('/merge', async (req: Request, res: Response) => {
         update: { keptKey },
         create: { type: 'contact', removedKey, keptKey },
       });
+      // The user's intent for this pair just changed from "ignore" (if it had ever
+      // been dismissed) to "always combine". Drop any stale dismissal so it can't
+      // short-circuit the merge rule on the next scan.
+      const [k1, k2] = orderedPair(removedKey, keptKey);
+      await prisma.dismissedDuplicate.deleteMany({
+        where: { type: 'contact', nameKey1: k1, nameKey2: k2 },
+      });
     }
-
-    // Also dismiss this pair by name so it never appears again if the rule doesn't fire
-    const [k1, k2] = orderedPair(removedKey, keptKey);
-    await prisma.dismissedDuplicate.upsert({
-      where: { type_nameKey1_nameKey2: { type: 'contact', nameKey1: k1, nameKey2: k2 } },
-      update: {},
-      create: { type: 'contact', nameKey1: k1, nameKey2: k2 },
-    }).catch(() => { /* ignore if same keys */ });
 
     res.json({ message: 'Contacts merged successfully' });
   } catch (error) {
@@ -655,8 +657,7 @@ router.get('/companies', async (_req: Request, res: Response) => {
       const [k1, k2] = orderedPair(key1, key2);
       const pairKey = `${k1}|${k2}`;
 
-      if (dismissedSet.has(pairKey)) continue;
-
+      // Merge rules outrank dismissals (see contact scan for rationale).
       const keptFor1 = mergeRuleMap.get(key1);
       const keptFor2 = mergeRuleMap.get(key2);
 
@@ -664,6 +665,8 @@ router.get('/companies', async (_req: Request, res: Response) => {
         toAutoMerge.push({ keepId: dup.company2.id, removeId: dup.company1.id });
       } else if (keptFor2 === key1) {
         toAutoMerge.push({ keepId: dup.company1.id, removeId: dup.company2.id });
+      } else if (dismissedSet.has(pairKey)) {
+        continue; // explicitly dismissed — silently suppress
       } else {
         reviewPairs.push(dup);
       }
@@ -903,7 +906,7 @@ router.post('/companies/merge', async (req: Request, res: Response) => {
 
     await runCompanyMerge(keepId, removeId, keep as Record<string, unknown>, remove as Record<string, unknown>, fieldSelections);
 
-    // Record merge rule so future reimports of the removed company auto-merge
+    // Record merge rule so future reimports of the removed company auto-merge.
     const removedKey = companyNameKey(remove.name);
     const keptKey = companyNameKey(keep.name);
     if (removedKey !== keptKey) {
@@ -912,15 +915,12 @@ router.post('/companies/merge', async (req: Request, res: Response) => {
         update: { keptKey },
         create: { type: 'company', removedKey, keptKey },
       });
+      // Drop any stale dismissal so it can't short-circuit the merge rule next scan.
+      const [k1, k2] = orderedPair(removedKey, keptKey);
+      await prisma.dismissedDuplicate.deleteMany({
+        where: { type: 'company', nameKey1: k1, nameKey2: k2 },
+      });
     }
-
-    // Dismiss the pair by name too
-    const [k1, k2] = orderedPair(removedKey, keptKey);
-    await prisma.dismissedDuplicate.upsert({
-      where: { type_nameKey1_nameKey2: { type: 'company', nameKey1: k1, nameKey2: k2 } },
-      update: {},
-      create: { type: 'company', nameKey1: k1, nameKey2: k2 },
-    }).catch(() => { /* ignore if same keys */ });
 
     res.json({ message: 'Companies merged successfully' });
   } catch (error) {

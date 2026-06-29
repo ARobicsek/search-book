@@ -5,6 +5,32 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Duplicate dismissals + auto-merge now persist (2026-06-29 s2)
+
+Owner reported that **dismissed duplicate matches kept coming back** (on a return visit / another
+device), and asked for two new behaviors: a once-dismissed pair should **stay dismissed when it
+recurs via a fresh import**, and **"combine ABC-D into ABC" should auto-apply to future imports** of
+either name. **SCHEMA** (2 new tables, Turso **DDL applied by owner**), pushed to `main`.
+
+- **Root cause:** dismissals lived only in browser `localStorage`, keyed by **row id** → never synced
+  across devices, never matched a reimport's new ids.
+- **Fix:** new **`DismissedDuplicate`** (`type`,`nameKey1`,`nameKey2`) + **`DuplicateMergeRule`**
+  (`type`,`removedKey`,`keptKey`) tables, **keyed by normalized name** (so decisions survive a
+  reimport). `POST /api/duplicates/[companies/]dismiss` persists dismissals; the merge endpoints
+  record a merge rule. The scan (`GET /api/duplicates[/companies]`) now returns `{ pairs,
+  autoMergedCount }`: a pair matching a **merge rule auto-merges** (reimported "ABC-D" folds into
+  "ABC" via the extracted `runContactMerge`/`runCompanyMerge`); a pair matching a **dismissal is
+  hidden**; client toasts auto-merges.
+- **Precedence (important):** **merge rules outrank dismissals** — the scan checks rules *before*
+  dismissals, and a merge **deletes any stale dismissal** for the pair (intent "ignore"→"combine").
+  (The first cut had this backwards and would have *hidden* reimported pairs instead of merging them;
+  caught in self-review and fixed.)
+- Both tables added to **both backup paths** (guard now sees **32** tables); also fixed two earlier
+  build breakers (literal Unicode in regex → `\uXXXX`; a statement stranded outside its function).
+- **Known design choices (surfaced to owner, not yet built):** auto-merge fires **lazily on
+  Duplicates-page load** (no separate import-time hook); **merge rules are permanent with no
+  review/revoke UI**. Revisit if the owner wants either.
+
 ### What Was Just Completed — Meeting-participant UX (2026-06-29)
 
 Five owner asks for the Quick Log / meeting editor, **schema-free**, pushed to `main` (`ce9f306`; lockfile chore `c0abed3`).
@@ -120,10 +146,14 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` — meeting-participant UX (`ce9f306`: create-on-add, click-through, bulk paste, auto-cleanup)
-+ lockfile chore (`c0abed3`) + this session's docs are **pushed**. **Schema-free** — no Turso DDL
-outstanding, no held commits. Server + client typecheck + full client `vite build` + `prepush`
-backup guard green.
+`main` — duplicate dismissals + auto-merge persistence is **merged and pushed** (dev branch
+`claude/duplicate-dismissals-persistence-9bo1l3`, fast-forwarded into `main`). **Turso DDL for the 2
+new tables (`DismissedDuplicate`, `DuplicateMergeRule`) was applied by the owner** — no DDL
+outstanding, no held commits. Backup-coverage guard green (32 tables). **Caveat:** the typecheck +
+full `vite build` were **not run locally this session** (npm registry unreachable from the container,
+`ECONNRESET`) — verified structurally via the dep-free backup guard + a dependency-less `tsc` pass
+(zero lexer/scope errors); **Vercel's `build:vercel` is the real gate** — confirm that deploy went
+green. Prior meeting-participant UX (`ce9f306`) + lockfile chore (`c0abed3`) still in `main`.
 
 ---
 

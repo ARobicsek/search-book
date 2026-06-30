@@ -5,6 +5,26 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Meeting-log polish: caret stays in view + new actions on top (2026-06-30 s2)
+
+Two small owner asks for the Quick Log / meeting editor, **schema-free, client-only**, merged + pushed
+to `main` (`a34f6aa`). Owner confirmed both live.
+1. **Caret no longer hides below the fold.** The note `MarkdownTextarea` auto-grows
+   (`field-sizing-content`) so it never scrolls internally — it extends past the bottom of the dialog's
+   scroll container, and the browser doesn't scroll that ancestor to follow the caret, so a line typed
+   after Enter at the bottom went out of view. New `scrollCaretIntoView` (reuses the existing mirror-div
+   `getCaretCoordinates`) finds the nearest scrollable ancestor and nudges its `scrollTop` (16px margin)
+   when the caret is past an edge. Wired into the textarea `onChange` (plain typing/Enter) **and** into
+   `apply`'s rAF (programmatic edits: list continuation, @-mention insert, pasted/dropped images).
+2. **"Add action" prepends.** `addAction` in `quick-log-dialog.tsx` now does `[makePendingAction(),
+   ...prev]` so the new composer row lands at the top, right under the button where it's easy to find.
+   Saving is key-based (`reconcileActions` dedups by row key), so row order is purely cosmetic.
+
+**Verification caveat:** `npm run prepush` halts on the **pre-existing** tsconfig `baseUrl` deprecation
+(TS5101 — newer TS in this container, present on the untouched tree too); confirmed the two edited files
+type-check clean via `tsc --ignoreDeprecations 6.0` (exit 0). Client-only, no schema/backup impact.
+Mobile (390px) not visually re-tested — a scroll nudge + a list-order flip, no layout change.
+
 ### What Was Just Completed — Action reminders: weekday/weekend default time + forgiving time entry (2026-06-30)
 
 Two owner asks for the action **Time (optional)** field, **schema-free**, pushed to `main` (`4a42849`).
@@ -198,8 +218,9 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` — action reminders **weekday/weekend default time + forgiving time entry** are **merged and pushed**
-(tip `4a42849`). **Schema-free** — no Turso DDL outstanding, no held commits. Client typecheck (tsconfig
+`main` — meeting-log polish **(caret-stays-in-view + new-actions-on-top)** is **merged and pushed**
+(tip `a34f6aa`, client-only). **Schema-free** — no Turso DDL outstanding, no held commits. Prior tip
+`4a42849`: action reminders weekday/weekend default time + forgiving time entry. Client typecheck (tsconfig
 `baseUrl`-deprecation bypassed) + `prepush` backup guard (32 tables) green; server `tsc` was blocked by an
 npm-registry `ECONNRESET` in this container (server deps wouldn't install) — the server change is pure
 date math with no new imports, logic verified via a standalone Node test; Vercel is the gate. Prior in

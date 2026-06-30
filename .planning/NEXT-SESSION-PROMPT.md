@@ -5,6 +5,33 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Action reminders: weekday/weekend default time + forgiving time entry (2026-06-30)
+
+Two owner asks for the action **Time (optional)** field, **schema-free**, pushed to `main` (`4a42849`).
+1. **Default reminder time is now 8:00 AM weekdays / 10:00 AM weekends** (was a flat 09:00), chosen by
+   the due **date's weekday**. New `defaultReminderTime(dueDate)` lives in **both** the server
+   (`server/src/lib/push.ts`, used by the cron's `reminderDueInstant` — replaced `DEFAULT_REMINDER_TIME`)
+   and the client (`client/src/lib/action-time.ts`, drives the "Remind me (defaults to …)" hint, which
+   now shows the right time for the picked date). Weekday read via `getUTCDay()` on the `YYYY-MM-DD` parts
+   (calendar weekday is tz-independent). **Note:** this changes existing reminders that rely on the
+   implicit time (notify on, no `dueTime`) from 9 → 8/10 — intended.
+2. **Forgiving free-text time input** (fixes the screenshot bug where the native `<input type="time">`
+   rejected partial entries like "9a" with a "Please enter a valid value" popup). New
+   `client/src/components/time-input.tsx` (`TimeInput`) replaces the native time input on both action
+   surfaces (the full action form **and** the inline `ActionDateSelect` popover). Backed by
+   `parseTimeInput` in `action-time.ts`: a bare hour assumes **:00** minutes and an `a`/`p` suffix sets
+   AM/PM — "9"→9:00 AM, "9a"→9:00 AM, "2:30p"→2:30 PM, "1400"→2:00 PM, "12a"→12:00 AM; blanks clear;
+   unparseable input flags the field (red border) instead of a browser popup. Shows the value back in
+   friendly "9:00 AM" form on blur. The meeting-log start-time field (`quick-log-dialog.tsx`) was left on
+   the native input — out of scope (this was an actions ask).
+
+Client typecheck (with the pre-existing tsconfig `baseUrl` deprecation bypassed — newer TS in the fresh
+container) and the backup-coverage guard both green; the server `tsc` couldn't run (npm registry
+`ECONNRESET` in this container blocked installing server deps), but the server edit is pure date
+arithmetic with **no new imports** — verified its logic + the parser with a standalone Node test (25
+cases incl. weekend/weekday boundaries and invalid input, all pass). Vercel build is the real gate.
+**Mobile (390px) NOT visually re-tested** — it's a single text input swap.
+
 ### What Was Just Completed — Meetings list: time-aware sort + "Upcoming" flag + "Hide upcoming" toggle (2026-06-29 s3)
 
 Three **schema-free** owner asks for the `/meetings` **list** view, each pushed to `main` on its own commit.
@@ -171,12 +198,14 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` — meetings-list **time-aware sort + "Upcoming" flag + "Hide upcoming" toggle** are **merged and
-pushed** (tip `070a651`; the three commits `131a503` / `bbdaccd` / `070a651`). **Schema-free** — no Turso
-DDL outstanding, no held commits. Client+server typecheck + `prepush` (backup guard, 32 tables) + full
-client `vite build` + server `tsc` all run **locally and green** this session. Prior in `main`: duplicate
+`main` — action reminders **weekday/weekend default time + forgiving time entry** are **merged and pushed**
+(tip `4a42849`). **Schema-free** — no Turso DDL outstanding, no held commits. Client typecheck (tsconfig
+`baseUrl`-deprecation bypassed) + `prepush` backup guard (32 tables) green; server `tsc` was blocked by an
+npm-registry `ECONNRESET` in this container (server deps wouldn't install) — the server change is pure
+date math with no new imports, logic verified via a standalone Node test; Vercel is the gate. Prior in
+`main`: meetings-list time-aware sort + Upcoming flag + Hide-upcoming toggle (`070a651`), duplicate
 dismissals + auto-merge persistence (`DismissedDuplicate` / `DuplicateMergeRule`, DDL already applied by
-owner) and meeting-participant UX (`ce9f306`).
+owner), meeting-participant UX (`ce9f306`).
 
 ---
 

@@ -118,6 +118,36 @@ export function MarkdownTextarea({
   const [mentionIndex, setMentionIndex] = useState(0)
   const mentionsEnabled = !!(mentionContacts || mentionCompanies)
 
+  // The textarea auto-grows to fit its content (`field-sizing-content`), so it
+  // never scrolls internally — instead it pushes past the bottom of the dialog's
+  // scroll container. Browsers don't scroll that ancestor to follow the caret, so
+  // a freshly typed line (e.g. after Enter at the bottom) lands below the fold,
+  // out of view. This walks up to the nearest scrollable ancestor and nudges it
+  // so the caret line stays visible.
+  const scrollCaretIntoView = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const { top, height } = getCaretCoordinates(el, el.selectionStart)
+    const taTop = el.getBoundingClientRect().top
+    const caretTop = taTop + top
+    const caretBottom = caretTop + height
+    const margin = 16
+    let node = el.parentElement
+    while (node) {
+      const style = getComputedStyle(node)
+      if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+        const r = node.getBoundingClientRect()
+        if (caretBottom > r.bottom - margin) {
+          node.scrollTop += caretBottom - (r.bottom - margin)
+        } else if (caretTop < r.top + margin) {
+          node.scrollTop -= (r.top + margin) - caretTop
+        }
+        return
+      }
+      node = node.parentElement
+    }
+  }, [])
+
   // Apply a new value and restore the cursor after React re-renders
   const apply = useCallback(
     (next: string, selStart: number, selEnd?: number) => {
@@ -127,9 +157,10 @@ export function MarkdownTextarea({
         if (!el) return
         el.focus()
         el.setSelectionRange(selStart, selEnd ?? selStart)
+        scrollCaretIntoView()
       })
     },
-    [onChange]
+    [onChange, scrollCaretIntoView]
   )
 
   // Recompute the active mention from the live caret position.
@@ -504,6 +535,7 @@ export function MarkdownTextarea({
           value={value}
           onChange={(e) => {
             onChange(e.target.value)
+            requestAnimationFrame(scrollCaretIntoView)
             if (mentionsEnabled) requestAnimationFrame(refreshMention)
           }}
           onKeyDown={handleKeyDown}

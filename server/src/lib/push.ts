@@ -50,12 +50,21 @@ export async function sendPush(target: PushTarget, payload: unknown): Promise<Pu
 // Actions store wall-clock strings (dueDate "YYYY-MM-DD", optional dueTime "HH:MM")
 // in the owner's timezone (REMINDER_TZ, default America/New_York). The cron runs in
 // UTC on Vercel, so we convert the wall-clock moment to a real UTC instant to decide
-// whether the reminder is due. When notify is on but no time was set, default 09:00.
-
-export const DEFAULT_REMINDER_TIME = '09:00';
+// whether the reminder is due. When notify is on but no time was set, default to
+// 8:00 AM on weekdays / 10:00 AM on weekends (see defaultReminderTime).
 
 export function reminderTimeZone(): string {
   return process.env.REMINDER_TZ || 'America/New_York';
+}
+
+// Default reminder time for an action with no explicit dueTime: 8:00 AM on
+// weekdays, 10:00 AM on weekends (Sat/Sun), based on the due date's weekday.
+// The weekday of a "YYYY-MM-DD" calendar date is timezone-independent, so we
+// read it via UTC. Mirrors the client's defaultReminderTime in client/src/lib/action-time.ts.
+export function defaultReminderTime(dueDate: string): string {
+  const [y, mo, d] = dueDate.split('-').map(Number);
+  const day = new Date(Date.UTC(y, (mo || 1) - 1, d || 1)).getUTCDay();
+  return day === 0 || day === 6 ? '10:00' : '08:00';
 }
 
 // Interpret `dateStr`+`timeStr` as wall-clock time in `timeZone`; return the UTC Date.
@@ -75,6 +84,6 @@ export function zonedWallTimeToUtc(dateStr: string, timeStr: string, timeZone: s
 // The UTC instant an action's reminder should fire, or null if it has no due date.
 export function reminderDueInstant(action: { dueDate: string | null; dueTime: string | null }): Date | null {
   if (!action.dueDate) return null;
-  const time = action.dueTime || DEFAULT_REMINDER_TIME;
+  const time = action.dueTime || defaultReminderTime(action.dueDate);
   return zonedWallTimeToUtc(action.dueDate, time, reminderTimeZone());
 }

@@ -27,8 +27,9 @@ default pattern of use — no times, no alerts — is completely unchanged: an a
 
 Real Web Push (works on desktop with the browser running, and on installed PWAs incl. iOS 16.4+
 home-screen installs). A free external cron pokes `/api/cron/reminders` every minute; that endpoint
-finds actions whose due moment (dueDate + dueTime, default **09:00 America/New_York** when `notify`
-is on but no time) has passed and haven't been notified, and fans a push out to every subscription.
+finds actions whose due moment (dueDate + dueTime, default **08:00 weekdays / 10:00 weekends
+America/New_York** when `notify` is on but no time) has passed and haven't been notified, and fans a
+push out to every subscription.
 
 ## One-time setup to turn it on (owner)
 
@@ -65,8 +66,12 @@ Reminders stay dormant until these are done — deploying the code alone changes
 ## Notes / decisions
 
 - **Time and alert are independent** (per owner): you can set a time with no alert, or an alert with
-  no explicit time (→ 9:00 AM ET).
-- **Default reminder time**: 09:00 America/New_York when `notify` is on and no `dueTime` is set.
+  no explicit time (→ default reminder time, see below).
+- **Default reminder time**: 08:00 (weekdays) / 10:00 (weekends, Sat/Sun) America/New_York, based on
+  the due date's weekday, when `notify` is on and no `dueTime` is set.
+- **Time entry**: the Time field is a forgiving free-text input (`client/src/components/time-input.tsx`),
+  not the native `<input type="time">`. A bare hour assumes :00 minutes and `a`/`p` set AM/PM —
+  e.g. "9a" → 9:00 AM, "2:30p" → 2:30 PM, "1400" → 2:00 PM.
 - **Re-arming**: editing an action's date, time, or notify flag clears `lastNotifiedAt`, so a
   rescheduled reminder fires again.
 - **Cost**: nothing here uses paid Vercel Cron or new managed services. Web Push + VAPID are free;

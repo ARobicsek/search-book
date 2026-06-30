@@ -347,7 +347,7 @@ model Action {
   // Kept SEPARATE from dueDate (which stays date-only "YYYY-MM-DD" for the app-wide string comparisons/sorting).
   dueTime               String?
   // Opt-in reminder. Independent of dueTime: a time can be set with no alert, or an alert with no
-  // explicit time (cron defaults to 09:00 in REMINDER_TZ). Default false ⇒ existing actions never alert.
+  // explicit time (cron defaults to 08:00 weekdays / 10:00 weekends in REMINDER_TZ). Default false ⇒ existing actions never alert.
   notify                Boolean       @default(false)
   // ISO timestamp the cron writes when it sends the Web Push, so a reminder fires exactly once.
   lastNotifiedAt        String?

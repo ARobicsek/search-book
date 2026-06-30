@@ -25,6 +25,8 @@ import {
 import { toast } from 'sonner'
 import { ArrowLeft, Loader2, Plus, Trash2, RotateCcw, ChevronDown, ChevronRight, Star, X, Bell } from 'lucide-react'
 import { ensurePushForReminder } from '@/lib/push'
+import { TimeInput } from '@/components/time-input'
+import { formatActionTime, defaultReminderTime } from '@/lib/action-time'
 import { useAutoSave } from '@/hooks/use-auto-save'
 import { SaveStatusIndicator } from '@/components/save-status'
 import { cn } from '@/lib/utils'
@@ -640,13 +642,11 @@ export function ActionFormPage() {
 
             <div className="space-y-2">
               <Label htmlFor="dueTime">Time (optional)</Label>
-              <Input
+              <TimeInput
                 id="dueTime"
-                type="time"
                 value={form.dueTime}
                 disabled={!form.dueDate}
-                onChange={async (e) => {
-                  const next = e.target.value
+                onChange={async (next) => {
                   // Picking a time of day defaults "Remind me" ON (only when
                   // it's currently off) — subscribe this device to push.
                   const autoEnableNotify = !!next && !form.notify
@@ -688,7 +688,7 @@ export function ActionFormPage() {
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <Bell className="h-3.5 w-3.5" />
-                Remind me{form.dueTime ? '' : ' (defaults to 9:00 AM)'}
+                Remind me{form.dueTime ? '' : ` (defaults to ${formatActionTime(defaultReminderTime(form.dueDate))})`}
               </label>
             </div>
 

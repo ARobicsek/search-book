@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { Action } from '@/lib/types'
 import { formatActionTime } from '@/lib/action-time'
+import { TimeInput } from '@/components/time-input'
 import { ensurePushForReminder } from '@/lib/push'
 
 interface ActionDateSelectProps {
@@ -190,11 +191,10 @@ export function ActionDateSelect({ action, onUpdate, showLabel = true, className
             <>
               <div className="px-2 py-1.5">
                 <span className="text-xs text-muted-foreground mb-1 block">Time (optional)</span>
-                <Input
-                  type="time"
+                <TimeInput
                   className="h-8 text-xs"
                   value={action.dueTime || ''}
-                  onChange={(e) => updateTime(e.target.value)}
+                  onChange={(value) => updateTime(value)}
                 />
               </div>
 

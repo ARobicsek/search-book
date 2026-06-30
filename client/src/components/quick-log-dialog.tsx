@@ -1215,7 +1215,10 @@ function QuickLogDialog({
   }
 
   function addAction() {
-    setNewActions((prev) => [...prev, makePendingAction()])
+    // Prepend so the freshly-added composer row appears at the top of the list,
+    // right under the "Add action" button where it's easy to find and fill in.
+    // Saving is key-based (reconcileActions dedups by row key), so order is cosmetic.
+    setNewActions((prev) => [makePendingAction(), ...prev])
   }
 
   function updateAction(key: number, patch: Partial<PendingAction>) {

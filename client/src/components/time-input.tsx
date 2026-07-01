@@ -46,7 +46,7 @@ export function TimeInput({ value, onChange, disabled, id, className, placeholde
     <Input
       id={id}
       type="text"
-      inputMode="numeric"
+      inputMode="text"
       autoComplete="off"
       placeholder={placeholder ?? 'e.g. 9a or 2:30 PM'}
       disabled={disabled}

@@ -39,9 +39,9 @@ differing-core-key path (unaffected), verified the contact-side suffix case, ver
 field-selection/stale-key fix against the DB directly, and re-confirmed dismiss-then-rescan still
 suppresses correctly (no regression — dismissal itself was already correct server-side). Client+server
 typecheck, `prepush` (32-table backup guard), full client `vite build` all green. **Schema-free.**
-Full write-up: `SESSION-HISTORY.md` 2026-07-02. **Pushed to `claude/org-merge-dedup-issues-ddtn2r`**
-(task-assigned branch, not `main`) — not yet merged; ask the owner whether to open a PR or fold it into
-`main` directly next session if that hasn't happened yet.
+Full write-up: `SESSION-HISTORY.md` 2026-07-02. Pushed to the task-assigned branch
+`claude/org-merge-dedup-issues-ddtn2r` first, then **owner asked to push to `main`** — fast-forwarded
+(`d712012..4112a85`, clean, no divergence). Live on `main`, Vercel auto-deploy triggered.
 
 ### What Was Just Completed — Meeting-log polish: caret stays in view + new actions on top (2026-06-30 s2)
 
@@ -256,12 +256,10 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-**`claude/org-merge-dedup-issues-ddtn2r`** (task-assigned, based on `main` tip `d712012`) — the duplicate
-auto-merge/dismiss bug fix above is committed and pushed **here**, not to `main`. **Not yet merged** —
-next session should check whether the owner wants a PR opened, or the branch merged/fast-forwarded into
-`main` directly (owner has standing direct-to-main permission per `CLAUDE.md`, but this branch was
-assigned by the triggering task, so it was left as-is rather than pushed straight to `main`).
-**Schema-free**, no Turso DDL outstanding.
+`main` — the duplicate auto-merge/dismiss bug fix above is live (tip `4112a85`). Developed on the
+task-assigned branch `claude/org-merge-dedup-issues-ddtn2r`, then fast-forwarded into `main` at the
+owner's request (`d712012..4112a85`). That branch still exists on the remote (identical history to
+`main` as of this push) — fine to delete or ignore. **Schema-free**, no Turso DDL outstanding.
 
 `main` tip (`d712012`) separately has: meeting-log polish **(caret-stays-in-view + new-actions-on-top)**
 (`a34f6aa`, client-only). **Schema-free** — no Turso DDL outstanding, no held commits. Prior tip

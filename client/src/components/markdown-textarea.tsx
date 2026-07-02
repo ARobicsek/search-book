@@ -597,7 +597,10 @@ export function MarkdownTextarea({
                   // onMouseDown (not onClick) so it fires before the textarea blur closes the list
                   onMouseDown={(e) => { e.preventDefault(); insertMention(item) }}
                   onMouseEnter={() => setMentionIndex(i)}
-                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-accent text-accent-foreground' : ''}`}
+                  // Explicit blue (matching the @-mention chip theme) rather than the
+                  // near-white `bg-accent` token, whose ~3% contrast was invisible in
+                  // some browsers/displays (e.g. Edge) as the keyboard-highlighted row.
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left ${i === mentionIndex ? 'bg-blue-100 text-blue-900 dark:bg-blue-500/30 dark:text-blue-50' : ''}`}
                 >
                   {item.kind === 'loose-person' ? (
                     <>

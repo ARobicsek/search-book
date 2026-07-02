@@ -5,6 +5,15 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Picker relevance ranking + toolbar-less markdown in contact docs + Edge highlight fix (2026-07-02 s5)
+
+Three bundled owner enhancement asks, **schema-free**, committed straight to `main` (`3391b43`, then `18a698f`); owner confirmed live.
+1. **Relevance-ranked people/org pickers.** The meeting **Participants** picker and the **@-mention** autocomplete now float the most-likely target first. `GET /api/contacts/names` + `/companies/names` return a numeric `rank` (rows pre-sorted by it), computed in app code from cheap parallel `groupBy` counts (Turso-safe, **not** the `_count` include). **Primary factor is engagement** — `min(meetings,40)*50 + min(@mentions,40)*30` (contact meetings = anchored `Conversation.contactId` + `ConversationParticipant`; @mentions = `ConversationMention`) — so among five "Sarah"s at NCQA the one you actually meet/@-mention most wins. Smaller boosts: NCQA ecosystem +150, has-a-written-profile +50 (ids-only presence query — no big-text transfer). Companies rank on meetings + @mentions + people-on-file. Client: `ComboboxOption.rank`; `Combobox`/`MultiCombobox` + the mention list sort **word-prefix-first** ("sar"→Sarah before Ce·sar), then rank, then alpha. **Owner explicitly chose engagement-primary over the initial NCQA-dominant (+1000) weighting** — if NCQA colleagues you haven't met feel too buried, raise the +150 boost.
+2. **Toolbar-less markdown in contact documentation boxes.** New `hideToolbar` prop on `MarkdownTextarea` keeps every shortcut (Ctrl+B/I, bullets, Tab-to-nest, list continuation, image paste) without the toolbar. **Role Description, Useful For, Personal Details** switched to it; their contact-detail read views now render markdown (`personalDetails` was plain text before).
+3. **@-mention keyboard highlight fixed (Edge).** Arrow/Enter/Tab selection already existed, but the highlighted row used `bg-accent` (`oklch 0.97`, ~3% contrast on white) — barely visible in Chrome, **invisible in Edge**. Swapped to an explicit blue matching the mention-chip theme + `scrollIntoView` so the active row stays visible on a long list.
+
+`prepush` (client+server typecheck + 32-table backup guard) + full client `vite build` green; both ranking endpoints smoke-tested live against local SQLite (curl) — `rank` on every row, sorted desc, the new `ConversationMention` `groupBy` doesn't hang. **No Turso DDL.** Mobile not separately re-tested (dropdown highlight + picker ordering + form-field editor swaps; no layout change).
+
 ### What Was Just Completed — Meeting-notes scroll-bar flicker fixed (2026-07-02 s4)
 
 Owner reported that while typing meeting notes with SearchBook at **half-monitor width** (Teams in the
@@ -300,8 +309,11 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is **`033673e`** — the meeting-notes scroll-bar-flicker fix above (`[scrollbar-gutter:stable]`,
-client-only, schema-free; developed on `claude/meeting-notes-scroll-flicker-9lopxu`, fast-forwarded in).
+`main` tip is **`18a698f`** — the s5 picker-ranking / toolbar-less-markdown / Edge-highlight work above
+(`3391b43` the three features + `18a698f` the Edge highlight fix; both client+server, **schema-free, no
+Turso DDL**, committed straight to `main`). Before it, a docs commit (`abbe88e`, s4 handoff) on top of
+**`033673e`** — the meeting-notes scroll-bar-flicker fix (`[scrollbar-gutter:stable]`, client-only,
+schema-free; developed on `claude/meeting-notes-scroll-flicker-9lopxu`, fast-forwarded in).
 Before it: the series prep-notes reuse feature (3 commits `ef46ee0` →
 `5c66d4e` → `d0fcadb`), on top of two docs commits (`5a39094` handoff refresh, `3ddb4b0` backup-schema
 reference) and the two duplicate-auto-merge fixes (round 1 `4112a85`, round 2 `2109fac`, on top of prior
@@ -335,10 +347,12 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session was a small, self-contained
-**meeting-log feature** — reuse a series' prep notes in the next meeting (top "What Was Just Completed"
-entry above; `SESSION-HISTORY.md` 2026-07-02 s3). Schema-free, client-only, live on `main` (tip
-`d0fcadb`), nothing pending. Before that was a two-round **bug-fix session** (via a GitHub task) chasing
+Context for *this* upcoming session specifically: the most recent session (2026-07-02 s5) was a bundle of
+three small **owner UX enhancements** — relevance-ranked participant/@-mention pickers (engagement-primary),
+toolbar-less markdown in the contact documentation boxes, and an Edge @-mention-highlight visibility fix
+(top "What Was Just Completed" entry above; `SESSION-HISTORY.md` 2026-07-02 s5). Schema-free, live on `main`
+(tip `18a698f`), nothing pending. Earlier the same day: an s4 scroll-flicker fix, an s3 series-prep-notes
+feature, and a two-round **bug-fix session** (via a GitHub task) chasing
 the duplicate-org auto-merge feature — full detail in its "What Was Just Completed" entry above and
 `SESSION-HISTORY.md` 2026-07-02 (both entries). Short version: round 1 found
 merge rules silently never got recorded when two names shared a normalized core key (the single most

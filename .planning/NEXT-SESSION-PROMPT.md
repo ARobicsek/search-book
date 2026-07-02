@@ -205,8 +205,9 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### What's Next
 
-1. **No carried-over primary task** (this was a maintenance/backup-integrity session). *Optional*
-   leftovers still open from the prior merge bug-fix session: **(a)** re-attach the merged
+1. **No carried-over primary task** — the just-completed session was itself a bug-fix session (duplicate
+   auto-merge, see above), not a continuation of plan work. *Long-standing optional* leftovers, still
+   open from a much older (2026-06-24) merge bug-fix session: **(a)** re-attach the merged
    **"Seth Glickman"** to the meeting he lost (the pre-fix merge cascade-deleted his participant link)
    — reopen that meeting → add him; the picker now refreshes so he's selectable. **(b)** a one-off
    **audit/repair of *earlier* contact merges** that may have similarly lost
@@ -259,20 +260,26 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` — the duplicate auto-merge/dismiss bug fix above is live (tip `4112a85`). Developed on the
-task-assigned branch `claude/org-merge-dedup-issues-ddtn2r`, then fast-forwarded into `main` at the
-owner's request (`d712012..4112a85`). That branch still exists on the remote (identical history to
-`main` as of this push) — fine to delete or ignore. **Schema-free**, no Turso DDL outstanding.
+`main` tip is **`2109fac`** — both duplicate-auto-merge fixes above are live (round 1 `4112a85`, round 2
+`2109fac`, on top of prior tip `d712012`). Developed on the task-assigned branch
+`claude/org-merge-dedup-issues-ddtn2r`, fast-forwarded into `main` at the owner's request both rounds;
+that branch is kept in sync (identical history to `main`) — fine to delete or ignore. **Schema-free**,
+no Turso DDL outstanding, no held commits.
 
-`main` tip (`d712012`) separately has: meeting-log polish **(caret-stays-in-view + new-actions-on-top)**
-(`a34f6aa`, client-only). **Schema-free** — no Turso DDL outstanding, no held commits. Prior tip
-`4a42849`: action reminders weekday/weekend default time + forgiving time entry. Client typecheck (tsconfig
-`baseUrl`-deprecation bypassed) + `prepush` backup guard (32 tables) green; server `tsc` was blocked by an
-npm-registry `ECONNRESET` in this container (server deps wouldn't install) — the server change is pure
-date math with no new imports, logic verified via a standalone Node test; Vercel is the gate. Prior in
-`main`: meetings-list time-aware sort + Upcoming flag + Hide-upcoming toggle (`070a651`), duplicate
-dismissals + auto-merge persistence (`DismissedDuplicate` / `DuplicateMergeRule`, DDL already applied by
-owner), meeting-participant UX (`ce9f306`).
+**Known gaps left deliberately out of scope this session** (surfaced while fixing the above, not bugs
+in what shipped): **(a)** the creation-time merge-rule check (`resolveExistingCompanyByName` /
+`POST /companies/resolve`) only exists for **companies** — an analogous "merge two contacts, then create
+a new contact whose name was the removed one" would still create a fresh duplicate contact immediately
+(it *would* still get auto-merged on the next Duplicates-page visit, since the scan-level
+`applyMergeRules` fix covers contacts symmetrically — this gap is creation-time only). Build the contact
+equivalent if the owner hits this. **(b)** The standalone **"Add Company"** page and the org `@`-mention
+**"Create organization"** button still don't consult merge rules — left alone on purpose since those are
+deliberate "make a new company" actions, not implicit name resolution; revisit if that assumption proves
+wrong in practice.
+
+Prior to that, `main` had: meeting-log polish **(caret-stays-in-view + new-actions-on-top)** (`a34f6aa`,
+client-only), action reminders weekday/weekend default time + forgiving time entry (`4a42849`), meetings-list
+time-aware sort + Upcoming flag + Hide-upcoming toggle (`070a651`), meeting-participant UX (`ce9f306`).
 
 ---
 
@@ -283,16 +290,16 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session was a **bug-fix session** triggered by a
-contact-merge mishap. Two schema-free fixes shipped to `main`: **(1)** the **contact merge** now
-re-points `ConversationParticipant` + `ActionContact` + `ConversationMention` to the kept contact before
-deleting the loser (it previously lost those via onDelete Cascade/SetNull — destroying a meeting's only
-participant + its fallback title) — `95cd537`; **(2)** the **Quick Log / meeting dialog** now **flushes
-unsaved work on close** (×/Esc/Cancel = keep, not discard; incl. brand-new free-text participants
-autosave skips) and **refetches contact/org/tag lookups on every open** (were cached per session, hiding
-mid-session-created/merged contacts from the pickers + `@`-autocomplete) — `8cbc7ee`. *Optional* leftover:
-re-attach the lost "Seth Glickman" participant to his meeting, and/or audit earlier merges for the same
-loss. (Action time-of-day + Web Push reminders shipped the **same day** in a parallel session — `9825a3a`,
-SCHEMA, live; runbook `.planning/ACTION-REMINDERS.md`.) Plan of record is
-`.planning/NCQA-ADAPTATION-PLAN.md` (Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9).
+Context for *this* upcoming session specifically: last session was a **bug-fix session** (via a GitHub
+task) chasing the duplicate-org auto-merge feature across two rounds — full detail in the "What Was Just
+Completed" entry above and `SESSION-HISTORY.md` 2026-07-02 (both entries). Short version: round 1 found
+merge rules silently never got recorded when two names shared a normalized core key (the single most
+common real-world dup shape); round 2 (owner tested live, still broken) found the Duplicates-page
+fallback never even *considered* a rule unless the heuristic similarity scan also flagged the pair as a
+candidate — so an acronym merged into its spelled-out name ("NCQA" → "National Committee for Quality
+Assurance (NCQA)") was invisible to the whole system — and that nothing consulted merge history at
+company-creation time at all, across **6** different client call sites. Both schema-free, both live on
+`main` (tip `2109fac`). Two known, deliberately-scoped-out gaps are noted in "Working branch" above — check
+those before assuming a related report is a new bug. Plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`
+(Phase 3+, gated on the "⏳ Waiting on owner" block, D5/D6/D8/D9) — untouched this session.
 Nothing is pending (no Turso DDL, no held commits).

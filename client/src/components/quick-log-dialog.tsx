@@ -2000,7 +2000,7 @@ function QuickLogDialog({
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
       <DialogContent
-        className={cn('max-h-[90vh] w-[95vw] overflow-y-auto sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', usePanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}
+        className={cn('max-h-[90vh] w-[95vw] overflow-y-auto [scrollbar-gutter:stable] sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', usePanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}
         // Dragging the prep/form resize handle fires a pointer-down that Radix
         // mis-reads as an outside interaction (react-resizable-panels' native
         // handler pre-empts Radix's "inside" marker) — keep the dialog open for it.
@@ -2096,7 +2096,7 @@ function QuickLogDialog({
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={65} minSize={30} className="pl-4">
-              <div className="h-full overflow-y-auto pb-4 pr-2">{formBody}</div>
+              <div className="h-full overflow-y-auto [scrollbar-gutter:stable] pb-4 pr-2">{formBody}</div>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (

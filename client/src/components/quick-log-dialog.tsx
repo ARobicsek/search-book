@@ -394,10 +394,6 @@ function QuickLogDialog({
   // Most recent earlier meeting in the same series (title match) — shown in the
   // left panel for context while writing up a recurring meeting.
   const [seriesContext, setSeriesContext] = useState<Conversation | null>(null)
-  // The seriesContext id whose prep notes have already been copied into this
-  // meeting (via "Copy to prep notes") — hides the button after use, and re-arms
-  // when a different series/last-meeting becomes the context.
-  const [copiedSeriesPrepId, setCopiedSeriesPrepId] = useState<number | null>(null)
 
   // Lookup data, fetched lazily on first open
   const [titles, setTitles] = useState<string[]>([])
@@ -448,7 +444,6 @@ function QuickLogDialog({
     actionSaveChainRef.current = Promise.resolve()
     setActionsSaveStatus('idle')
     setSeriesContext(null)
-    setCopiedSeriesPrepId(null)
 
     // Autosave bookkeeping. In edit mode the record already exists (= editId);
     // in create mode it's created by the first valid autosave POST.
@@ -1211,9 +1206,10 @@ function QuickLogDialog({
         ...sourceNotes.map((n) => ({ content: n.content, date: today })),
       ])
     }
-    setCopiedSeriesPrepId(source.id)
     // Make sure the prep section is open so the copied notes are visible (matters on
-    // mobile / when the panel isn't shown).
+    // mobile / when the panel isn't shown). Once the meeting has prep notes of its
+    // own, the source box hides itself (see its render condition) — durably, so it
+    // stays hidden after save + reopen.
     setShowTagsPrep(true)
     toast.success(
       `Copied ${sourceNotes.length} prep note${sourceNotes.length === 1 ? '' : 's'} from the last meeting`
@@ -1407,6 +1403,11 @@ function QuickLogDialog({
   // prep-note bar on desktop right away (not only after a note is saved + reopened).
   const showPanel = prepNotes.length > 0 || pendingPrepNotes.length > 0 || !!seriesContext || showTagsPrep
   const usePanel = showPanel && isDesktop
+
+  // Does this meeting already have prep notes of its own (saved or staged)? Copying
+  // the last meeting's prep notes populates these, so this durably hides the
+  // "Copy to prep notes" source box — including after save + reopen.
+  const meetingHasPrepNotes = prepNotes.length > 0 || pendingPrepNotes.length > 0
 
   // Prep notes list + composer. Rendered in the left panel when it's visible,
   // otherwise inside the "Prep, tags & attachments" section. Saved notes are
@@ -2056,11 +2057,12 @@ function QuickLogDialog({
                         </div>
                       )}
                     </div>
-                    {/* Once these prep notes have been copied into this meeting they
-                        live (editable) at the top of the panel, so hide the source
-                        block to free up room for the last meeting's notes. */}
+                    {/* Offer the last meeting's prep notes only while THIS meeting has
+                        none of its own. Copying them (or writing any) populates the
+                        panel above and hides this source box — durably, so it stays
+                        gone after save + reopen, freeing room for the notes box. */}
                     {seriesContext.prepNotes && seriesContext.prepNotes.length > 0 &&
-                      copiedSeriesPrepId !== seriesContext.id && (
+                      !meetingHasPrepNotes && (
                       <div className="mt-2 space-y-1 rounded-md bg-yellow-50/60 p-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="flex items-center gap-1 text-xs font-medium text-amber-900">

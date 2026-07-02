@@ -5,6 +5,28 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Reuse a series' prep notes in the next meeting (2026-07-02 s3)
+
+Owner ask: when logging a meeting **in a series**, the desktop "Last Meeting in Series" panel already
+shows the prior meeting's notes — now it also surfaces that meeting's **prep notes** with a **"Copy to
+prep notes"** button that duplicates their *content* into the new meeting as fresh, editable prep notes,
+so you can rapidly populate + tweak them. It's a **one-way content copy** — the prior meeting's own
+prep-note records are never touched. In create mode the copies stage as `pendingPrepNotes` (persisted on
+finalize like any staged note); in edit mode they `POST` to `/conversation-prepnotes` on the current
+meeting. Dated **today** (prep for the new meeting). **Schema-free, client-only** — all in
+`client/src/components/quick-log-dialog.tsx` (the `/meetings` list `include` already returned `prepNotes`,
+so the series-context object already carried them). Three commits, pushed to `main` (`ef46ee0` → `5c66d4e`
+→ `d0fcadb`).
+
+Two follow-up refinements in the same session: **(1, `5c66d4e`)** once copied, the source prep-notes box
+**hides itself** (the copies live editable at the top of the panel), freeing room for the notes box.
+**(2, `d0fcadb`)** the first cut keyed that hide on session-only state, so the box **reappeared on reopen**
+after copy+save — fixed by basing visibility on a **durable** signal (`meetingHasPrepNotes` = does THIS
+meeting already have prep notes of its own, saved or staged), so it stays hidden across save + reopen and
+re-appears only if you clear all of this meeting's prep notes. **Desktop-only** (the series-context panel
+is `useIsDesktop`-gated — mobile has no side panel; unchanged). `prepush` (typecheck + 32-table backup
+guard) + full client `vite build` green.
+
 ### What Was Just Completed — Duplicate auto-merge, two rounds: recorded rules that never fired, then a fallback that never even looked (2026-07-02)
 
 Owner reported (via a GitHub task) that after the 2026-06-29 persistence session, dupes kept
@@ -260,8 +282,11 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is **`2109fac`** — both duplicate-auto-merge fixes above are live (round 1 `4112a85`, round 2
-`2109fac`, on top of prior tip `d712012`). Developed on the task-assigned branch
+`main` tip is **`d0fcadb`** — the series prep-notes reuse feature above is live (3 commits `ef46ee0` →
+`5c66d4e` → `d0fcadb`), on top of two docs commits (`5a39094` handoff refresh, `3ddb4b0` backup-schema
+reference) and the two duplicate-auto-merge fixes (round 1 `4112a85`, round 2 `2109fac`, on top of prior
+tip `d712012`). The prep-notes work was committed straight to `main` (schema-free, owner's standing
+permission). The duplicate-merge rounds were developed on the task-assigned branch
 `claude/org-merge-dedup-issues-ddtn2r`, fast-forwarded into `main` at the owner's request both rounds;
 that branch is kept in sync (identical history to `main`) — fine to delete or ignore. **Schema-free**,
 no Turso DDL outstanding, no held commits.
@@ -290,9 +315,12 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: last session was a **bug-fix session** (via a GitHub
-task) chasing the duplicate-org auto-merge feature across two rounds — full detail in the "What Was Just
-Completed" entry above and `SESSION-HISTORY.md` 2026-07-02 (both entries). Short version: round 1 found
+Context for *this* upcoming session specifically: the most recent session was a small, self-contained
+**meeting-log feature** — reuse a series' prep notes in the next meeting (top "What Was Just Completed"
+entry above; `SESSION-HISTORY.md` 2026-07-02 s3). Schema-free, client-only, live on `main` (tip
+`d0fcadb`), nothing pending. Before that was a two-round **bug-fix session** (via a GitHub task) chasing
+the duplicate-org auto-merge feature — full detail in its "What Was Just Completed" entry above and
+`SESSION-HISTORY.md` 2026-07-02 (both entries). Short version: round 1 found
 merge rules silently never got recorded when two names shared a normalized core key (the single most
 common real-world dup shape); round 2 (owner tested live, still broken) found the Duplicates-page
 fallback never even *considered* a rule unless the heuristic similarity scan also flagged the pair as a

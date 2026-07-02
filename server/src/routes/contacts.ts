@@ -190,13 +190,54 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/contacts/names — lightweight list for comboboxes. Also carries title +
 // primary employer so meeting dialogs can show a hover tooltip on participant chips
 // (extra fields are ignored by the plain {value,label} combobox consumers).
+//
+// Each row carries a `rank` so the participant picker + @-mention autocomplete can
+// float the people you're most likely choosing to the top. How OFTEN you engage a
+// person is the primary factor — the number of meetings you've had with them plus
+// the number of times you've @-mentioned them — so among five same-named people the
+// one you actually deal with wins. Being at NCQA / having a written profile are
+// smaller tie-breaking boosts on top. Rows come back pre-sorted by rank (then name)
+// — the pickers re-sort but the mention list relies on this order directly.
 router.get('/names', async (_req: Request, res: Response) => {
   try {
-    const contacts = await prisma.contact.findMany({
-      select: { id: true, name: true, preferredName: true, title: true, company: { select: { name: true } } },
-      orderBy: { name: 'asc' },
-    });
-    res.json(contacts);
+    const [contacts, anchoredCounts, participantCounts, mentionCounts, documented] = await Promise.all([
+      prisma.contact.findMany({
+        select: { id: true, name: true, preferredName: true, title: true, ecosystem: true, company: { select: { name: true } } },
+        orderBy: { name: 'asc' },
+      }),
+      // "Met with": 1:1 meetings anchored on the contact + multi-person meetings
+      // where they're a named participant. groupBy on the table/junction is safe on
+      // the libsql adapter (unlike the `_count` include — see CLAUDE.md).
+      prisma.conversation.groupBy({ by: ['contactId'], _count: { _all: true }, where: { contactId: { not: null } } }),
+      prisma.conversationParticipant.groupBy({ by: ['contactId'], _count: { _all: true } }),
+      // "@-mentioned": how many meeting notes name this person in an @-mention.
+      prisma.conversationMention.groupBy({ by: ['contactId'], _count: { _all: true }, where: { contactId: { not: null } } }),
+      // "Documented about": ids only, so we never transfer the big note text here.
+      prisma.contact.findMany({
+        where: { OR: [{ notes: { not: null } }, { personalDetails: { not: null } }, { usefulFor: { not: null } }, { roleDescription: { not: null } }, { openQuestions: { not: null } }] },
+        select: { id: true },
+      }),
+    ]);
+
+    const meetings = new Map<number, number>();
+    for (const r of anchoredCounts) if (r.contactId != null) meetings.set(r.contactId, (meetings.get(r.contactId) ?? 0) + r._count._all);
+    for (const r of participantCounts) meetings.set(r.contactId, (meetings.get(r.contactId) ?? 0) + r._count._all);
+    const mentions = new Map<number, number>();
+    for (const r of mentionCounts) if (r.contactId != null) mentions.set(r.contactId, r._count._all);
+    const documentedIds = new Set(documented.map((c) => c.id));
+
+    const ranked = contacts
+      .map((c) => ({
+        ...c,
+        rank:
+          Math.min(meetings.get(c.id) ?? 0, 40) * 50 +   // how often you've met — primary
+          Math.min(mentions.get(c.id) ?? 0, 40) * 30 +   // how often you've @-mentioned — primary
+          (c.ecosystem === 'NCQA' ? 150 : 0) +           // NCQA — small boost
+          (documentedIds.has(c.id) ? 50 : 0),            // has a written profile — small boost
+      }))
+      .sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name));
+
+    res.json(ranked);
   } catch (error) {
     console.error('Error fetching contact names:', error);
     res.status(500).json({ error: 'Failed to fetch contact names' });

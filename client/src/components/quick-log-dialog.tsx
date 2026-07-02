@@ -478,16 +478,18 @@ function QuickLogDialog({
     // permanently at app root, so caching these (the old `lookupsLoaded` gate) left a
     // contact created or merged earlier this session invisible to the participant /
     // org pickers and the @-mention autocomplete until a full page reload.
-    api.get<{ id: number; name: string; preferredName?: string | null; title?: string | null; company?: { name: string } | null }[]>('/contacts/names')
+    // Names come back pre-sorted by relevance (rank), which the mention picker uses
+    // directly and the participant/org comboboxes re-sort by (rank → prefix → alpha).
+    api.get<{ id: number; name: string; preferredName?: string | null; title?: string | null; company?: { name: string } | null; rank?: number }[]>('/contacts/names')
       .then((data) => {
-        setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
+        setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name, rank: c.rank })))
         setContactMeta(new Map(data.map((c) => [c.id.toString(), { pronunciation: c.preferredName, title: c.title, employer: c.company?.name }])))
         setMentionContacts(data.map((c) => ({ id: c.id, name: c.name, title: c.title })))
       })
       .catch(() => { })
-    api.get<{ id: number; name: string }[]>('/companies/names')
+    api.get<{ id: number; name: string; rank?: number }[]>('/companies/names')
       .then((data) => {
-        setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name })))
+        setCompanyOptions(data.map((c) => ({ value: c.id.toString(), label: c.name, rank: c.rank })))
         setMentionCompanies(data.map((c) => ({ id: c.id, name: c.name })))
       })
       .catch(() => { })

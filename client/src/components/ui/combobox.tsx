@@ -21,6 +21,26 @@ import { PersonTooltip } from '@/components/person-tooltip';
 export interface ComboboxOption {
   value: string;
   label: string;
+  // Optional relevance score (higher = more likely). When set, options sort by it
+  // (after prefix matching) so e.g. the meeting participant picker surfaces people
+  // you've met with / at NCQA first. Absent → falls back to alphabetical.
+  rank?: number;
+}
+
+// Sort comparator shared by both combobox variants. When the user is searching, a
+// word-prefix match ("sar" → "Sarah") beats a mid-word hit ("Ce-sar"); within a
+// tier, higher `rank` wins, then alphabetical. With no search / no ranks this is
+// just the previous alphabetical order.
+function compareOptions(a: ComboboxOption, b: ComboboxOption, q: string) {
+  if (q) {
+    const ap = (' ' + a.label.toLowerCase()).includes(' ' + q) ? 0 : 1;
+    const bp = (' ' + b.label.toLowerCase()).includes(' ' + q) ? 0 : 1;
+    if (ap !== bp) return ap - bp;
+  }
+  const ar = a.rank ?? 0;
+  const br = b.rank ?? 0;
+  if (ar !== br) return br - ar;
+  return a.label.localeCompare(b.label);
 }
 
 interface ComboboxProps {
@@ -52,9 +72,10 @@ export function Combobox({
   const selected = options.find((o) => o.value === value);
   const displayValue = selected?.label || (value && !selected ? value : '');
 
+  const q = search.toLowerCase().trim();
   const filteredOptions = options
-    .filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .filter((o) => o.label.toLowerCase().includes(q))
+    .sort((a, b) => compareOptions(a, b, q));
 
   const showAddOption =
     allowFreeText &&
@@ -177,9 +198,10 @@ export function MultiCombobox({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
 
+  const q = search.toLowerCase().trim();
   const filteredOptions = options
-    .filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .filter((o) => o.label.toLowerCase().includes(q))
+    .sort((a, b) => compareOptions(a, b, q));
 
   const showAddOption =
     allowFreeText &&

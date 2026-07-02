@@ -524,7 +524,7 @@ export function ContactDetailPage() {
                   }
                 })()}
                 {contact.roleDescription && (
-                  <p className="mt-1 text-sm text-muted-foreground">{contact.roleDescription}</p>
+                  <div className="mt-1 text-sm text-muted-foreground prep-note-markdown"><ReactMarkdown>{contact.roleDescription}</ReactMarkdown></div>
                 )}
               </div>
             </div>
@@ -805,7 +805,7 @@ export function ContactDetailPage() {
                 <CardTitle>Personal Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm whitespace-pre-wrap">{contact.personalDetails}</p>
+                <div className="text-sm prep-note-markdown"><ReactMarkdown>{contact.personalDetails}</ReactMarkdown></div>
               </CardContent>
             </Card>
           )}
@@ -2254,7 +2254,9 @@ function PrepSheetTab({
               <Field label="Title">{contact.title}</Field>
             )}
             {contact.roleDescription && (
-              <Field label="Role Description" className="sm:col-span-2">{contact.roleDescription}</Field>
+              <Field label="Role Description" className="sm:col-span-2">
+                <div className="prep-note-markdown"><ReactMarkdown>{contact.roleDescription}</ReactMarkdown></div>
+              </Field>
             )}
             {(contact.company || contact.companyName) && (
               <Field label="Company">

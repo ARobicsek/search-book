@@ -6,7 +6,6 @@ import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -870,12 +869,13 @@ export function ContactFormPage() {
 
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="roleDescription">Role Description</Label>
-              <Textarea
+              <MarkdownTextarea
                 id="roleDescription"
                 value={form.roleDescription}
-                onChange={(e) => set('roleDescription', e.target.value)}
-                placeholder="Describe their responsibilities, team size, focus areas..."
+                onChange={(v) => set('roleDescription', v)}
+                placeholder="Describe their responsibilities, team size, focus areas… (**bold**, - bullets, Tab to nest)"
                 rows={2}
+                hideToolbar
               />
             </div>
 
@@ -1060,12 +1060,13 @@ export function ContactFormPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <Textarea
+              <MarkdownTextarea
                 id="usefulFor"
                 value={form.usefulFor}
-                onChange={(e) => set('usefulFor', e.target.value)}
-                placeholder="Topics, expertise, or collaborations this person offered or is suited for"
+                onChange={(v) => set('usefulFor', v)}
+                placeholder="Topics, expertise, or collaborations this person offered or is suited for (**bold**, - bullets, Tab to nest)"
                 rows={3}
+                hideToolbar
               />
             </div>
           </CardContent>
@@ -1089,12 +1090,13 @@ export function ContactFormPage() {
               <CardContent>
                 <div className="space-y-2">
                   <Label htmlFor="personalDetails">Personal Details</Label>
-                  <Textarea
+                  <MarkdownTextarea
                     id="personalDetails"
                     value={form.personalDetails}
-                    onChange={(e) => set('personalDetails', e.target.value)}
-                    placeholder="Kids ages, hobbies, interests, birthdays, etc."
+                    onChange={(v) => set('personalDetails', v)}
+                    placeholder="Kids ages, hobbies, interests, birthdays, etc. (**bold**, - bullets, Tab to nest)"
                     rows={4}
+                    hideToolbar
                   />
                 </div>
               </CardContent>

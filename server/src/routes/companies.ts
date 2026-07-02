@@ -37,14 +37,41 @@ function safeParseArray(value: string | null | undefined): any[] {
   }
 }
 
-// GET /api/companies/names — lightweight list of just id/name (no _count subquery)
+// GET /api/companies/names — lightweight list of just id/name (no _count subquery).
+// Carries a `rank` so the org picker + @-mention autocomplete float the orgs you
+// engage most: primarily how often you've met with them (anchor + additional orgs)
+// and @-mentioned them, with the number of people on file as a smaller boost.
+// groupBy on the table/junction is safe on the libsql adapter (unlike the `_count`
+// include — see CLAUDE.md).
 router.get('/names', async (_req: Request, res: Response) => {
   try {
-    const companies = await prisma.company.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    });
-    res.json(companies);
+    const [companies, anchoredCounts, orgCounts, mentionCounts, contactCounts] = await Promise.all([
+      prisma.company.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+      prisma.conversation.groupBy({ by: ['companyId'], _count: { _all: true }, where: { companyId: { not: null } } }),
+      prisma.conversationOrg.groupBy({ by: ['companyId'], _count: { _all: true } }),
+      prisma.conversationMention.groupBy({ by: ['companyId'], _count: { _all: true }, where: { companyId: { not: null } } }),
+      prisma.contact.groupBy({ by: ['companyId'], _count: { _all: true }, where: { companyId: { not: null } } }),
+    ]);
+
+    const meetings = new Map<number, number>();
+    for (const r of anchoredCounts) if (r.companyId != null) meetings.set(r.companyId, (meetings.get(r.companyId) ?? 0) + r._count._all);
+    for (const r of orgCounts) meetings.set(r.companyId, (meetings.get(r.companyId) ?? 0) + r._count._all);
+    const mentions = new Map<number, number>();
+    for (const r of mentionCounts) if (r.companyId != null) mentions.set(r.companyId, r._count._all);
+    const people = new Map<number, number>();
+    for (const r of contactCounts) if (r.companyId != null) people.set(r.companyId, r._count._all);
+
+    const ranked = companies
+      .map((c) => ({
+        ...c,
+        rank:
+          Math.min(meetings.get(c.id) ?? 0, 40) * 50 +   // how often you've met — primary
+          Math.min(mentions.get(c.id) ?? 0, 40) * 30 +   // how often you've @-mentioned — primary
+          Math.min(people.get(c.id) ?? 0, 20) * 10,      // people on file — small boost
+      }))
+      .sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name));
+
+    res.json(ranked);
   } catch (error) {
     console.error('Error fetching company names:', error);
     res.status(500).json({ error: 'Failed to fetch company names' });

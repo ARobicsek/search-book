@@ -40,10 +40,23 @@ interface MarkdownTextareaProps {
   className?: string
   autoFocus?: boolean
   onBlur?: () => void
+  // Hide the formatting toolbar while keeping every keyboard shortcut, list
+  // continuation, nested-bullet Tab handling and image paste. Lets the smaller
+  // "documentation" boxes (role, useful-for, personal details) support the same
+  // markdown as Notes without a toolbar cluttering each one.
+  hideToolbar?: boolean
   // When either list is provided, typing "@" opens a picker. People and
   // organizations are offered together, distinguished by icon.
   mentionContacts?: MentionContact[]
   mentionCompanies?: MentionCompany[]
+}
+
+// 0 when some word in `label` starts with `q` (a strong "you meant this" signal),
+// 1 for a mid-word substring match. Used to float prefix matches to the top of
+// the @-mention list before falling back to the caller's (relevance) order.
+function wordPrefixTier(label: string, q: string): number {
+  if (!q) return 0
+  return (' ' + label.toLowerCase()).includes(' ' + q) ? 0 : 1
 }
 
 // One row in the @ picker. `kind` selects the token written on insert.
@@ -107,10 +120,12 @@ export function MarkdownTextarea({
   className,
   autoFocus,
   onBlur,
+  hideToolbar,
   mentionContacts,
   mentionCompanies,
 }: MarkdownTextareaProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   const [uploading, setUploading] = useState(false)
 
   // ── @-mention autocomplete state ──
@@ -178,16 +193,25 @@ export function MarkdownTextarea({
 
   // The suggestion list for the current query: matching people, then matching
   // organizations, then "loose" options to flag a name/org not in the CRM yet.
+  // The source lists arrive already ordered by relevance (people met with /
+  // documented / at NCQA first — see /contacts/names). We keep that order but
+  // float word-prefix matches to the top so a few typed letters surface the
+  // intended name with the fewest keystrokes. Array.sort is stable in V8, so the
+  // relevance order is preserved within each prefix tier.
   const mentionItems = (() => {
     if (!mention) return [] as MentionItem[]
     const raw = mention.query.trim()
     const q = raw.toLowerCase()
     const contacts = (q
-      ? (mentionContacts ?? []).filter((c) => c.name.toLowerCase().includes(q))
+      ? (mentionContacts ?? [])
+          .filter((c) => c.name.toLowerCase().includes(q))
+          .sort((a, b) => wordPrefixTier(a.name, q) - wordPrefixTier(b.name, q))
       : (mentionContacts ?? [])
     ).slice(0, 5).map((c): MentionItem => ({ kind: 'contact', name: c.name, id: c.id, title: c.title }))
     const companies = (q
-      ? (mentionCompanies ?? []).filter((c) => c.name.toLowerCase().includes(q))
+      ? (mentionCompanies ?? [])
+          .filter((c) => c.name.toLowerCase().includes(q))
+          .sort((a, b) => wordPrefixTier(a.name, q) - wordPrefixTier(b.name, q))
       : (mentionCompanies ?? [])
     ).slice(0, 3).map((c): MentionItem => ({ kind: 'company', name: c.name, id: c.id }))
     const items: MentionItem[] = [...contacts, ...companies]
@@ -499,6 +523,13 @@ export function MarkdownTextarea({
     return () => document.removeEventListener('selectionchange', onSel)
   }, [mention, refreshMention])
 
+  // Keep the arrow-key-highlighted row visible as you page down a long list.
+  useEffect(() => {
+    if (!mention) return
+    const active = listRef.current?.children[mentionIndex] as HTMLElement | undefined
+    active?.scrollIntoView({ block: 'nearest' })
+  }, [mentionIndex, mention])
+
   const tools: { icon: React.ReactNode; title: string; onClick: () => void }[] = [
     { icon: <Heading3 className="h-3.5 w-3.5" />, title: 'Heading (Ctrl+Alt+3)', onClick: () => insertHeading(3) },
     { icon: <Bold className="h-3.5 w-3.5" />, title: 'Bold (Ctrl+B)', onClick: () => wrapSelection('**') },
@@ -509,25 +540,30 @@ export function MarkdownTextarea({
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-0.5">
-        {tools.map((t) => (
-          <button
-            key={t.title}
-            type="button"
-            title={t.title}
-            tabIndex={-1}
-            // onMouseDown+preventDefault keeps focus (and the selection) in the textarea
-            onMouseDown={(e) => {
-              e.preventDefault()
-              t.onClick()
-            }}
-            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {t.icon}
-          </button>
-        ))}
-        {uploading && <span className="ml-2 text-xs text-muted-foreground">Uploading image…</span>}
-      </div>
+      {!hideToolbar && (
+        <div className="flex items-center gap-0.5">
+          {tools.map((t) => (
+            <button
+              key={t.title}
+              type="button"
+              title={t.title}
+              tabIndex={-1}
+              // onMouseDown+preventDefault keeps focus (and the selection) in the textarea
+              onMouseDown={(e) => {
+                e.preventDefault()
+                t.onClick()
+              }}
+              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {t.icon}
+            </button>
+          ))}
+          {uploading && <span className="ml-2 text-xs text-muted-foreground">Uploading image…</span>}
+        </div>
+      )}
+      {hideToolbar && uploading && (
+        <span className="text-xs text-muted-foreground">Uploading image…</span>
+      )}
       <div className="relative">
         <Textarea
           ref={ref}
@@ -550,6 +586,7 @@ export function MarkdownTextarea({
         />
         {mention && mentionItems.length > 0 && (
           <ul
+            ref={listRef}
             className="absolute z-50 max-h-56 w-72 overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md"
             style={{ top: mention.top, left: Math.min(mention.left, 220) }}
           >

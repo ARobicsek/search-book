@@ -3,6 +3,7 @@ import prisma from '../db';
 import { deleteWithSnapshot } from '../lib/undo';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE, assertNotStale } from '../concurrency';
 import { currentEmployerCompanyIds, promoteCompaniesToConnected } from '../company-status';
+import { resolveExistingCompanyByName } from './duplicates';
 
 const router = Router();
 
@@ -637,6 +638,15 @@ router.post('/import-match', async (req: Request, res: Response) => {
       if (found) {
         companyCache.set(key, found.id);
         return found.id;
+      }
+      // Before creating a fresh company, check whether this exact name was already
+      // identified — via a prior merge — as a duplicate of an existing company (e.g.
+      // a CSV row says "NCQA" after "NCQA" was merged into "National Committee for
+      // Quality Assurance (NCQA)"); reuse that company instead of recreating the dup.
+      const redirect = await resolveExistingCompanyByName(rawName, allCompanies);
+      if (redirect) {
+        companyCache.set(key, redirect.id);
+        return redirect.id;
       }
       const createdCo = await prisma.company.create({
         data: { name: rawName.trim(), status: 'RESEARCHING' },

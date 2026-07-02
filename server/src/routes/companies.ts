@@ -3,6 +3,7 @@ import prisma from '../db';
 import { captureDelete } from '../lib/undo';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE, assertNotStale } from '../concurrency';
 import { promoteCompaniesToConnected } from '../company-status';
+import { resolveExistingCompanyByName } from './duplicates';
 
 const router = Router();
 
@@ -268,6 +269,43 @@ router.post('/', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error creating company:', error);
     res.status(500).json({ error: 'Failed to create company' });
+  }
+});
+
+// POST /api/companies/resolve — find-or-create a company by typed name, consulting
+// prior merge decisions first: an exact name match wins; otherwise, if this name was
+// already merged away in favor of another (still-existing) company, that company is
+// returned instead of creating a fresh duplicate. Only creates when neither applies.
+// Used by the contact form's "type a new org" flow (an inline, implicit resolution —
+// unlike this same bare POST /, which is a deliberate "add a company" action and
+// stays exact-create).
+router.post('/resolve', async (req: Request, res: Response) => {
+  try {
+    const { name, status } = req.body as { name?: string; status?: string };
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    const existing = await resolveExistingCompanyByName(name);
+    if (existing) {
+      res.json({ ...existing, created: false });
+      return;
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const company = await tx.company.create({
+        data: { name: name.trim(), status: status || 'RESEARCHING' },
+      });
+      await tx.companyStatusHistory.create({
+        data: { companyId: company.id, oldStatus: null, newStatus: company.status },
+      });
+      return company;
+    });
+    res.status(201).json({ ...created, created: true });
+  } catch (error) {
+    console.error('Error resolving company:', error);
+    res.status(500).json({ error: 'Failed to resolve company' });
   }
 });
 

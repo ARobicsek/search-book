@@ -84,18 +84,110 @@ function orderedPair(a: string, b: string): [string, string] {
   return a <= b ? [a, b] : [b, a];
 }
 
+// Auto-merge every entity whose normalized name key matches a DuplicateMergeRule,
+// independent of any name-similarity heuristic. A merge rule is an explicit prior
+// decision ("X is the same person/org as Y"), so it must fire even when the two
+// names share no resemblance at all — e.g. "NCQA" merged into "National Committee
+// for Quality Assurance (NCQA)" shares no token and no string similarity with the
+// spelled-out name, so the heuristic candidate scan below would never surface that
+// pair on its own (it only ever compares names that already look alike). Returns
+// the surviving list with merged-away entities removed, so the caller's heuristic
+// scan only ever sees what's left (no double-processing).
+async function applyMergeRules<T extends { id: number; name: string }>(
+  entities: T[],
+  keyFn: (name: string) => string,
+  mergeRuleMap: Map<string, string>,
+  runMerge: (keepId: number, removeId: number) => Promise<void>,
+): Promise<{ remaining: T[]; autoMergedCount: number }> {
+  if (mergeRuleMap.size === 0) return { remaining: entities, autoMergedCount: 0 };
+
+  const byKey = new Map<string, T[]>();
+  for (const e of entities) {
+    const k = keyFn(e.name);
+    const arr = byKey.get(k);
+    if (arr) arr.push(e); else byKey.set(k, [e]);
+  }
+
+  const removedIds = new Set<number>();
+  let autoMergedCount = 0;
+  const tryMerge = async (keepId: number, removeId: number) => {
+    try {
+      await runMerge(keepId, removeId);
+      removedIds.add(removeId);
+      autoMergedCount++;
+    } catch (err) {
+      console.error('[duplicates] Auto-merge failed for pair', keepId, removeId, err);
+    }
+  };
+
+  // Same-key groups sharing an established rule (e.g. two entities differing only by
+  // a suffix/legal-entity descriptor that normalizes away — "John Smith Jr." or
+  // "Acme Health System Inc" — where removedKey === keptKey since the key alone
+  // can't distinguish which literal spelling is which). Keep the lower id (the more
+  // established record).
+  for (const [key, group] of byKey) {
+    if (group.length < 2 || !mergeRuleMap.has(key)) continue;
+    const keepId = Math.min(...group.map((e) => e.id));
+    for (const e of group) {
+      if (e.id !== keepId) await tryMerge(keepId, e.id);
+    }
+  }
+
+  // Different-key rules — the common case, including pairs that don't resemble each
+  // other at all (an acronym vs. its spelled-out form).
+  for (const [removedKey, keptKey] of mergeRuleMap) {
+    if (removedKey === keptKey) continue; // handled above
+    const removedGroup = (byKey.get(removedKey) ?? []).filter((e) => !removedIds.has(e.id));
+    const keptGroup = (byKey.get(keptKey) ?? []).filter((e) => !removedIds.has(e.id));
+    if (removedGroup.length === 0 || keptGroup.length === 0) continue;
+    const keepId = Math.min(...keptGroup.map((e) => e.id));
+    for (const e of removedGroup) await tryMerge(keepId, e.id);
+  }
+
+  const remaining = removedIds.size > 0 ? entities.filter((e) => !removedIds.has(e.id)) : entities;
+  return { remaining, autoMergedCount };
+}
+
 // GET /api/duplicates — find potential duplicate contacts
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const t0 = Date.now();
     // Minimal query: only fields needed for name/email comparison + display
-    const contacts = await prisma.contact.findMany({
+    let contacts = await prisma.contact.findMany({
       select: {
         id: true, name: true, email: true, title: true,
         company: { select: { id: true, name: true } },
       },
     });
     console.log(`[duplicates] DB query: ${Date.now() - t0}ms, ${contacts.length} contacts`);
+
+    // Load server-side dismissals and merge rules up front.
+    const [dismissals, mergeRules] = await Promise.all([
+      prisma.dismissedDuplicate.findMany({ where: { type: 'contact' } }),
+      prisma.duplicateMergeRule.findMany({ where: { type: 'contact' } }),
+    ]);
+    const dismissedSet = new Set(dismissals.map(d => `${d.nameKey1}|${d.nameKey2}`));
+    const mergeRuleMap = new Map(mergeRules.map(r => [r.removedKey, r.keptKey]));
+
+    // Rule-driven auto-merge FIRST, independent of the name-similarity heuristic
+    // below (see applyMergeRules for why: a merge rule must apply even to names
+    // that share no resemblance at all). Whatever's merged away is removed from
+    // `contacts` so the heuristic scan below never re-considers it.
+    const { remaining, autoMergedCount } = await applyMergeRules(
+      contacts,
+      contactNameKey,
+      mergeRuleMap,
+      async (keepId, removeId) => {
+        const [keep, remove] = await Promise.all([
+          prisma.contact.findUnique({ where: { id: keepId } }),
+          prisma.contact.findUnique({ where: { id: removeId } }),
+        ]);
+        if (!keep || !remove) return;
+        await runContactMerge(keepId, removeId, keep, remove);
+        console.log(`[duplicates] Auto-merged contact ${removeId} into ${keepId} (merge rule match)`);
+      },
+    );
+    contacts = remaining;
 
     type SlimContact = typeof contacts[0];
     const duplicates: Array<{
@@ -186,75 +278,16 @@ router.get('/', async (_req: Request, res: Response) => {
     duplicates.sort((a, b) => b.score - a.score);
     console.log(`[duplicates] Total: ${Date.now() - t0}ms, ${candidates.size} candidates, ${duplicates.length} duplicates`);
 
-    // Load server-side dismissals and merge rules
-    const [dismissals, mergeRules] = await Promise.all([
-      prisma.dismissedDuplicate.findMany({ where: { type: 'contact' } }),
-      prisma.duplicateMergeRule.findMany({ where: { type: 'contact' } }),
-    ]);
-
-    const dismissedSet = new Set(dismissals.map(d => `${d.nameKey1}|${d.nameKey2}`));
-    // removedKey → keptKey
-    const mergeRuleMap = new Map(mergeRules.map(r => [r.removedKey, r.keptKey]));
-
-    // Partition into auto-mergeable, dismissed, and pairs needing review
+    // Merge rules were already fully applied above (including pairs that don't look
+    // alike at all) — only dismissals remain to check for the pairs still standing.
     const reviewPairs: typeof duplicates = [];
-    const toAutoMerge: Array<{ keepId: number; removeId: number }> = [];
-
     for (const dup of duplicates) {
       const key1 = contactNameKey(dup.contact1.name);
       const key2 = contactNameKey(dup.contact2.name);
       const [k1, k2] = orderedPair(key1, key2);
       const pairKey = `${k1}|${k2}`;
-
-      // Merge rules outrank dismissals: an explicit "combine these" is a stronger
-      // signal than "ignore this pair", so check rules FIRST. (If the user once
-      // dismissed a pair and later merged it, the merge wins.)
-      const keptFor1 = mergeRuleMap.get(key1);
-      const keptFor2 = mergeRuleMap.get(key2);
-
-      if (key1 === key2 && mergeRuleMap.has(key1)) {
-        // Both names reduce to the identical normalized key (e.g. "John Smith" vs
-        // "John Smith Jr." — differ only by a suffix normalizeName strips) — the
-        // single-key removedKey/keptKey pair can't tell us which literal name was
-        // which anymore, but a rule on this key means it's a confirmed dup group.
-        // Keep the lower id (the more established record) and fold the other in.
-        const [keepId, removeId] = dup.contact1.id < dup.contact2.id
-          ? [dup.contact1.id, dup.contact2.id]
-          : [dup.contact2.id, dup.contact1.id];
-        toAutoMerge.push({ keepId, removeId });
-      } else if (keptFor1 === key2) {
-        // contact1.name was previously deleted; contact2.name is the survivor
-        toAutoMerge.push({ keepId: dup.contact2.id, removeId: dup.contact1.id });
-      } else if (keptFor2 === key1) {
-        // contact2.name was previously deleted; contact1.name is the survivor
-        toAutoMerge.push({ keepId: dup.contact1.id, removeId: dup.contact2.id });
-      } else if (dismissedSet.has(pairKey)) {
-        continue; // explicitly dismissed — silently suppress
-      } else {
-        reviewPairs.push(dup);
-      }
-    }
-
-    // Auto-merge applicable pairs (reimported entities with prior merge rules)
-    let autoMergedCount = 0;
-    for (const { keepId, removeId } of toAutoMerge) {
-      try {
-        const [keep, remove] = await Promise.all([
-          prisma.contact.findUnique({ where: { id: keepId } }),
-          prisma.contact.findUnique({ where: { id: removeId } }),
-        ]);
-        if (!keep || !remove) continue;
-        await runContactMerge(keepId, removeId, keep, remove);
-        autoMergedCount++;
-        console.log(`[duplicates] Auto-merged contact ${removeId} into ${keepId} (merge rule match)`);
-      } catch (err) {
-        console.error('[duplicates] Auto-merge failed for contact pair', keepId, removeId, err);
-        // Fall back: show the pair for manual review
-        const dup = toAutoMerge.length > 0
-          ? duplicates.find(d => (d.contact1.id === keepId && d.contact2.id === removeId) || (d.contact1.id === removeId && d.contact2.id === keepId))
-          : undefined;
-        if (dup) reviewPairs.push(dup);
-      }
+      if (dismissedSet.has(pairKey)) continue; // explicitly dismissed — silently suppress
+      reviewPairs.push(dup);
     }
 
     res.json({ pairs: reviewPairs, autoMergedCount });
@@ -571,6 +604,33 @@ function companyNameKey(name: string): string {
   return normalizeCompanyNameForDedupe(name);
 }
 
+// Resolve a typed name to an EXISTING company: an exact (case-insensitive) name
+// match wins; failing that, if this exact name was already identified — via a
+// prior merge — as a duplicate of another, still-existing company, that company is
+// returned instead. Returns null when the name is genuinely new (the caller should
+// create it). Used at company-creation time (contact form, CSV import) so e.g.
+// typing "NCQA" after merging it into "National Committee for Quality Assurance
+// (NCQA)" attaches the existing org immediately instead of creating a fresh
+// duplicate that would otherwise sit there until the next Duplicates-page visit.
+export async function resolveExistingCompanyByName(
+  name: string,
+  preloadedCompanies?: { id: number; name: string }[],
+): Promise<{ id: number; name: string } | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const key = trimmed.toLowerCase();
+  const companies = preloadedCompanies ?? await prisma.company.findMany({ select: { id: true, name: true } });
+
+  const exact = companies.find((c) => c.name.trim().toLowerCase() === key);
+  if (exact) return exact;
+
+  const rule = await prisma.duplicateMergeRule.findFirst({
+    where: { type: 'company', removedKey: companyNameKey(trimmed) },
+  });
+  if (!rule) return null;
+  return companies.find((c) => companyNameKey(c.name) === rule.keptKey) ?? null;
+}
+
 // Token list with punctuation normalization but NO descriptor stripping — used for the
 // subset test so "Boston Children's Hospital" tokens are a subset of "...Hospital CHIP"
 // (#3) while "Mass General Hospital" vs "Mass General Brigham" (divergent tails) is NOT.
@@ -591,11 +651,41 @@ function sharedPrefixLen(a: string[], b: string[]): number {
 // GET /api/duplicates/companies — find potential duplicate companies
 router.get('/companies', async (_req: Request, res: Response) => {
   try {
-    const companies = await prisma.company.findMany({
+    let companies = await prisma.company.findMany({
       select: {
         id: true, name: true, industry: true, size: true, status: true,
       },
     });
+
+    // Load server-side dismissals and merge rules up front.
+    const [dismissals, mergeRules] = await Promise.all([
+      prisma.dismissedDuplicate.findMany({ where: { type: 'company' } }),
+      prisma.duplicateMergeRule.findMany({ where: { type: 'company' } }),
+    ]);
+    const dismissedSet = new Set(dismissals.map(d => `${d.nameKey1}|${d.nameKey2}`));
+    const mergeRuleMap = new Map(mergeRules.map(r => [r.removedKey, r.keptKey]));
+
+    // Rule-driven auto-merge FIRST, independent of the name-similarity heuristic
+    // below (see applyMergeRules for why — e.g. "NCQA" merged into "National
+    // Committee for Quality Assurance (NCQA)" shares no token/similarity with the
+    // spelled-out name, so the heuristic scan below would never surface that pair).
+    // Whatever's merged away is removed from `companies` so the heuristic scan below
+    // never re-considers it.
+    const { remaining, autoMergedCount } = await applyMergeRules(
+      companies,
+      companyNameKey,
+      mergeRuleMap,
+      async (keepId, removeId) => {
+        const [keep, remove] = await Promise.all([
+          prisma.company.findUnique({ where: { id: keepId } }),
+          prisma.company.findUnique({ where: { id: removeId } }),
+        ]);
+        if (!keep || !remove) return;
+        await runCompanyMerge(keepId, removeId, keep, remove);
+        console.log(`[duplicates] Auto-merged company ${removeId} into ${keepId} (merge rule match)`);
+      },
+    );
+    companies = remaining;
 
     type SlimCompany = typeof companies[0];
     const duplicates: Array<{
@@ -655,66 +745,16 @@ router.get('/companies', async (_req: Request, res: Response) => {
 
     duplicates.sort((a, b) => b.score - a.score);
 
-    // Load server-side dismissals and merge rules
-    const [dismissals, mergeRules] = await Promise.all([
-      prisma.dismissedDuplicate.findMany({ where: { type: 'company' } }),
-      prisma.duplicateMergeRule.findMany({ where: { type: 'company' } }),
-    ]);
-
-    const dismissedSet = new Set(dismissals.map(d => `${d.nameKey1}|${d.nameKey2}`));
-    const mergeRuleMap = new Map(mergeRules.map(r => [r.removedKey, r.keptKey]));
-
+    // Merge rules were already fully applied above (including pairs that don't look
+    // alike at all) — only dismissals remain to check for the pairs still standing.
     const reviewPairs: typeof duplicates = [];
-    const toAutoMerge: Array<{ keepId: number; removeId: number }> = [];
-
     for (const dup of duplicates) {
       const key1 = companyNameKey(dup.company1.name);
       const key2 = companyNameKey(dup.company2.name);
       const [k1, k2] = orderedPair(key1, key2);
       const pairKey = `${k1}|${k2}`;
-
-      // Merge rules outrank dismissals (see contact scan for rationale).
-      const keptFor1 = mergeRuleMap.get(key1);
-      const keptFor2 = mergeRuleMap.get(key2);
-
-      if (key1 === key2 && mergeRuleMap.has(key1)) {
-        // Same core name on both sides (e.g. "Acme Health System" vs "Acme Health
-        // System Inc" — both strip to "acme health") — see contact scan for why the
-        // single-key rule can't distinguish direction here. Keep the lower id.
-        const [keepId, removeId] = dup.company1.id < dup.company2.id
-          ? [dup.company1.id, dup.company2.id]
-          : [dup.company2.id, dup.company1.id];
-        toAutoMerge.push({ keepId, removeId });
-      } else if (keptFor1 === key2) {
-        toAutoMerge.push({ keepId: dup.company2.id, removeId: dup.company1.id });
-      } else if (keptFor2 === key1) {
-        toAutoMerge.push({ keepId: dup.company1.id, removeId: dup.company2.id });
-      } else if (dismissedSet.has(pairKey)) {
-        continue; // explicitly dismissed — silently suppress
-      } else {
-        reviewPairs.push(dup);
-      }
-    }
-
-    let autoMergedCount = 0;
-    for (const { keepId, removeId } of toAutoMerge) {
-      try {
-        const [keep, remove] = await Promise.all([
-          prisma.company.findUnique({ where: { id: keepId } }),
-          prisma.company.findUnique({ where: { id: removeId } }),
-        ]);
-        if (!keep || !remove) continue;
-        await runCompanyMerge(keepId, removeId, keep, remove);
-        autoMergedCount++;
-        console.log(`[duplicates] Auto-merged company ${removeId} into ${keepId} (merge rule match)`);
-      } catch (err) {
-        console.error('[duplicates] Auto-merge failed for company pair', keepId, removeId, err);
-        const dup = duplicates.find(d =>
-          (d.company1.id === keepId && d.company2.id === removeId) ||
-          (d.company1.id === removeId && d.company2.id === keepId)
-        );
-        if (dup) reviewPairs.push(dup);
-      }
+      if (dismissedSet.has(pairKey)) continue; // explicitly dismissed — silently suppress
+      reviewPairs.push(dup);
     }
 
     res.json({ pairs: reviewPairs, autoMergedCount });

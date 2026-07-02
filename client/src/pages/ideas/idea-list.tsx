@@ -477,12 +477,15 @@ export function IdeaListPage() {
             companyIds.push(existingCompany.id)
           } else if (val.trim()) {
             try {
-              const newCompany = await api.post<Company>('/companies', {
+              // Resolve server-side (consults prior merge decisions) rather than a
+              // bare create, so a name already merged into another org attaches to
+              // the existing one instead of creating a fresh duplicate.
+              const resolved = await api.post<Company & { created: boolean }>('/companies/resolve', {
                 name: val.trim(),
                 status: 'CONNECTED',
               })
-              companyIds.push(newCompany.id)
-              setAllCompanies((prev) => [...prev, { id: newCompany.id, name: newCompany.name }])
+              companyIds.push(resolved.id)
+              setAllCompanies((prev) => (prev.some((c) => c.id === resolved.id) ? prev : [...prev, { id: resolved.id, name: resolved.name }]))
             } catch {
               // Skip if creation fails
             }

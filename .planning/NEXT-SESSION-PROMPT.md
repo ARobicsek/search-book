@@ -5,43 +5,46 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-### What Was Just Completed — Duplicate auto-merge/dismiss: found + fixed the real bug behind the 2026-06-29 fix not working (2026-07-02)
+### What Was Just Completed — Duplicate auto-merge, two rounds: recorded rules that never fired, then a fallback that never even looked (2026-07-02)
 
-Owner reported (via a GitHub task, branch `claude/org-merge-dedup-issues-ddtn2r`) that both symptoms the
-2026-06-29 persistence session was supposed to fix were **still happening**: a merged org kept
-reappearing as a fresh duplicate on reimport, and dismissed pairs kept coming back. Didn't trust the
-prior session's self-report — got a local server running against real SQLite (worked around two
-container issues: Prisma/better-sqlite3 binary downloads need `NODE_USE_ENV_PROXY=1`, see
-`/root/.ccr/README.md`; and the documented `db push`-from-`server/`-writes-the-wrong-`dev.db` gotcha)
-and empirically reproduced the flow with curl.
+Owner reported (via a GitHub task) that after the 2026-06-29 persistence session, dupes kept
+recurring instead of auto-merging. Two rounds, both verified with a local server against real SQLite
+(curl), not just by re-reading code — worked around two container issues along the way:
+Prisma/better-sqlite3 binary downloads need `NODE_USE_ENV_PROXY=1` (see `/root/.ccr/README.md`), and
+the documented `db push`-from-`server/`-writes-the-wrong-`dev.db` gotcha.
 
-**Root cause 1 (server, the big one):** both merge endpoints only wrote the `DuplicateMergeRule` row
-`if (removedKey !== keptKey)`. Those keys are the *normalized core name* — and for the single most
-common duplicate shape (two names whose core normalizes identically: exact re-entered duplicates, or a
-legal-suffix variant like "Acme Health System" vs "...Inc", both → "acme health") the keys are **always
-equal**, so the rule silently never got written for exactly that bucket. Merges "worked" but nothing was
-recorded, so reimporting the removed name created a fresh unmerged duplicate every time. Same guard hit
-contacts differing only by a suffix `normalizeName` strips (e.g. "Robert Chen" vs "...Jr."). **Fixed**
-in `server/src/routes/duplicates.ts`: rule is always recorded now (including the self-mapped case); the
-scan's auto-merge branch handles `key1 === key2` by keeping the lower id. Also fixed a related bug in
-the same code: the recorded `keptKey` used the **pre-merge** fetched name, stale if a field-selection
-chose the removed side's name for the survivor — now re-fetches post-merge.
+**Round 1:** both merge endpoints only wrote `DuplicateMergeRule` `if (removedKey !== keptKey)` — but
+those keys are the *normalized core name*, and the single most common duplicate shape (two names whose
+core normalizes identically — exact dupes, or a legal-suffix variant like "Acme Health System" vs
+"...Inc") always has equal keys, so the rule silently never got recorded for that bucket. Fixed to
+always record (including the self-mapped case, keeping the lower id); also fixed the recorded `keptKey`
+going stale when a merge's field-selection chose the removed side's name. Separately, the client's
+`handleDismiss` fired the dismiss POST without awaiting it and swallowed any failure — fixed to match
+`handleMerge`'s await-and-toast pattern.
 
-**Root cause 2 (client, likely explains "dismissed pairs recur"):** `handleDismiss` in
-`client/src/pages/duplicates.tsx` fired the dismiss POST **without awaiting it** and swallowed any error
-(`.catch(() => {})`), optimistically removing the pair from view regardless of whether it actually
-persisted — unlike `handleMerge`, which awaits + toasts on failure. Fixed to match that pattern.
+**Round 2 (owner tested live, still not working):** repro was merging "NCQA" into "National Committee
+for Quality Assurance (NCQA)", then creating a contact with org "NCQA" — expected it to resolve to the
+full name; didn't. Two more gaps: **(a)** the round-1 fix only ever checked merge rules for pairs the
+*heuristic* similarity scan also flagged — and "NCQA" shares no token/similarity with the spelled-out
+name, so it's never even a candidate (confirmed: scanning the two returned `pairs: []`). Fixed by
+extracting `applyMergeRules()` — an independent first pass over *all* entities (grouped by normalized
+key) that applies every rule regardless of similarity, before the heuristic scan runs, removing what it
+merges so the heuristic pass never re-sees it. **(b)** nothing consulted merge history at
+company-*creation* time, so typing "NCQA" recreated the duplicate immediately regardless. Added
+`resolveExistingCompanyByName()` (exact match → merge-rule redirect → null) + `POST
+/api/companies/resolve`, wired into **6 places** that each had their own bare "look up locally, else
+create" logic: contact-form (+ its LinkedIn-import path), CSV import (both the server `contacts.ts`
+helper *and* a separate, previously-unfixed client-side `csv-import-dialog.tsx` path), actions, ideas,
+and the Quick Log meeting-org resolver. Left the standalone "Add Company" page and the org-`@`-mention
+"Create organization" button untouched — both are deliberate "make a new one" actions, unlike the other
+sites' implicit resolution.
 
-**Verified empirically**, not just by re-reading code: reproduced the original bug pre-fix (merge →
-`DuplicateMergeRule` table empty → recreate → `autoMergedCount: 0`), confirmed the fix (same flow → rule
-recorded → `autoMergedCount: 1`, correct lower-id survivor), regression-checked the pre-existing
-differing-core-key path (unaffected), verified the contact-side suffix case, verified the
-field-selection/stale-key fix against the DB directly, and re-confirmed dismiss-then-rescan still
-suppresses correctly (no regression — dismissal itself was already correct server-side). Client+server
-typecheck, `prepush` (32-table backup guard), full client `vite build` all green. **Schema-free.**
-Full write-up: `SESSION-HISTORY.md` 2026-07-02. Pushed to the task-assigned branch
-`claude/org-merge-dedup-issues-ddtn2r` first, then **owner asked to push to `main`** — fast-forwarded
-(`d712012..4112a85`, clean, no divergence). Live on `main`, Vercel auto-deploy triggered.
+Verified end-to-end: the exact NCQA repro now resolves immediately (`created:false`, no duplicate,
+contact attaches to the right org); regression-checked the same-key case, a dissimilar-name case for
+contacts too, heuristic-similarity pairs still surfacing for review, and dismiss-then-rescan — all pass.
+Client+server typecheck, `prepush` (32-table guard), full client `vite build`, server `tsc` all green.
+**Schema-free.** Full write-up: `SESSION-HISTORY.md` 2026-07-02 (both entries). Pushed to `main` both
+rounds (owner asked directly in round 1; kept `claude/org-merge-dedup-issues-ddtn2r` in sync too).
 
 ### What Was Just Completed — Meeting-log polish: caret stays in view + new actions on top (2026-06-30 s2)
 

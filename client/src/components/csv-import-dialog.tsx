@@ -631,30 +631,23 @@ export function CsvImportDialog({
       if (rawData.notes) contact.notes = rawData.notes
       if (rawData.personalDetails) contact.personalDetails = rawData.personalDetails
 
-      // Handle company: look up or create
+      // Handle company: look up, or resolve via a prior merge decision, or create
       if (rawData.companyName) {
         const companyNameLower = rawData.companyName.toLowerCase()
         if (companyCache[companyNameLower]) {
           contact.companyId = companyCache[companyNameLower]
         } else {
           try {
-            // Try to find existing company
-            const companies = await api.get<{ id: number; name: string }[]>('/companies')
-            const existing = companies.find(
-              (c) => c.name.toLowerCase() === companyNameLower
-            )
-            if (existing) {
-              companyCache[companyNameLower] = existing.id
-              contact.companyId = existing.id
-            } else {
-              // Create new company
-              const newCompany = await api.post<{ id: number }>('/companies', {
-                name: rawData.companyName,
-                status: 'RESEARCHING',
-              })
-              companyCache[companyNameLower] = newCompany.id
-              contact.companyId = newCompany.id
-            }
+            // Resolves an exact-name match first, then a prior merge-rule redirect
+            // (e.g. this CSV says "NCQA" but "NCQA" was already merged into
+            // "National Committee for Quality Assurance (NCQA)" — attaches to the
+            // existing org instead of recreating the duplicate), else creates new.
+            const resolved = await api.post<{ id: number; name: string }>('/companies/resolve', {
+              name: rawData.companyName,
+              status: 'RESEARCHING',
+            })
+            companyCache[companyNameLower] = resolved.id
+            contact.companyId = resolved.id
           } catch {
             // Fall back to just storing the name
             contact.companyName = rawData.companyName

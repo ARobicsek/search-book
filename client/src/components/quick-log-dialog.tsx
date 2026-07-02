@@ -721,8 +721,11 @@ function QuickLogDialog({
       if (/^\d+$/.test(val)) {
         resolvedOrgIds.push(Number(val))
       } else {
-        const created = await api.post<{ id: number }>('/companies', { name: val })
-        resolvedOrgIds.push(created.id)
+        // Resolve server-side (exact match, then a prior merge-rule redirect,
+        // else create) so e.g. typing "NCQA" attaches the existing "National
+        // Committee for Quality Assurance (NCQA)" instead of a fresh duplicate.
+        const resolved = await api.post<{ id: number }>('/companies/resolve', { name: val })
+        resolvedOrgIds.push(resolved.id)
       }
     }
     const participants: { contactId: number; note: string | null }[] = []

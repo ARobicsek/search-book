@@ -330,14 +330,16 @@ export function ActionFormPage() {
         if (companies.some((c) => c.id.toString() === idOrName)) {
           finalCompanyIds.push(parseInt(idOrName))
         } else {
-          // Create new company
+          // Resolve (or create) server-side: consults prior merge decisions first,
+          // so a name already merged into another org attaches to the existing one
+          // instead of creating a fresh duplicate.
           try {
-            const newCompany = await api.post<Company>('/companies', {
+            const resolved = await api.post<Company & { created: boolean }>('/companies/resolve', {
               name: idOrName,
               status: 'CONNECTED',
             })
-            finalCompanyIds.push(newCompany.id)
-            setCompanies((prev) => [...prev, newCompany])
+            finalCompanyIds.push(resolved.id)
+            setCompanies((prev) => (prev.some((c) => c.id === resolved.id) ? prev : [...prev, resolved]))
           } catch (err) {
             console.error('Failed to create company:', idOrName, err)
             toast.error(`Failed to create company: ${idOrName}`)

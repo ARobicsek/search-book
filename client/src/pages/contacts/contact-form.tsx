@@ -475,13 +475,17 @@ export function ContactFormPage() {
         if (existingCompany) {
           companyEntries.push({ id: existingCompany.id, isCurrent: entry.isCurrent })
         } else if (entry.value.trim()) {
-          // Create new company
+          // Resolve (or create) server-side: this local check only recognizes an
+          // existing company by exact-ish name, but the server also consults prior
+          // merge decisions — e.g. typing "NCQA" after merging it into "National
+          // Committee for Quality Assurance (NCQA)" attaches the existing org
+          // instead of creating a fresh duplicate.
           try {
-            const newCompany = await api.post<Company>('/companies', { name: entry.value.trim(), status: 'CONNECTED' })
-            companyEntries.push({ id: newCompany.id, isCurrent: entry.isCurrent })
-            setCompanies((prev) => [...prev, newCompany])
+            const resolved = await api.post<Company & { created: boolean }>('/companies/resolve', { name: entry.value.trim(), status: 'CONNECTED' })
+            companyEntries.push({ id: resolved.id, isCurrent: entry.isCurrent })
+            setCompanies((prev) => (prev.some((c) => c.id === resolved.id) ? prev : [...prev, resolved]))
           } catch (err) {
-            toast.error(`Failed to create company "${entry.value}".`)
+            toast.error(`Failed to resolve company "${entry.value}".`)
           }
         }
       }
@@ -1300,9 +1304,15 @@ export function ContactFormPage() {
             }
             try {
               const status = (info.isCurrent && form.status === 'CONNECTED') ? 'CONNECTED' : 'NONE'
-              const created = await api.post<Company>('/companies', { name: info.name.trim(), status })
-              idByNorm.set(norm, created.id)
-              newlyCreated.push({ id: created.id, name: created.name })
+              // Resolve server-side (consults prior merge decisions first) rather
+              // than a bare create, so a LinkedIn-parsed name already merged into
+              // another org attaches to the existing one instead of a fresh dup.
+              const resolved = await api.post<Company & { created: boolean }>('/companies/resolve', { name: info.name.trim(), status })
+              idByNorm.set(norm, resolved.id)
+              // Not necessarily "created" (a merge-rule redirect returns an existing
+              // company) — but it's absent from this component's already-loaded
+              // `companies` (checked above), so local state needs it either way.
+              newlyCreated.push({ id: resolved.id, name: resolved.name })
             } catch (err) {
               console.error('[LinkedIn import] Failed to create company:', info.name, err)
             }

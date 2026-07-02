@@ -2056,29 +2056,27 @@ function QuickLogDialog({
                         </div>
                       )}
                     </div>
-                    {seriesContext.prepNotes && seriesContext.prepNotes.length > 0 && (
+                    {/* Once these prep notes have been copied into this meeting they
+                        live (editable) at the top of the panel, so hide the source
+                        block to free up room for the last meeting's notes. */}
+                    {seriesContext.prepNotes && seriesContext.prepNotes.length > 0 &&
+                      copiedSeriesPrepId !== seriesContext.id && (
                       <div className="mt-2 space-y-1 rounded-md bg-yellow-50/60 p-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="flex items-center gap-1 text-xs font-medium text-amber-900">
                             <FileText className="h-3 w-3" /> Prep notes
                           </span>
-                          {copiedSeriesPrepId === seriesContext.id ? (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Check className="h-3 w-3" /> Copied
-                            </span>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-6 gap-1 px-2 text-xs"
-                              onClick={copyPrepNotesFromSeries}
-                              title="Copy these prep notes into this meeting to reuse and edit — the last meeting's record is unchanged"
-                            >
-                              <Copy className="h-3 w-3" />
-                              Copy to prep notes
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 gap-1 px-2 text-xs"
+                            onClick={copyPrepNotesFromSeries}
+                            title="Copy these prep notes into this meeting to reuse and edit — the last meeting's record is unchanged"
+                          >
+                            <Copy className="h-3 w-3" />
+                            Copy to prep notes
+                          </Button>
                         </div>
                         {seriesContext.prepNotes.map((n) => (
                           <div

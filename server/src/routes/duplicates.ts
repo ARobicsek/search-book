@@ -212,7 +212,17 @@ router.get('/', async (_req: Request, res: Response) => {
       const keptFor1 = mergeRuleMap.get(key1);
       const keptFor2 = mergeRuleMap.get(key2);
 
-      if (keptFor1 === key2) {
+      if (key1 === key2 && mergeRuleMap.has(key1)) {
+        // Both names reduce to the identical normalized key (e.g. "John Smith" vs
+        // "John Smith Jr." — differ only by a suffix normalizeName strips) — the
+        // single-key removedKey/keptKey pair can't tell us which literal name was
+        // which anymore, but a rule on this key means it's a confirmed dup group.
+        // Keep the lower id (the more established record) and fold the other in.
+        const [keepId, removeId] = dup.contact1.id < dup.contact2.id
+          ? [dup.contact1.id, dup.contact2.id]
+          : [dup.contact2.id, dup.contact1.id];
+        toAutoMerge.push({ keepId, removeId });
+      } else if (keptFor1 === key2) {
         // contact1.name was previously deleted; contact2.name is the survivor
         toAutoMerge.push({ keepId: dup.contact2.id, removeId: dup.contact1.id });
       } else if (keptFor2 === key1) {
@@ -485,22 +495,28 @@ router.post('/merge', async (req: Request, res: Response) => {
     await runContactMerge(keepId, removeId, keep, remove, fieldSelections);
 
     // Record merge rule so future reimports of the removed contact auto-merge.
+    // Re-fetch the kept contact's name: a field selection may have chosen the
+    // removed contact's name for the survivor, so the pre-merge `keep.name` we
+    // fetched above could now be stale.
+    const keptNow = await prisma.contact.findUnique({ where: { id: keepId }, select: { name: true } });
     const removedKey = contactNameKey(remove.name);
-    const keptKey = contactNameKey(keep.name);
-    if (removedKey !== keptKey) {
-      await prisma.duplicateMergeRule.upsert({
-        where: { type_removedKey: { type: 'contact', removedKey } },
-        update: { keptKey },
-        create: { type: 'contact', removedKey, keptKey },
-      });
-      // The user's intent for this pair just changed from "ignore" (if it had ever
-      // been dismissed) to "always combine". Drop any stale dismissal so it can't
-      // short-circuit the merge rule on the next scan.
-      const [k1, k2] = orderedPair(removedKey, keptKey);
-      await prisma.dismissedDuplicate.deleteMany({
-        where: { type: 'contact', nameKey1: k1, nameKey2: k2 },
-      });
-    }
+    const keptKey = contactNameKey(keptNow?.name ?? keep.name);
+    // Always record the rule, even when both names collapse to the same
+    // normalized key (e.g. exact-name duplicates, or "Jr."/middle-initial-only
+    // differences) — that's the highest-confidence duplicate bucket, and a future
+    // reimport of either spelling still needs to auto-merge instead of asking again.
+    await prisma.duplicateMergeRule.upsert({
+      where: { type_removedKey: { type: 'contact', removedKey } },
+      update: { keptKey },
+      create: { type: 'contact', removedKey, keptKey },
+    });
+    // The user's intent for this pair just changed from "ignore" (if it had ever
+    // been dismissed) to "always combine". Drop any stale dismissal so it can't
+    // short-circuit the merge rule on the next scan.
+    const [k1, k2] = orderedPair(removedKey, keptKey);
+    await prisma.dismissedDuplicate.deleteMany({
+      where: { type: 'contact', nameKey1: k1, nameKey2: k2 },
+    });
 
     res.json({ message: 'Contacts merged successfully' });
   } catch (error) {
@@ -661,7 +677,15 @@ router.get('/companies', async (_req: Request, res: Response) => {
       const keptFor1 = mergeRuleMap.get(key1);
       const keptFor2 = mergeRuleMap.get(key2);
 
-      if (keptFor1 === key2) {
+      if (key1 === key2 && mergeRuleMap.has(key1)) {
+        // Same core name on both sides (e.g. "Acme Health System" vs "Acme Health
+        // System Inc" — both strip to "acme health") — see contact scan for why the
+        // single-key rule can't distinguish direction here. Keep the lower id.
+        const [keepId, removeId] = dup.company1.id < dup.company2.id
+          ? [dup.company1.id, dup.company2.id]
+          : [dup.company2.id, dup.company1.id];
+        toAutoMerge.push({ keepId, removeId });
+      } else if (keptFor1 === key2) {
         toAutoMerge.push({ keepId: dup.company2.id, removeId: dup.company1.id });
       } else if (keptFor2 === key1) {
         toAutoMerge.push({ keepId: dup.company1.id, removeId: dup.company2.id });
@@ -907,20 +931,28 @@ router.post('/companies/merge', async (req: Request, res: Response) => {
     await runCompanyMerge(keepId, removeId, keep as Record<string, unknown>, remove as Record<string, unknown>, fieldSelections);
 
     // Record merge rule so future reimports of the removed company auto-merge.
+    // Re-fetch the kept company's name: a field selection may have chosen the
+    // removed company's name for the survivor, so the pre-merge `keep.name` we
+    // fetched above could now be stale.
+    const keptNow = await prisma.company.findUnique({ where: { id: keepId }, select: { name: true } });
     const removedKey = companyNameKey(remove.name);
-    const keptKey = companyNameKey(keep.name);
-    if (removedKey !== keptKey) {
-      await prisma.duplicateMergeRule.upsert({
-        where: { type_removedKey: { type: 'company', removedKey } },
-        update: { keptKey },
-        create: { type: 'company', removedKey, keptKey },
-      });
-      // Drop any stale dismissal so it can't short-circuit the merge rule next scan.
-      const [k1, k2] = orderedPair(removedKey, keptKey);
-      await prisma.dismissedDuplicate.deleteMany({
-        where: { type: 'company', nameKey1: k1, nameKey2: k2 },
-      });
-    }
+    const keptKey = companyNameKey(keptNow?.name ?? keep.name);
+    // Always record the rule — see the contact merge endpoint for why this must
+    // not be skipped when removedKey === keptKey (e.g. "Acme Health System" vs
+    // "Acme Health System Inc" both core-normalize to "acme health"). That's
+    // actually the MOST common real-world company-duplicate shape (a legal-entity
+    // suffix added/dropped between data entries), so skipping it there defeated
+    // the auto-merge feature for its primary use case.
+    await prisma.duplicateMergeRule.upsert({
+      where: { type_removedKey: { type: 'company', removedKey } },
+      update: { keptKey },
+      create: { type: 'company', removedKey, keptKey },
+    });
+    // Drop any stale dismissal so it can't short-circuit the merge rule next scan.
+    const [k1, k2] = orderedPair(removedKey, keptKey);
+    await prisma.dismissedDuplicate.deleteMany({
+      where: { type: 'company', nameKey1: k1, nameKey2: k2 },
+    });
 
     res.json({ message: 'Companies merged successfully' });
   } catch (error) {

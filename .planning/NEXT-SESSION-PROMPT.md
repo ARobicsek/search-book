@@ -5,6 +5,44 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Duplicate auto-merge/dismiss: found + fixed the real bug behind the 2026-06-29 fix not working (2026-07-02)
+
+Owner reported (via a GitHub task, branch `claude/org-merge-dedup-issues-ddtn2r`) that both symptoms the
+2026-06-29 persistence session was supposed to fix were **still happening**: a merged org kept
+reappearing as a fresh duplicate on reimport, and dismissed pairs kept coming back. Didn't trust the
+prior session's self-report — got a local server running against real SQLite (worked around two
+container issues: Prisma/better-sqlite3 binary downloads need `NODE_USE_ENV_PROXY=1`, see
+`/root/.ccr/README.md`; and the documented `db push`-from-`server/`-writes-the-wrong-`dev.db` gotcha)
+and empirically reproduced the flow with curl.
+
+**Root cause 1 (server, the big one):** both merge endpoints only wrote the `DuplicateMergeRule` row
+`if (removedKey !== keptKey)`. Those keys are the *normalized core name* — and for the single most
+common duplicate shape (two names whose core normalizes identically: exact re-entered duplicates, or a
+legal-suffix variant like "Acme Health System" vs "...Inc", both → "acme health") the keys are **always
+equal**, so the rule silently never got written for exactly that bucket. Merges "worked" but nothing was
+recorded, so reimporting the removed name created a fresh unmerged duplicate every time. Same guard hit
+contacts differing only by a suffix `normalizeName` strips (e.g. "Robert Chen" vs "...Jr."). **Fixed**
+in `server/src/routes/duplicates.ts`: rule is always recorded now (including the self-mapped case); the
+scan's auto-merge branch handles `key1 === key2` by keeping the lower id. Also fixed a related bug in
+the same code: the recorded `keptKey` used the **pre-merge** fetched name, stale if a field-selection
+chose the removed side's name for the survivor — now re-fetches post-merge.
+
+**Root cause 2 (client, likely explains "dismissed pairs recur"):** `handleDismiss` in
+`client/src/pages/duplicates.tsx` fired the dismiss POST **without awaiting it** and swallowed any error
+(`.catch(() => {})`), optimistically removing the pair from view regardless of whether it actually
+persisted — unlike `handleMerge`, which awaits + toasts on failure. Fixed to match that pattern.
+
+**Verified empirically**, not just by re-reading code: reproduced the original bug pre-fix (merge →
+`DuplicateMergeRule` table empty → recreate → `autoMergedCount: 0`), confirmed the fix (same flow → rule
+recorded → `autoMergedCount: 1`, correct lower-id survivor), regression-checked the pre-existing
+differing-core-key path (unaffected), verified the contact-side suffix case, verified the
+field-selection/stale-key fix against the DB directly, and re-confirmed dismiss-then-rescan still
+suppresses correctly (no regression — dismissal itself was already correct server-side). Client+server
+typecheck, `prepush` (32-table backup guard), full client `vite build` all green. **Schema-free.**
+Full write-up: `SESSION-HISTORY.md` 2026-07-02. **Pushed to `claude/org-merge-dedup-issues-ddtn2r`**
+(task-assigned branch, not `main`) — not yet merged; ask the owner whether to open a PR or fold it into
+`main` directly next session if that hasn't happened yet.
+
 ### What Was Just Completed — Meeting-log polish: caret stays in view + new actions on top (2026-06-30 s2)
 
 Two small owner asks for the Quick Log / meeting editor, **schema-free, client-only**, merged + pushed
@@ -218,8 +256,15 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` — meeting-log polish **(caret-stays-in-view + new-actions-on-top)** is **merged and pushed**
-(tip `a34f6aa`, client-only). **Schema-free** — no Turso DDL outstanding, no held commits. Prior tip
+**`claude/org-merge-dedup-issues-ddtn2r`** (task-assigned, based on `main` tip `d712012`) — the duplicate
+auto-merge/dismiss bug fix above is committed and pushed **here**, not to `main`. **Not yet merged** —
+next session should check whether the owner wants a PR opened, or the branch merged/fast-forwarded into
+`main` directly (owner has standing direct-to-main permission per `CLAUDE.md`, but this branch was
+assigned by the triggering task, so it was left as-is rather than pushed straight to `main`).
+**Schema-free**, no Turso DDL outstanding.
+
+`main` tip (`d712012`) separately has: meeting-log polish **(caret-stays-in-view + new-actions-on-top)**
+(`a34f6aa`, client-only). **Schema-free** — no Turso DDL outstanding, no held commits. Prior tip
 `4a42849`: action reminders weekday/weekend default time + forgiving time entry. Client typecheck (tsconfig
 `baseUrl`-deprecation bypassed) + `prepush` backup guard (32 tables) green; server `tsc` was blocked by an
 npm-registry `ECONNRESET` in this container (server deps wouldn't install) — the server change is pure

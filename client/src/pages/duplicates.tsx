@@ -116,9 +116,13 @@ function ContactsTab() {
   const [loadingManualMerge, setLoadingManualMerge] = useState(false)
   const [loadingMergeDetails, setLoadingMergeDetails] = useState(false)
 
-  function handleDismiss(name1: string, name2: string) {
-    api.post('/duplicates/dismiss', { name1, name2 }).catch(() => {})
-    setDuplicates(prev => prev.filter(d => d.contact1.name !== name1 || d.contact2.name !== name2).filter(d => d.contact1.name !== name2 || d.contact2.name !== name1))
+  async function handleDismiss(name1: string, name2: string) {
+    try {
+      await api.post('/duplicates/dismiss', { name1, name2 })
+      setDuplicates(prev => prev.filter(d => d.contact1.name !== name1 || d.contact2.name !== name2).filter(d => d.contact1.name !== name2 || d.contact2.name !== name1))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to dismiss — it may reappear, try again')
+    }
   }
 
   const loadDuplicates = useCallback(() => {
@@ -492,9 +496,13 @@ function CompaniesTab() {
   const [loadingManualMerge, setLoadingManualMerge] = useState(false)
   const [loadingMergeDetails, setLoadingMergeDetails] = useState(false)
 
-  function handleDismiss(name1: string, name2: string) {
-    api.post('/duplicates/companies/dismiss', { name1, name2 }).catch(() => {})
-    setDuplicates(prev => prev.filter(d => d.company1.name !== name1 || d.company2.name !== name2).filter(d => d.company1.name !== name2 || d.company2.name !== name1))
+  async function handleDismiss(name1: string, name2: string) {
+    try {
+      await api.post('/duplicates/companies/dismiss', { name1, name2 })
+      setDuplicates(prev => prev.filter(d => d.company1.name !== name1 || d.company2.name !== name2).filter(d => d.company1.name !== name2 || d.company2.name !== name1))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to dismiss — it may reappear, try again')
+    }
   }
 
   const loadDuplicates = useCallback(() => {

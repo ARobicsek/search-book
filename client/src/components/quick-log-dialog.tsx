@@ -49,7 +49,7 @@ import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import {
-  Check, ChevronDown, ChevronRight, FileText, ListTodo, Loader2, Paperclip,
+  Check, ChevronDown, ChevronRight, Copy, FileText, ListTodo, Loader2, Paperclip,
   Pencil, Plus, Star, Trash2, X,
 } from 'lucide-react'
 
@@ -394,6 +394,10 @@ function QuickLogDialog({
   // Most recent earlier meeting in the same series (title match) — shown in the
   // left panel for context while writing up a recurring meeting.
   const [seriesContext, setSeriesContext] = useState<Conversation | null>(null)
+  // The seriesContext id whose prep notes have already been copied into this
+  // meeting (via "Copy to prep notes") — hides the button after use, and re-arms
+  // when a different series/last-meeting becomes the context.
+  const [copiedSeriesPrepId, setCopiedSeriesPrepId] = useState<number | null>(null)
 
   // Lookup data, fetched lazily on first open
   const [titles, setTitles] = useState<string[]>([])
@@ -444,6 +448,7 @@ function QuickLogDialog({
     actionSaveChainRef.current = Promise.resolve()
     setActionsSaveStatus('idle')
     setSeriesContext(null)
+    setCopiedSeriesPrepId(null)
 
     // Autosave bookkeeping. In edit mode the record already exists (= editId);
     // in create mode it's created by the first valid autosave POST.
@@ -1173,6 +1178,46 @@ function QuickLogDialog({
     } catch {
       toast.error('Failed to delete prep note')
     }
+  }
+
+  // Copy the previous series meeting's prep notes into THIS meeting as fresh,
+  // editable prep notes. This is a one-way duplicate of the content — it never
+  // touches the prior meeting's own prep-note records. In create mode the copies
+  // stage as pending notes (persisted on finalize like any staged prep note); once
+  // the record exists (edit mode, or after autosave) they're POSTed as real notes.
+  // Dated today, since they represent prep for the new meeting, not the old one.
+  async function copyPrepNotesFromSeries() {
+    const source = seriesContext
+    const sourceNotes = source?.prepNotes
+    if (!source || !sourceNotes || sourceNotes.length === 0) return
+    const today = new Date().toLocaleDateString('en-CA')
+    if (savedIdRef.current !== null) {
+      try {
+        for (const n of sourceNotes) {
+          await api.post('/conversation-prepnotes', {
+            conversationId: savedIdRef.current,
+            content: n.content,
+            date: today,
+          })
+        }
+        await reloadPrepNotes()
+      } catch {
+        toast.error('Failed to copy prep notes')
+        return
+      }
+    } else {
+      setPendingPrepNotes((prev) => [
+        ...prev,
+        ...sourceNotes.map((n) => ({ content: n.content, date: today })),
+      ])
+    }
+    setCopiedSeriesPrepId(source.id)
+    // Make sure the prep section is open so the copied notes are visible (matters on
+    // mobile / when the panel isn't shown).
+    setShowTagsPrep(true)
+    toast.success(
+      `Copied ${sourceNotes.length} prep note${sourceNotes.length === 1 ? '' : 's'} from the last meeting`
+    )
   }
 
   // ── Follow-up actions ─────────────────────────────────────
@@ -2011,6 +2056,40 @@ function QuickLogDialog({
                         </div>
                       )}
                     </div>
+                    {seriesContext.prepNotes && seriesContext.prepNotes.length > 0 && (
+                      <div className="mt-2 space-y-1 rounded-md bg-yellow-50/60 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1 text-xs font-medium text-amber-900">
+                            <FileText className="h-3 w-3" /> Prep notes
+                          </span>
+                          {copiedSeriesPrepId === seriesContext.id ? (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Check className="h-3 w-3" /> Copied
+                            </span>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 gap-1 px-2 text-xs"
+                              onClick={copyPrepNotesFromSeries}
+                              title="Copy these prep notes into this meeting to reuse and edit — the last meeting's record is unchanged"
+                            >
+                              <Copy className="h-3 w-3" />
+                              Copy to prep notes
+                            </Button>
+                          )}
+                        </div>
+                        {seriesContext.prepNotes.map((n) => (
+                          <div
+                            key={n.id}
+                            className="prep-note-markdown max-h-32 overflow-y-auto text-xs text-muted-foreground"
+                          >
+                            <ReactMarkdown>{n.content}</ReactMarkdown>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

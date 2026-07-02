@@ -5,6 +5,24 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Meeting-notes scroll-bar flicker fixed (2026-07-02 s4)
+
+Owner reported that while typing meeting notes with SearchBook at **half-monitor width** (Teams in the
+other half), the right-edge scroll bar kept **appearing and disappearing**. **Root cause:** the notes
+`MarkdownTextarea` auto-grows (`field-sizing-content`) inside an `overflow-y-auto` scroll container; when
+it grows past the container a scroll bar appears → on classic (non-overlay) Windows scroll bars that eats
+~15px of width → the narrower column **rewraps** the text → textarea height changes by a line → content can
+drop back under the scroll threshold → bar hides → width restored → rewraps back → grows → oscillation =
+flicker. Worse at half-width because a narrow column sits right on word-wrap boundaries. **Fix**
+(`client/src/components/quick-log-dialog.tsx`, `033673e`): added `[scrollbar-gutter:stable]` to the two
+scroll containers wrapping the notes field — the `DialogContent` (non-panel mode) and the desktop
+right-panel form scroll `div` (panel mode) — so the gutter is permanently reserved, the scroll bar toggling
+no longer changes content width, and the loop can't start. **Schema-free, client-only** (two-line Tailwind
+className edit). Client `tsc` + `check:backup` (32 tables) green; server `tsc` couldn't run (no server
+`node_modules` in this container — pre-existing env limitation, unrelated errors only), Vercel's
+`build:vercel` is the real gate. Developed on `claude/meeting-notes-scroll-flicker-9lopxu`, fast-forwarded
+into `main` (`dd07481..033673e`) at owner's request; owner confirmed it looks good. Mobile unchanged.
+
 ### What Was Just Completed — Reuse a series' prep notes in the next meeting (2026-07-02 s3)
 
 Owner ask: when logging a meeting **in a series**, the desktop "Last Meeting in Series" panel already
@@ -282,7 +300,9 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is **`d0fcadb`** — the series prep-notes reuse feature above is live (3 commits `ef46ee0` →
+`main` tip is **`033673e`** — the meeting-notes scroll-bar-flicker fix above (`[scrollbar-gutter:stable]`,
+client-only, schema-free; developed on `claude/meeting-notes-scroll-flicker-9lopxu`, fast-forwarded in).
+Before it: the series prep-notes reuse feature (3 commits `ef46ee0` →
 `5c66d4e` → `d0fcadb`), on top of two docs commits (`5a39094` handoff refresh, `3ddb4b0` backup-schema
 reference) and the two duplicate-auto-merge fixes (round 1 `4112a85`, round 2 `2109fac`, on top of prior
 tip `d712012`). The prep-notes work was committed straight to `main` (schema-free, owner's standing

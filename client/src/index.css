@@ -62,7 +62,10 @@
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  /* Darker than --border so form-field outlines (Input/Textarea/Select use
+     border-input) stay clearly visible — the light default was hard to spot
+     in Edge, especially for the meeting-log documentation boxes. */
+  --input: oklch(0.84 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);

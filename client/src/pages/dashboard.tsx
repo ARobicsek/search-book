@@ -76,9 +76,11 @@ function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
           <Badge variant="outline" className={`text-xs ${typeColors[action.type as ActionType]}`}>
             {getLabel(action.type, ACTION_TYPE_OPTIONS)}
           </Badge>
-          <Badge variant="outline" className={`text-xs ${priorityColors[action.priority as ActionPriority]}`}>
-            {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
-          </Badge>
+          {action.priority === 'HIGH' && (
+            <Badge variant="outline" className={`text-xs ${priorityColors[action.priority as ActionPriority]}`}>
+              {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}
+            </Badge>
+          )}
           {(() => {
             const { people, waiting } = actionDisplayPeople(action)
             return people.map((c, i) => (

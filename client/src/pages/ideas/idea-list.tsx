@@ -856,7 +856,7 @@ export function IdeaListPage() {
       <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
         <DialogContent
-          className="sm:w-[28rem] sm:min-w-[22rem] sm:max-w-[92vw] sm:max-h-[85vh] sm:resize sm:overflow-auto"
+          className="sm:w-[52rem] sm:min-w-[22rem] sm:max-w-[92vw] sm:max-h-[85vh] sm:resize sm:overflow-auto"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>

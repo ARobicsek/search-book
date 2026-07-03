@@ -360,6 +360,11 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
             owedByMe: existing.owedByMe,
             owerContactIds: existing.owerContactIds,
             dueDate: nextDueDate,
+            // Carry the reminder onto every recurrence: keep the time-of-day and the
+            // notify opt-in. lastNotifiedAt is left unset (defaults null) so the fresh
+            // occurrence is un-notified and the cron arms a reminder for its own dueDate.
+            dueTime: existing.dueTime,
+            notify: existing.notify,
             contactId: existing.contactId,
             companyId: existing.companyId,
             recurring: true,

@@ -64,15 +64,15 @@ function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
       >
         {action.completed && <Check className="h-5 w-5 sm:h-3 sm:w-3" />}
       </button>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
         <Link
           to={`/actions/${action.id}`}
-          className={`text-sm font-medium hover:underline block truncate ${action.completed ? 'text-muted-foreground line-through' : ''
+          className={`text-sm font-medium hover:underline truncate max-w-full ${action.completed ? 'text-muted-foreground line-through' : ''
             }`}
         >
           {action.title}
         </Link>
-        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="outline" className={`text-xs ${typeColors[action.type as ActionType]}`}>
             {getLabel(action.type, ACTION_TYPE_OPTIONS)}
           </Badge>

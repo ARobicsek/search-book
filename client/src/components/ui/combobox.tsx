@@ -95,7 +95,7 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn('w-full justify-between font-normal', className)}
+          className={cn('w-full justify-between font-normal border-input', className)}
           disabled={disabled}
         >
           <span className={cn(!displayValue && 'text-muted-foreground')}>
@@ -231,7 +231,7 @@ export function MultiCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn('w-full justify-between font-normal h-auto min-h-9', className)}
+          className={cn('w-full justify-between font-normal h-auto min-h-9 border-input', className)}
           disabled={disabled}
         >
           <div className="flex flex-wrap gap-1 flex-1 items-center">

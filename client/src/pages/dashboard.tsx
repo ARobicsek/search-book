@@ -73,9 +73,11 @@ function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
           {action.title}
         </Link>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline" className={`text-xs ${typeColors[action.type as ActionType]}`}>
-            {getLabel(action.type, ACTION_TYPE_OPTIONS)}
-          </Badge>
+          {action.type !== 'OTHER' && (
+            <Badge variant="outline" className={`text-xs ${typeColors[action.type as ActionType]}`}>
+              {getLabel(action.type, ACTION_TYPE_OPTIONS)}
+            </Badge>
+          )}
           {action.priority === 'HIGH' && (
             <Badge variant="outline" className={`text-xs ${priorityColors[action.priority as ActionPriority]}`}>
               {getLabel(action.priority, ACTION_PRIORITY_OPTIONS)}

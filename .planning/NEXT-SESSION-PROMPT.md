@@ -5,6 +5,40 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Owner UX polish batch + recurring-action reminder fix + weekday-only recurrence (2026-07-03)
+
+A batch of small owner-facing tweaks plus two action-recurrence fixes. Five commits on `main`
+(`6646c88` → `8035c08` → `02c29b8` → `876d3fc` → `63cc211`); owner asked for each live.
+
+1. **Dashboard pills decluttered** (schema-free): the action **priority** pill shows only when `HIGH`
+   (Medium/Low were near-universal noise); the **type** pill is hidden when type is `OTHER`; and the
+   title + remaining pills/markers now sit on **one wrapping row** (pills to the *right* of the name,
+   wrapping under only when the title can't share the line) instead of a line below.
+2. **Idea editor opens wider** (schema-free): the Edit/New Idea dialog default `sm:w-[28rem]` → `sm:w-[52rem]`
+   (still drag-resizable, capped `92vw`).
+3. **Darker form-field outlines** (schema-free): light-mode `--input` `oklch(0.922)` → `oklch(0.84)` (kept
+   just below `--border`) — the near-white outline was hard to see, notably in **Edge** on the meeting-log
+   documentation boxes. Done at the token so it covers Input/Textarea/Select everywhere; also gave
+   `Combobox`/`MultiCombobox` triggers explicit `border-input` (they fell back to the lighter `--border`) so
+   the participant / org / series / tag pickers match.
+4. **Reminder carries onto recurring occurrences** (schema-free, `876d3fc`): the next-occurrence creation in
+   `PATCH /actions/:id/complete` copied schedule/priority/contacts but **dropped `dueTime` + `notify`**, so a
+   recurring action lost its reminder after the first fire. Both now carry forward; `lastNotifiedAt` left null
+   so the cron arms a fresh reminder for the new occurrence.
+5. **Weekday-only recurrence** (**SCHEMA**, `63cc211`): new additive `Action.recurringWeekdaysOnly` bool — when
+   set, the next occurrence advances to the next weekday, skipping Sat/Sun (Fri→Mon), which a fixed day interval
+   can't express. Form "Recurring action" block gained a **Repeat** selector (Every N days / Every weekday
+   (Mon–Fri)); interval input hides in weekday mode; detail view + backup boolean-coercion updated; the flag is
+   carried onto recurrences too. **Turso DDL applied by the owner** (`ALTER TABLE "Action" ADD COLUMN
+   "recurringWeekdaysOnly" BOOLEAN NOT NULL DEFAULT false`) via the **web SQL console** — the committed
+   `server/.env` rw token is **stale (hard 401)**, so the "uncomment creds + run a libsql script" path no longer
+   works; use the web console or a fresh token. Chose a clean column over a sentinel-in-`recurringIntervalDays`
+   (owner picked "add a proper field" via AskUserQuestion).
+
+`prepush` (client+server typecheck + 32-table backup guard) green on every commit. Mobile (390px) not
+separately re-tested — the dashboard row is a flex-wrap of existing chips; the rest are a dialog width, a
+border-color token, and a form selector.
+
 ### What Was Just Completed — Picker relevance ranking + toolbar-less markdown in contact docs + Edge highlight fix (2026-07-02 s5)
 
 Three bundled owner enhancement asks, **schema-free**, committed straight to `main` (`3391b43`, then `18a698f`); owner confirmed live.
@@ -309,9 +343,16 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is **`18a698f`** — the s5 picker-ranking / toolbar-less-markdown / Edge-highlight work above
-(`3391b43` the three features + `18a698f` the Edge highlight fix; both client+server, **schema-free, no
-Turso DDL**, committed straight to `main`). Before it, a docs commit (`abbe88e`, s4 handoff) on top of
+`main` tip is the **2026-07-03** docs/handoff commit on top of **`63cc211`** — the weekday-only-recurrence
+feature (**SCHEMA**: `Action.recurringWeekdaysOnly`; **Turso DDL applied by owner**). That closed the
+2026-07-03 batch: `6646c88` (dashboard priority-pill/idea-width/input-outline) → `8035c08` (pills inline
++ combobox outlines) → `02c29b8` (hide `OTHER` type pill) → `876d3fc` (carry reminder onto recurrences,
+schema-free) → `63cc211` (weekday recurrence). All pushed straight to `main`; the schema commit was held
+until the owner confirmed the DDL. **⚠ No held commits / no outstanding DDL now** (the column exists in
+Turso). Before this batch, `main` tip was **`18a698f`** — the s5 picker-ranking / toolbar-less-markdown /
+Edge-highlight work above (`3391b43` the three features + `18a698f` the Edge highlight fix; both
+client+server, **schema-free, no Turso DDL**, committed straight to `main`). Before it, a docs commit
+(`abbe88e`, s4 handoff) on top of
 **`033673e`** — the meeting-notes scroll-bar-flicker fix (`[scrollbar-gutter:stable]`, client-only,
 schema-free; developed on `claude/meeting-notes-scroll-flicker-9lopxu`, fast-forwarded in).
 Before it: the series prep-notes reuse feature (3 commits `ef46ee0` →
@@ -347,11 +388,17 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session (2026-07-02 s5) was a bundle of
-three small **owner UX enhancements** — relevance-ranked participant/@-mention pickers (engagement-primary),
-toolbar-less markdown in the contact documentation boxes, and an Edge @-mention-highlight visibility fix
-(top "What Was Just Completed" entry above; `SESSION-HISTORY.md` 2026-07-02 s5). Schema-free, live on `main`
-(tip `18a698f`), nothing pending. Earlier the same day: an s4 scroll-flicker fix, an s3 series-prep-notes
+Context for *this* upcoming session specifically: the most recent session (**2026-07-03**) was a batch of
+small **owner UX asks** plus two action-recurrence fixes — dashboard pill declutter (HIGH-only priority,
+hide `OTHER` type, pills inline to the right of the name), wider idea dialog, darker form-field/combobox
+outlines (Edge visibility), **reminder now carried onto recurring occurrences** (was silently dropped after
+the first fire), and **weekday-only recurrence** (new `Action.recurringWeekdaysOnly` — the one **schema**
+change; Turso DDL applied by owner). Top "What Was Just Completed" entry above; `SESSION-HISTORY.md`
+2026-07-03. Live on `main` (tip = a docs commit on `63cc211`), **nothing pending, no outstanding DDL.**
+Before it (2026-07-02 s5): a bundle of three small owner UX enhancements — relevance-ranked
+participant/@-mention pickers (engagement-primary), toolbar-less markdown in the contact documentation
+boxes, and an Edge @-mention-highlight visibility fix (schema-free, `18a698f`). Earlier the same day: an s4
+scroll-flicker fix, an s3 series-prep-notes
 feature, and a two-round **bug-fix session** (via a GitHub task) chasing
 the duplicate-org auto-merge feature — full detail in its "What Was Just Completed" entry above and
 `SESSION-HISTORY.md` 2026-07-02 (both entries). Short version: round 1 found

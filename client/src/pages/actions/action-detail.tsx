@@ -276,7 +276,9 @@ export function ActionDetailPage() {
             {action.recurring && (
               <>
                 <Field label="Recurring">
-                  Every {action.recurringIntervalDays} day{action.recurringIntervalDays !== 1 ? 's' : ''}
+                  {action.recurringWeekdaysOnly
+                    ? 'Every weekday (Mon–Fri)'
+                    : `Every ${action.recurringIntervalDays} day${action.recurringIntervalDays !== 1 ? 's' : ''}`}
                 </Field>
                 {action.recurringEndDate && (
                   <Field label="Recurrence Ends">

@@ -365,6 +365,9 @@ model Action {
   owerContactIds        String?       // Task 3: JSON array of contact ids who owe it (null/empty = nobody specific)
   recurring             Boolean       @default(false)
   recurringIntervalDays Int?
+  // When true, the recurrence advances to the next weekday (Mon–Fri), skipping
+  // Sat/Sun — recurringIntervalDays is ignored (there is no fixed day interval).
+  recurringWeekdaysOnly Boolean       @default(false)
   recurringEndDate      String?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt

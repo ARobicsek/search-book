@@ -339,11 +339,18 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
 
     // If completing a recurring action, auto-create next occurrence
     let nextAction = null;
-    if (completed && existing.recurring && existing.recurringIntervalDays) {
+    if (completed && existing.recurring && (existing.recurringWeekdaysOnly || existing.recurringIntervalDays)) {
       const baseDate = existing.dueDate
         ? new Date(existing.dueDate + 'T00:00:00')
         : new Date();
-      baseDate.setDate(baseDate.getDate() + existing.recurringIntervalDays);
+      if (existing.recurringWeekdaysOnly) {
+        // Advance to the next weekday, skipping Sat (6) and Sun (0). Fri → Mon.
+        do {
+          baseDate.setDate(baseDate.getDate() + 1);
+        } while (baseDate.getDay() === 0 || baseDate.getDay() === 6);
+      } else {
+        baseDate.setDate(baseDate.getDate() + existing.recurringIntervalDays!);
+      }
       const nextDueDate = baseDate.toLocaleDateString('en-CA');
 
       // Only create if before end date (or no end date)
@@ -369,6 +376,7 @@ router.patch('/:id/complete', async (req: Request, res: Response) => {
             companyId: existing.companyId,
             recurring: true,
             recurringIntervalDays: existing.recurringIntervalDays,
+            recurringWeekdaysOnly: existing.recurringWeekdaysOnly,
             recurringEndDate: existing.recurringEndDate,
             // Copy junction table entries to next occurrence
             actionContacts: existing.actionContacts.length

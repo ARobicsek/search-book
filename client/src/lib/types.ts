@@ -146,6 +146,7 @@ export interface Action {
 
   recurring: boolean;
   recurringIntervalDays: number | null;
+  recurringWeekdaysOnly: boolean;
   recurringEndDate: string | null;
   createdAt: string;
   updatedAt: string;

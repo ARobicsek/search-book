@@ -392,7 +392,7 @@ router.post('/save-local', (req: Request, res: Response) => {
 // - Raw SQLite strings: "2026-02-08 15:39:27"
 // Booleans come as integers (0/1) instead of true/false.
 const DATETIME_FIELDS = new Set(['createdAt', 'updatedAt']);
-const BOOLEAN_FIELDS = new Set(['flagged', 'completed', 'recurring', 'notify', 'owedByMe', 'archived']);
+const BOOLEAN_FIELDS = new Set(['flagged', 'completed', 'recurring', 'recurringWeekdaysOnly', 'notify', 'owedByMe', 'archived']);
 
 function toDate(value: unknown): Date {
   if (typeof value === 'number') return new Date(value);

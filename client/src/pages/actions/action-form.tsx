@@ -50,6 +50,7 @@ type FormData = {
   companyIds: string[]
   recurring: boolean
   recurringIntervalDays: string
+  recurringWeekdaysOnly: boolean
   recurringEndDate: string
   links: LinkEntry[]
 }
@@ -68,6 +69,7 @@ const emptyForm: FormData = {
   companyIds: [],
   recurring: false,
   recurringIntervalDays: '',
+  recurringWeekdaysOnly: false,
   recurringEndDate: '',
   links: [],
 }
@@ -106,6 +108,7 @@ function actionToForm(action: Action): FormData {
     companyIds,
     recurring: action.recurring,
     recurringIntervalDays: action.recurringIntervalDays?.toString() ?? '',
+    recurringWeekdaysOnly: action.recurringWeekdaysOnly ?? false,
     recurringEndDate: action.recurringEndDate ?? '',
     links: [], // Will be loaded separately
   }
@@ -125,7 +128,8 @@ function formToPayload(form: FormData) {
     contactIds: form.contactIds.map((id) => parseInt(id)),
     companyIds: form.companyIds.map((id) => parseInt(id)),
     recurring: form.recurring,
-    recurringIntervalDays: form.recurring && form.recurringIntervalDays
+    recurringWeekdaysOnly: form.recurring ? form.recurringWeekdaysOnly : false,
+    recurringIntervalDays: form.recurring && !form.recurringWeekdaysOnly && form.recurringIntervalDays
       ? parseInt(form.recurringIntervalDays)
       : null,
     recurringEndDate: form.recurring && form.recurringEndDate
@@ -248,7 +252,7 @@ export function ActionFormPage() {
   function validate(data: FormData = form): boolean {
     const errs: Record<string, string> = {}
     if (!data.title.trim()) errs.title = 'Title is required'
-    if (data.recurring && data.recurringIntervalDays) {
+    if (data.recurring && !data.recurringWeekdaysOnly && data.recurringIntervalDays) {
       const days = parseInt(data.recurringIntervalDays)
       if (isNaN(days) || days < 1) errs.recurringIntervalDays = 'Must be a positive number'
     }
@@ -362,7 +366,8 @@ export function ActionFormPage() {
         contactIds: finalContactIds,
         companyIds: finalCompanyIds,
         recurring: form.recurring,
-        recurringIntervalDays: form.recurring && form.recurringIntervalDays
+        recurringWeekdaysOnly: form.recurring ? form.recurringWeekdaysOnly : false,
+        recurringIntervalDays: form.recurring && !form.recurringWeekdaysOnly && form.recurringIntervalDays
           ? parseInt(form.recurringIntervalDays)
           : null,
         recurringEndDate: form.recurring && form.recurringEndDate
@@ -709,20 +714,38 @@ export function ActionFormPage() {
             {form.recurring && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="recurringIntervalDays">Repeat every (days)</Label>
-                  <Input
-                    id="recurringIntervalDays"
-                    type="number"
-                    min="1"
-                    value={form.recurringIntervalDays}
-                    onChange={(e) => set('recurringIntervalDays', e.target.value)}
-                    placeholder="e.g. 7, 14, 30"
-                    aria-invalid={!!errors.recurringIntervalDays}
-                  />
-                  {errors.recurringIntervalDays && (
-                    <p className="text-sm text-destructive">{errors.recurringIntervalDays}</p>
-                  )}
+                  <Label htmlFor="recurringPattern">Repeat</Label>
+                  <Select
+                    value={form.recurringWeekdaysOnly ? 'weekdays' : 'interval'}
+                    onValueChange={(v) => set('recurringWeekdaysOnly', v === 'weekdays')}
+                  >
+                    <SelectTrigger id="recurringPattern">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="interval">Every N days</SelectItem>
+                      <SelectItem value="weekdays">Every weekday (Mon–Fri)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {!form.recurringWeekdaysOnly && (
+                  <div className="space-y-2">
+                    <Label htmlFor="recurringIntervalDays">Repeat every (days)</Label>
+                    <Input
+                      id="recurringIntervalDays"
+                      type="number"
+                      min="1"
+                      value={form.recurringIntervalDays}
+                      onChange={(e) => set('recurringIntervalDays', e.target.value)}
+                      placeholder="e.g. 7, 14, 30"
+                      aria-invalid={!!errors.recurringIntervalDays}
+                    />
+                    {errors.recurringIntervalDays && (
+                      <p className="text-sm text-destructive">{errors.recurringIntervalDays}</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="recurringEndDate">Recurrence End Date</Label>

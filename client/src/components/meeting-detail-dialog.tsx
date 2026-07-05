@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { HighlightedText } from '@/components/highlighted-text'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
+import { useQuickLog } from '@/components/quick-log-dialog'
 import {
   Loader2,
   FileText,
@@ -75,6 +76,7 @@ export function MeetingDetailDialog({
   const [conv, setConv] = useState<Conversation | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const quickLog = useQuickLog()
 
   useEffect(() => {
     if (conversationId == null) return
@@ -136,13 +138,19 @@ export function MeetingDetailDialog({
                   {hl(conv.series.name)}
                 </span>
               )}
-              <Link
-                to={conv.title ? `/meetings?title=${encodeURIComponent(conv.title)}` : `/meetings?id=${conv.id}`}
+              <button
+                type="button"
+                onClick={() => {
+                  // Close this read-only view and open the canonical meeting editor
+                  // for THIS meeting (Quick Log dialog, available app-wide).
+                  onOpenChange(false)
+                  quickLog.openEdit(conv.id)
+                }}
                 className="ml-auto inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                title="Open in Meetings to edit"
+                title="Edit this meeting"
               >
-                <Pencil className="h-3 w-3" /> Open in Meetings
-              </Link>
+                <Pencil className="h-3 w-3" /> Edit meeting
+              </button>
             </div>
 
             {conv.summary && <p className="text-sm font-medium">{hl(conv.summary)}</p>}

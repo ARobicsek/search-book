@@ -5,6 +5,33 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Meeting search results expand into a full read-only detail view with highlighting (2026-07-04)
+
+Owner ask: clicking a **meeting** result in global search should show its **full contents + prep notes with the
+search term(s) highlighted**, not navigate away to the `/meetings` list. **Schema-free, client-only**, two
+commits straight to `main` (`182885e` → `28fb55a`); owner confirmed both live.
+
+1. **New `MeetingDetailDialog`** (`client/src/components/meeting-detail-dialog.tsx`): clicking a meeting search
+   card (title or card body) opens a read-only dialog that **fetches the full record** (`GET /conversations/:id`
+   — the `/api/search` response only carries 60-char match snippets) and renders summary, **notes**, **next
+   steps**, **prep notes**, attachments, and related people/orgs/tags chips. Search terms are highlighted
+   throughout — plain text (title/summary/participants) via `HighlightedText`, and *inside the rendered markdown*
+   (notes/prep/next-steps) via the existing `highlightRehype` rehype plugin.
+2. **`MentionableMarkdown` gained optional `highlightTerms`/`caseSensitive` props** — applies `highlightRehype`
+   when present (keeps the `@`-mention chips), mirroring the Ideas-list highlight pattern. `MeetingSearchCard` in
+   `search.tsx` now opens the dialog (one page-level instance via `openMeetingId`; both "All" + "Meetings" tabs)
+   instead of `<Link>`-ing out.
+3. **"Edit meeting" button** (`28fb55a`): the first cut linked to `/meetings?id=`/`?title=` (which just filtered
+   the list) — replaced with a button that closes the detail view and opens the **canonical Quick Log editor for
+   THAT meeting** via the app-wide `useQuickLog().openEdit(id)` (search page renders inside `QuickLogProvider`), no
+   navigation.
+
+`prepush` (client+server typecheck + 32-table backup guard) + full client `vite build` green; **verified live
+in-browser** (Chrome DevTools MCP) desktop **and** 390px mobile — dialog opens, term highlighted in rendered
+notes, Edit → editor loads the right meeting; no console errors. **Command-palette meeting hits still navigate
+to the list** (out of scope; raise if wanted). Prep-note highlight path is byte-identical to the verified notes
+path but the local DB has no prep notes to exercise it live.
+
 ### What Was Just Completed — Owner UX polish batch + recurring-action reminder fix + weekday-only recurrence (2026-07-03)
 
 A batch of small owner-facing tweaks plus two action-recurrence fixes. Five commits on `main`
@@ -343,8 +370,11 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is the **2026-07-03** docs/handoff commit on top of **`63cc211`** — the weekday-only-recurrence
-feature (**SCHEMA**: `Action.recurringWeekdaysOnly`; **Turso DDL applied by owner**). That closed the
+`main` tip is the **2026-07-04** docs/handoff commit on top of **`28fb55a`** — the meeting-search read-only
+detail view + its "Edit meeting" fix (`182885e` feat → `28fb55a` edit-button; **schema-free, client-only, no
+Turso DDL, no held commits**). Before it, the tip was the **2026-07-03** docs/handoff commit on top of
+**`63cc211`** — the weekday-only-recurrence feature (**SCHEMA**: `Action.recurringWeekdaysOnly`; **Turso DDL
+applied by owner**). That closed the
 2026-07-03 batch: `6646c88` (dashboard priority-pill/idea-width/input-outline) → `8035c08` (pills inline
 + combobox outlines) → `02c29b8` (hide `OTHER` type pill) → `876d3fc` (carry reminder onto recurrences,
 schema-free) → `63cc211` (weekday recurrence). All pushed straight to `main`; the schema commit was held
@@ -388,7 +418,13 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session (**2026-07-03**) was a batch of
+Context for *this* upcoming session specifically: the most recent session (**2026-07-04**) was a single
+**owner UX ask** — meeting results in **global search** now open a **read-only expanded detail view** (full
+notes + prep notes + next steps + related chips, fetched via `GET /conversations/:id`) with the **search
+term(s) highlighted** inside the rendered markdown, and an **"Edit meeting"** button that opens the canonical
+Quick Log editor for that specific meeting (`useQuickLog().openEdit`). Schema-free, client-only, live on `main`
+(tip = a docs commit on `28fb55a`); nothing pending. Top "What Was Just Completed" entry above;
+`SESSION-HISTORY.md` 2026-07-04. Before it (**2026-07-03**) was a batch of
 small **owner UX asks** plus two action-recurrence fixes — dashboard pill declutter (HIGH-only priority,
 hide `OTHER` type, pills inline to the right of the name), wider idea dialog, darker form-field/combobox
 outlines (Edge visibility), **reminder now carried onto recurring occurrences** (was silently dropped after

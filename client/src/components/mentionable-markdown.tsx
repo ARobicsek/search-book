@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import { Link } from 'react-router-dom'
+import { highlightRehype } from '@/lib/highlight-markdown'
 
 // Renders meeting-note markdown, turning @-mention tokens into chips:
 //   [@Name](/contacts/123)  → a blue chip linking to the contact
@@ -8,11 +9,28 @@ import { Link } from 'react-router-dom'
 //   [@Org](#org-mention)    → a dashed violet "loose org" chip (not a company yet)
 // Everything else renders as normal markdown (other links open in a new tab).
 //
+// Optionally wraps search-term matches in <mark> (pass `highlightTerms`) — used by
+// the search page's meeting detail view so the terms that surfaced the meeting are
+// highlighted inside its notes/prep-note body.
+//
 // Wrap in a `.prep-note-markdown` container (as the meeting card does) for the
 // shared note typography.
-export function MentionableMarkdown({ children }: { children: string }) {
+export function MentionableMarkdown({
+  children,
+  highlightTerms,
+  caseSensitive = false,
+}: {
+  children: string
+  highlightTerms?: string[]
+  caseSensitive?: boolean
+}) {
+  const rehypePlugins =
+    highlightTerms && highlightTerms.some(Boolean)
+      ? [highlightRehype(highlightTerms, caseSensitive)]
+      : undefined
   return (
     <ReactMarkdown
+      rehypePlugins={rehypePlugins}
       components={{
         a({ href, children }) {
           const h = href || ''

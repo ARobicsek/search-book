@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { ActionDateSelect } from '@/components/action-date-select'
 import { HighlightedText } from '@/components/highlighted-text'
+import { MeetingDetailDialog } from '@/components/meeting-detail-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -222,17 +223,27 @@ interface EvidenceProps {
   caseSensitive: boolean
 }
 
-function MeetingSearchCard({ conv, ev, onTagClick }: { conv: NonNullable<SearchResult['conversations']>[number]; ev: EvidenceProps; onTagClick: (id: number) => void }) {
+function MeetingSearchCard({ conv, ev, onOpen, onTagClick }: { conv: NonNullable<SearchResult['conversations']>[number]; ev: EvidenceProps; onOpen: (id: number) => void; onTagClick: (id: number) => void }) {
   return (
-    <Card className="mb-2">
+    <Card
+      className="mb-2 cursor-pointer transition-colors hover:border-primary/40"
+      onClick={(e) => {
+        // Clicking anywhere on the card opens the expanded meeting view — but let
+        // inner links/buttons (title, tag chips) do their own thing.
+        if ((e.target as HTMLElement).closest('a,button')) return
+        onOpen(conv.id)
+      }}
+    >
       <CardContent className="p-3">
         <div className="flex items-center gap-2">
-          <Link
-            to={conv.title ? `/meetings?title=${encodeURIComponent(conv.title)}` : `/meetings?id=${conv.id}`}
-            className="font-medium hover:underline"
+          <button
+            type="button"
+            onClick={() => onOpen(conv.id)}
+            className="text-left font-medium hover:underline"
+            title="View full meeting"
           >
             <HighlightedText text={conv.displayName} terms={ev.terms} caseSensitive={ev.caseSensitive} />
-          </Link>
+          </button>
         </div>
         <p className="text-sm text-muted-foreground">
           {conv.date}
@@ -649,6 +660,8 @@ export function SearchPage() {
   const [loading, setLoading] = useState(false)
   const [expandedEntity, setExpandedEntity] = useState<string | null>(null)
   const [tab, setTab] = useState('all')
+  // Meeting whose full contents are shown in the expanded detail dialog (null = closed).
+  const [openMeetingId, setOpenMeetingId] = useState<number | null>(null)
 
   // Load the full tag list once for the filter picker.
   useEffect(() => {
@@ -1018,7 +1031,7 @@ export function SearchPage() {
                   <MessageSquare className="h-5 w-5" /> Meetings
                 </h2>
                 {results.conversations.slice(0, 5).map((conv) => (
-                  <MeetingSearchCard key={conv.id} conv={conv} ev={ev} onTagClick={addTagFilter} />
+                  <MeetingSearchCard key={conv.id} conv={conv} ev={ev} onOpen={setOpenMeetingId} onTagClick={addTagFilter} />
                 ))}
                 {(results.conversations.length > 5) && (
                   <Button variant="link" className="px-0" onClick={() => setTab('meetings')}>
@@ -1107,7 +1120,7 @@ export function SearchPage() {
 
           <TabsContent value="meetings" className="mt-4">
             {results.conversations?.map((conv) => (
-              <MeetingSearchCard key={conv.id} conv={conv} ev={ev} onTagClick={addTagFilter} />
+              <MeetingSearchCard key={conv.id} conv={conv} ev={ev} onOpen={setOpenMeetingId} onTagClick={addTagFilter} />
             ))}
             {totals && totals.conversations > (results.conversations?.length ?? 0) && (
               <ShowAllLink
@@ -1141,6 +1154,13 @@ export function SearchPage() {
           </TabsContent>
         </Tabs>
       )}
+
+      <MeetingDetailDialog
+        conversationId={openMeetingId}
+        terms={ev.terms}
+        caseSensitive={ev.caseSensitive}
+        onOpenChange={(open) => { if (!open) setOpenMeetingId(null) }}
+      />
     </div>
   )
 }

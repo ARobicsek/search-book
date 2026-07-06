@@ -1600,7 +1600,14 @@ function QuickLogDialog({
                   // since they now have an id). Flush + close the dialog on the way.
                   <Link
                     to={`/contacts/${val}`}
-                    onClick={() => handleDialogOpenChange(false)}
+                    // Ctrl/Cmd/Shift/Alt/middle-click opens the card in a NEW tab
+                    // (browser default; react-router skips client-nav on a modified
+                    // click) — keep the meeting log open so you can keep documenting
+                    // there. A plain left-click navigates in place, so flush + close.
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+                      handleDialogOpenChange(false)
+                    }}
                     className="w-28 shrink-0 truncate text-xs text-primary hover:underline"
                     title={`Open ${participantNameOf(val)}'s card`}
                   >
@@ -2002,7 +2009,7 @@ function QuickLogDialog({
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       {/* Desktop: drag the bottom-right corner to widen/narrow this free-text dialog. */}
       <DialogContent
-        className={cn('max-h-[90vh] w-[95vw] overflow-y-auto [scrollbar-gutter:stable] sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', usePanel ? 'sm:w-[64rem]' : 'sm:w-[36rem]')}
+        className={cn('max-h-[90vh] w-[95vw] overflow-y-auto [scrollbar-gutter:stable] sm:resize sm:overflow-auto sm:min-w-[24rem] sm:max-h-[90vh] sm:max-w-[95vw]', usePanel ? 'sm:w-[64rem]' : 'sm:w-[52rem]')}
         // Dragging the prep/form resize handle fires a pointer-down that Radix
         // mis-reads as an outside interaction (react-resizable-panels' native
         // handler pre-empts Radix's "inside" marker) — keep the dialog open for it.

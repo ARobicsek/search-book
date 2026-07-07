@@ -146,6 +146,9 @@ export function ActionFormPage() {
 
   const [form, setForm] = useState<FormData>(() => {
     const initial = { ...emptyForm, contactIds: [...emptyForm.contactIds], companyIds: [...emptyForm.companyIds] }
+    // New actions default to due today (owner preference) — the X by the field
+    // clears it, or pick another date. Edit mode replaces the form once loaded.
+    if (!isEdit) initial.dueDate = new Date().toLocaleDateString('en-CA')
     const qContactId = searchParams.get('contactId')
     const qCompanyId = searchParams.get('companyId')
     if (qContactId) {
@@ -639,12 +642,26 @@ export function ActionFormPage() {
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="dueDate">Due Date</Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={form.dueDate}
-                onChange={(e) => set('dueDate', e.target.value)}
-              />
+              <div className="flex items-center gap-1">
+                <Input
+                  id="dueDate"
+                  type="date"
+                  value={form.dueDate}
+                  onChange={(e) => set('dueDate', e.target.value)}
+                />
+                {form.dueDate && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                    title="Clear due date"
+                    onClick={() => set('dueDate', '')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">

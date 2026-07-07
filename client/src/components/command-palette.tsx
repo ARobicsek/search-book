@@ -14,7 +14,7 @@ import { useQuickLog } from '@/components/quick-log-dialog'
 import type { Contact, Action, Idea, SearchResult } from '@/lib/types'
 import { contactDisplayName } from '@/lib/types'
 import { toast } from 'sonner'
-import { BookUser, Building2, ListTodo, Lightbulb, Search, Loader2, MessageSquarePlus } from 'lucide-react'
+import { BookUser, Building2, ListTodo, Lightbulb, Search, Loader2, MessageSquarePlus, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -103,7 +103,8 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
   const [actionTitle, setActionTitle] = useState('')
   const [actionType, setActionType] = useState('OTHER')
   const [actionPriority, setActionPriority] = useState('MEDIUM')
-  const [actionDueDate, setActionDueDate] = useState('')
+  // New actions default to due today (owner preference) — clearable via the X.
+  const [actionDueDate, setActionDueDate] = useState(() => new Date().toLocaleDateString('en-CA'))
   const [noteTitle, setNoteTitle] = useState('')
   const [noteDescription, setNoteDescription] = useState('')
 
@@ -139,7 +140,7 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
     setActionTitle('')
     setActionType('OTHER')
     setActionPriority('MEDIUM')
-    setActionDueDate('')
+    setActionDueDate(new Date().toLocaleDateString('en-CA'))
     setNoteTitle('')
     setNoteDescription('')
   }
@@ -292,12 +293,26 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
           </div>
           <div className="space-y-2">
             <Label htmlFor="q-due">Due Date</Label>
-            <Input
-              id="q-due"
-              type="date"
-              value={actionDueDate}
-              onChange={(e) => setActionDueDate(e.target.value)}
-            />
+            <div className="flex items-center gap-1">
+              <Input
+                id="q-due"
+                type="date"
+                value={actionDueDate}
+                onChange={(e) => setActionDueDate(e.target.value)}
+              />
+              {actionDueDate && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                  title="Clear due date"
+                  onClick={() => setActionDueDate('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
             <Button onClick={handleAddAction} disabled={saving || !actionTitle.trim()}>

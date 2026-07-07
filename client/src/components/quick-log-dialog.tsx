@@ -132,7 +132,9 @@ function makePendingAction(): PendingAction {
     key: ++pendingActionKeySeq,
     title: '',
     type: 'FOLLOW_UP',
-    dueDate: '',
+    // New actions default to due today (owner preference); the date input's native
+    // picker has a Clear for making it undated (no room for an X in the 3-col row).
+    dueDate: new Date().toLocaleDateString('en-CA'),
     priority: 'MEDIUM',
     owedByMe: true,
     owerIds: [],

@@ -13,6 +13,7 @@ import {
 } from '@tanstack/react-table'
 import { ArrowUpDown, Plus, Check, Search, List, CalendarDays, Hourglass, X } from 'lucide-react'
 import { ActionDateSelect } from '@/components/action-date-select'
+import { ActionOwnerSelect } from '@/components/action-owner-select'
 import { ActionsCalendar } from '@/pages/calendar'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api } from '@/lib/api'
@@ -205,11 +206,17 @@ export function ActionListPage() {
               </Badge>
             )}
           </span>
-          <div className="sm:hidden mt-1" onClick={(e) => e.stopPropagation()}>
+          <div className="sm:hidden mt-1 flex items-center" onClick={(e) => e.stopPropagation()}>
             <ActionDateSelect
               action={row.original}
               onUpdate={fetchActions}
               className="-ml-2 h-8"
+            />
+            <ActionOwnerSelect
+              action={row.original}
+              onUpdate={fetchActions}
+              className="h-8"
+              hideLabel
             />
           </div>
         </div>
@@ -265,6 +272,21 @@ export function ActionListPage() {
           />
         </div>
       ),
+    },
+    {
+      id: 'owner',
+      header: () => <span className="sr-only">Ownership</span>,
+      cell: ({ row }) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ActionOwnerSelect
+            action={row.original}
+            onUpdate={fetchActions}
+            className="-ml-2 h-8"
+            hideLabel
+          />
+        </div>
+      ),
+      size: 40,
     },
     {
       accessorKey: 'priority',
@@ -389,6 +411,7 @@ export function ActionListPage() {
       priority: !isMobile,
       company: !isMobile,
       dueDate: !isMobile,
+      owner: !isMobile, // mobile gets the trigger inline next to the date select instead
       completedDate: !isMobile,
     })
   }, [isMobile])

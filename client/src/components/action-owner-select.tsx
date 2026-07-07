@@ -44,12 +44,15 @@ interface ActionOwnerSelectProps {
   action: Action
   onUpdate?: () => void
   className?: string
+  // For surfaces that already carry their own waiting cue (e.g. the actions-list
+  // "Waiting" badge) — keeps the trigger icon-only instead of showing "Waiting" text.
+  hideLabel?: boolean
 }
 
 // Quick ownership switch for an action row: hand it off ("I did my part — now I'm
 // waiting on them") or take it back, without opening the full action form. Saves
 // owedByMe + owerContactIds; the server derives `direction` from the pair.
-export function ActionOwnerSelect({ action, onUpdate, className }: ActionOwnerSelectProps) {
+export function ActionOwnerSelect({ action, onUpdate, className, hideLabel }: ActionOwnerSelectProps) {
   const [open, setOpen] = useState(false)
   const [contacts, setContacts] = useState<{ id: number; name: string }[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -127,7 +130,7 @@ export function ActionOwnerSelect({ action, onUpdate, className }: ActionOwnerSe
         >
           <Hourglass className="h-3.5 w-3.5" />
           {/* Named owers already appear on the row; label the unnamed case so it isn't invisible */}
-          {waiting && !owers.length ? (
+          {!hideLabel && waiting && !owers.length ? (
             <span className="ml-1">Waiting</span>
           ) : (
             <span className="sr-only">{waiting ? 'Change ownership' : 'Hand off'}</span>

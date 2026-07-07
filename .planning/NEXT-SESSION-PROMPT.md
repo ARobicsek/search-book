@@ -24,8 +24,12 @@ John's court → he wants to flip ownership in a couple of clicks from the dashb
    `resolveOwers` defaults `owedByMe` to true when omitted, so sending one field alone corrupts the other.
 2. **`waitingSink` sort key** in `dashboard.tsx`: untimed `WAITING_ON_THEM` items sort to the bottom of
    **Today** and **Overdue**; timed items keep their clock position; within the sunk group the existing
-   date/priority order applies. (Only the dashboard — the `/actions` list page is unchanged; the
-   component is reusable there if the owner asks.)
+   date/priority order applies. (Sorting is dashboard-only; the `/actions` list keeps its own sortable
+   columns.)
+3. **Also on the `/actions` list page** (owner follow-up ask, same session): a slim "Ownership" column
+   after Due Date on desktop (icon-only trigger — `hideLabel` prop keeps it from duplicating the list's
+   existing "Waiting" title-badge), and on mobile the trigger sits inline next to the date select under
+   the title (column hidden via `columnVisibility`, matching the other mobile-hidden columns).
 
 Verified live (Chrome DevTools MCP) desktop + 390px mobile: linked-contact hand-off, unnamed hand-off
 (a HIGH item visibly sank below a MEDIUM), take-back, search + Enter keyboard pick, both lists

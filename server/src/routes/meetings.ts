@@ -34,9 +34,10 @@ const SORT_FIELDS = new Set(['date', 'updatedAt', 'createdAt']);
 const END_OF_BUSINESS = '17:00';
 
 // Mirror of the client's `isUpcomingMeeting`, as a where-fragment that KEEPS only
-// meetings that are NOT upcoming — used by the "hide upcoming" toggle. `today`
-// (YYYY-MM-DD) and `now` (HH:MM) are the client's Eastern wall clock; meeting dates
-// and start times are stored in ET, so the cutoff is correct regardless of the
+// meetings that are NOT upcoming — used directly by the "hide upcoming" mode, and
+// negated (Prisma NOT) by the "upcoming only" mode so the two are exact complements.
+// `today` (YYYY-MM-DD) and `now` (HH:MM) are the client's Eastern wall clock; meeting
+// dates and start times are stored in ET, so the cutoff is correct regardless of the
 // server's timezone. Upcoming = a future date, OR today with a start time still
 // ahead of now, OR today & untimed & before 5 PM ET & nothing written up yet; this
 // returns the complement of that set.
@@ -98,8 +99,9 @@ async function meetingOrgClauses(companyId: number): Promise<Record<string, unkn
 // Filters: seriesId (series view), title (contains, legacy), companyId (org field
 // OR a current employee of that org attended), tagId, type, from/to (date range),
 // q (title / participant name / series name contains — people/orgs/tags have their own filters), id
-// (single-meeting deep link), hideUpcoming (drop not-yet-happened meetings; needs the
-// client's ET today+now). Sort: sortBy (date|updatedAt|createdAt) + sortDir
+// (single-meeting deep link), hideUpcoming (drop not-yet-happened meetings) /
+// onlyUpcoming (keep ONLY them; both need the client's ET today+now, hideUpcoming
+// wins if both are sent). Sort: sortBy (date|updatedAt|createdAt) + sortDir
 // (asc|desc), default date desc. Returns the standard pagination envelope.
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -117,13 +119,19 @@ router.get('/', async (req: Request, res: Response) => {
     if (from) AND.push({ date: { gte: from as string } });
     if (to) AND.push({ date: { lte: to as string } });
 
-    // "Hide upcoming" toggle: drop meetings that haven't happened yet. The client
-    // sends its Eastern-time `today` (YYYY-MM-DD) + `now` (HH:MM); skip the filter if
-    // either is missing/malformed rather than guessing the wrong clock server-side.
+    // Past/upcoming scoping: hideUpcoming drops meetings that haven't happened yet,
+    // onlyUpcoming keeps ONLY those (the NOT of the same clause, so the two modes
+    // partition the list exactly). The client sends its Eastern-time `today`
+    // (YYYY-MM-DD) + `now` (HH:MM); skip the filter if either is missing/malformed
+    // rather than guessing the wrong clock server-side.
     const hideUpcoming = req.query.hideUpcoming === '1' || req.query.hideUpcoming === 'true';
+    const onlyUpcoming = req.query.onlyUpcoming === '1' || req.query.onlyUpcoming === 'true';
     const todayParam = typeof req.query.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.today) ? req.query.today : null;
     const nowParam = typeof req.query.now === 'string' && /^\d{2}:\d{2}$/.test(req.query.now) ? req.query.now : null;
-    if (hideUpcoming && todayParam && nowParam) AND.push(notUpcomingClause(todayParam, nowParam));
+    if (todayParam && nowParam) {
+      if (hideUpcoming) AND.push(notUpcomingClause(todayParam, nowParam));
+      else if (onlyUpcoming) AND.push({ NOT: notUpcomingClause(todayParam, nowParam) });
+    }
 
     // Free-text search matches the meeting's TITLE, any named PARTICIPANT, and its
     // SERIES name (owner ask). For UNTITLED meetings it also matches the rest of the

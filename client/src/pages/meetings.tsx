@@ -21,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import {
   Popover,
@@ -763,9 +762,11 @@ export function MeetingsPage() {
   // Default sort: most-recently-updated first (owner preference).
   const sortBy = searchParams.get('sortBy') || 'updatedAt'
   const sortDir = searchParams.get('sortDir') || 'desc'
-  // "Hide upcoming" toggle — drops not-yet-happened meetings (server-side, so counts
-  // and pagination stay correct). Persisted in the URL like the other filters.
-  const hideUpcoming = searchParams.get('hideUpcoming') === '1'
+  // Past/upcoming scope — 'past' drops not-yet-happened meetings, 'upcoming' shows
+  // ONLY them (both server-side, so counts and pagination stay correct). Persisted
+  // in the URL like the other filters; legacy ?hideUpcoming=1 links read as 'past'.
+  const whenFilter = searchParams.get('when')
+    || (searchParams.get('hideUpcoming') === '1' ? 'past' : 'all')
   // Series view (seriesFilter) is inherently a chronological list, so the
   // calendar toggle is hidden there and the view is forced back to list.
   const view = !seriesFilter && searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
@@ -839,11 +840,11 @@ export function MeetingsPage() {
     if (toFilter) params.set('to', toFilter)
     if (qFilter) params.set('q', qFilter)
     if (idFilter) params.set('id', idFilter)
-    // Hiding upcoming meetings needs the client's Eastern wall clock so the server
+    // Past/upcoming scoping needs the client's Eastern wall clock so the server
     // applies the same cutoff as the "Upcoming" badge.
-    if (hideUpcoming) {
+    if (whenFilter === 'past' || whenFilter === 'upcoming') {
       const { today, hhmm } = easternNowParts()
-      params.set('hideUpcoming', '1')
+      params.set(whenFilter === 'past' ? 'hideUpcoming' : 'onlyUpcoming', '1')
       params.set('today', today)
       params.set('now', hhmm)
     }
@@ -852,7 +853,7 @@ export function MeetingsPage() {
     params.set('limit', PAGE_SIZE.toString())
     params.set('offset', offset.toString())
     return params.toString()
-  }, [seriesFilter, companyFilter, tagFilter, typeFilter, fromFilter, toFilter, qFilter, idFilter, hideUpcoming, sortBy, sortDir])
+  }, [seriesFilter, companyFilter, tagFilter, typeFilter, fromFilter, toFilter, qFilter, idFilter, whenFilter, sortBy, sortDir])
 
   const loadMeetings = useCallback(async () => {
     setLoading(true)
@@ -962,6 +963,18 @@ export function MeetingsPage() {
     }, { replace: true })
   }
 
+  // Past/upcoming scope lives in `when`; always drop the legacy hideUpcoming param
+  // so a stale ?hideUpcoming=1 can't override a newly-picked mode.
+  function setWhen(value: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('hideUpcoming')
+      if (value === 'all') next.delete('when')
+      else next.set('when', value)
+      return next
+    }, { replace: true })
+  }
+
   function clearFilters() {
     setQInput('')
     setSearchParams({}, { replace: true })
@@ -1027,17 +1040,16 @@ export function MeetingsPage() {
             </Select>
           )}
           {view === 'list' && (
-            <label
-              className="flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border px-2 text-sm text-muted-foreground"
-              title="Hide meetings that haven't happened yet"
-            >
-              <Switch
-                checked={hideUpcoming}
-                onCheckedChange={(c) => setParam('hideUpcoming', c ? '1' : '')}
-                aria-label="Hide upcoming meetings"
-              />
-              Hide upcoming
-            </label>
+            <Select value={whenFilter} onValueChange={setWhen}>
+              <SelectTrigger className="h-8 w-[150px]" title="Show all meetings, only past ones, or only upcoming ones">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All meetings</SelectItem>
+                <SelectItem value="past">Hide upcoming</SelectItem>
+                <SelectItem value="upcoming">Upcoming only</SelectItem>
+              </SelectContent>
+            </Select>
           )}
           {!seriesFilter && (
             <div className="inline-flex rounded-md border p-0.5">

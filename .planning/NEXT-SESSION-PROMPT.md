@@ -5,6 +5,36 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Dashboard action ownership quick-switch + waiting-items sink (2026-07-07)
+
+Two owner asks for the dashboard actions workflow, **schema-free, client-only**, one commit to `main`
+(`e2f5a63`). Owner's scenario: he does his part of "Reach out to John re X" → the ball is now in
+John's court → he wants to flip ownership in a couple of clicks from the dashboard, and wants untimed
+"waiting on someone else" items kept at the **bottom** of the Overdue/Today lists.
+
+1. **New `ActionOwnerSelect`** (`client/src/components/action-owner-select.tsx`, mirrors the inline
+   `ActionDateSelect` pattern): an hourglass popover on every dashboard action row. **No schema change**
+   — it drives the existing Task-3 ownership model (`owedByMe` + `owerContactIds`; server derives
+   `direction`). Owned rows get a hover-revealed trigger (always visible on mobile) → one-click
+   hand-off to the action's **linked contact(s)** (2 clicks for the canonical case), a ranked contact
+   search, or **"Someone else — no name"** (unnamed waiting — the owner usually can't tell the system
+   who). Waiting rows get an always-visible fuchsia trigger (+ a visible "Waiting" label when there's
+   no named ower on the row) → removable chips, add-person search, one-click **"Take it back"**.
+   ⚠ Gotcha honored: the PUT always sends **both** `owedByMe` and `owerContactIds` — the server's
+   `resolveOwers` defaults `owedByMe` to true when omitted, so sending one field alone corrupts the other.
+2. **`waitingSink` sort key** in `dashboard.tsx`: untimed `WAITING_ON_THEM` items sort to the bottom of
+   **Today** and **Overdue**; timed items keep their clock position; within the sunk group the existing
+   date/priority order applies. (Only the dashboard — the `/actions` list page is unchanged; the
+   component is reusable there if the owner asks.)
+
+Verified live (Chrome DevTools MCP) desktop + 390px mobile: linked-contact hand-off, unnamed hand-off
+(a HIGH item visibly sank below a MEDIUM), take-back, search + Enter keyboard pick, both lists
+re-sorting, console clean; all test actions deleted after. `prepush` + full client `vite build` green.
+**Env fix along the way:** local `server/prisma/dev.db` had drifted ~4 sessions behind the schema
+(missing `dueTime`/`notify`/`lastNotifiedAt`/`recurringWeekdaysOnly`) so every Action read/write 500'd
+locally — synced additively via `npx prisma db push --url "file:C:/dev/personal/searchbook/server/prisma/dev.db"`
+(Prisma 7's `--url` flag sidesteps the stray-`server/dev.db` CWD gotcha below).
+
 ### What Was Just Completed — Meeting-log dialog: wider + Ctrl-click a name keeps the log open (2026-07-06)
 
 Two small owner asks for the Quick Log / meeting editor (`client/src/components/quick-log-dialog.tsx`),
@@ -380,8 +410,11 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 - **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** Use the Turso web SQL
   console for DDL.
 - **⚠ `prisma db push` local-path gotcha:** from `server/`, `db push` resolves `file:./dev.db` to
-  the stray empty `server/dev.db`, not the populated `server/prisma/dev.db` the server opens. Use a
-  dual-mode libsql `file:` migration script (pattern preserved in `server/scripts/archive/`) instead.
+  the stray empty `server/dev.db`, not the populated `server/prisma/dev.db` the server opens.
+  **Verified fix (2026-07-07):** pass the file explicitly —
+  `npx prisma db push --url "file:C:/dev/personal/searchbook/server/prisma/dev.db"` (Prisma 7 flag) —
+  which synced the drifted local DB additively with no data loss. The dual-mode libsql migration
+  script pattern (`server/scripts/archive/`) remains the fallback.
 - Run `tsc -b` / full `vite build` (not just `npm run prepush`) before every push — it catches
   unused imports the typecheck misses.
 - Dev smoke: server 3001, client 5173. The local app has `APP_PASSWORD` unset → seed any non-empty
@@ -390,7 +423,9 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is **`f1bb55d`** — the **2026-07-06** meeting-log dialog polish (wider default `sm:w-[52rem]` +
+`main` tip is **`e2f5a63`** (+ its docs commit) — the **2026-07-07** dashboard action ownership
+quick-switch + waiting-items sink (**schema-free, client-only, no Turso DDL, no held commits**; new
+`client/src/components/action-owner-select.tsx` + `dashboard.tsx` sort). Before it: **`f1bb55d`** — the **2026-07-06** meeting-log dialog polish (wider default `sm:w-[52rem]` +
 Ctrl-click a participant name keeps the log open; **schema-free, client-only, no Turso DDL, no held
 commits**). Before it: the **2026-07-04** docs/handoff commit on top of **`28fb55a`** — the meeting-search
 read-only detail view + its "Edit meeting" fix (`182885e` feat → `28fb55a` edit-button; schema-free,
@@ -440,7 +475,15 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session (**2026-07-06**) was two small
+Context for *this* upcoming session specifically: the most recent session (**2026-07-07**) was two
+**owner UX asks** for the dashboard actions workflow — a new inline **ownership quick-switch popover**
+(`ActionOwnerSelect`: hand an action off to a linked contact / searched contact / "someone — no name",
+or take it back, all in 1–2 clicks, driving the existing `owedByMe`/`owerContactIds` model — no schema
+change) and **untimed "waiting on someone else" items now sink to the bottom of the dashboard Today +
+Overdue lists**. Schema-free, client-only, live on `main` (`e2f5a63`); verified in-browser desktop +
+390px mobile; nothing pending. Also fixed the drifted local `server/prisma/dev.db` via
+`prisma db push --url` (see caveats). Top "What Was Just Completed" entry above; `SESSION-HISTORY.md`
+2026-07-07. Before it (**2026-07-06**): two small
 **owner UX asks** for the Quick Log / meeting editor — the dialog's **default width** widened to
 `sm:w-[52rem]` (matching Ideas), and **Ctrl/Cmd-clicking a participant name** now opens that contact in a new
 browser tab **without closing the meeting log** (so you can document about the person while continuing to

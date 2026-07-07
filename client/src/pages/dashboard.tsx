@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import { Check, Plus, AlertTriangle, CalendarDays, Loader2, Hourglass } from 'lucide-react'
 import { ActionDateSelect } from '@/components/action-date-select'
+import { ActionOwnerSelect } from '@/components/action-owner-select'
 import { dueTimeMinutes, isTimeOverdue } from '@/lib/action-time'
 
 const typeColors: Record<ActionType, string> = {
@@ -43,6 +44,13 @@ const priorityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
 
 function sortByPriority(a: Action, b: Action) {
   return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9)
+}
+
+// Untimed "waiting on someone else" items sink below your own actionable items in the
+// Today and Overdue lists — they need no action from you, just patience. Items with a
+// specific time of day keep their clock position regardless of ownership.
+function waitingSink(a: Action): number {
+  return a.direction === 'WAITING_ON_THEM' && !a.dueTime ? 1 : 0
 }
 
 interface ActionRowProps {
@@ -105,6 +113,18 @@ function ActionRow({ action, onToggle, onUpdate, showDate }: ActionRowProps) {
               className={showDate ? "" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity px-0 h-auto py-0"}
             />
           </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            {/* Ownership flip: hover-revealed affordance on my actions; always-visible state cue on waiting ones */}
+            <ActionOwnerSelect
+              action={action}
+              onUpdate={onUpdate}
+              className={
+                action.direction === 'WAITING_ON_THEM'
+                  ? 'px-1 h-auto py-0'
+                  : 'px-1 h-auto py-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity'
+              }
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -160,19 +180,25 @@ export function DashboardPage() {
     (a) => a.dueDate === today && isTimeOverdue(a.dueDate, a.dueTime),
   )
 
-  // Today: timed actions first (earliest time at the top), then untimed by priority.
-  // Anything whose time has passed is excluded — it's shown as overdue instead.
+  // Today: timed actions first (earliest time at the top), then untimed by priority
+  // (untimed waiting-on-others last). Anything whose time has passed is excluded —
+  // it's shown as overdue instead.
   const todayActions = allPending
     .filter((a) => a.dueDate === today && !isTimeOverdue(a.dueDate, a.dueTime))
     .sort((a, b) => {
+      const sink = waitingSink(a) - waitingSink(b)
+      if (sink !== 0) return sink
       const am = dueTimeMinutes(a.dueTime)
       const bm = dueTimeMinutes(b.dueTime)
       if (am !== bm) return am - bm
       return sortByPriority(a, b)
     })
 
-  // Server overdue (dueDate < today) + today's time-passed actions, oldest moment first.
+  // Server overdue (dueDate < today) + today's time-passed actions, oldest moment first;
+  // untimed waiting-on-others sink to the bottom (still oldest-first among themselves).
   const combinedOverdue = [...overdueActions, ...timeOverdueToday].sort((a, b) => {
+    const sink = waitingSink(a) - waitingSink(b)
+    if (sink !== 0) return sink
     const ad = a.dueDate ?? ''
     const bd = b.dueDate ?? ''
     if (ad !== bd) return ad < bd ? -1 : 1

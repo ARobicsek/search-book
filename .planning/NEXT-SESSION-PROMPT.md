@@ -5,6 +5,34 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Meetings "Upcoming only" filter + new actions default to due today (2026-07-07 s2)
+
+Two owner asks, **schema-free**, two feature commits straight to `main`.
+
+1. **Meetings list: "Upcoming only" mode.** The list-view "Hide upcoming" Switch is now a three-way
+   Select next to the sort control — **All meetings / Hide upcoming / Upcoming only** — persisted as
+   `?when=past|upcoming` (absent = all); legacy `?hideUpcoming=1` links still read as "past", and
+   picking any mode deletes the legacy param so it can't override. Server (`routes/meetings.ts`): new
+   `onlyUpcoming=1` param pushes `{ NOT: notUpcomingClause(today, now) }` — the literal Prisma negation
+   of the hide-mode clause, so the two modes are **exact complements** of the "Upcoming" badge rule
+   (same client-sent ET `today`/`now`; filter skipped if either is missing/malformed; `hideUpcoming`
+   wins if both sent). Verified against local SQLite via curl: all(224) = past(221) + upcoming(3) with a
+   backdated `today`, partition stays exact at the same-day/EOB boundaries (now=12:00 vs 18:00).
+2. **New actions default to due *today*** (creation day, local `en-CA` date) on **all three** creation
+   surfaces: the New Action page (`action-form.tsx` — edit mode untouched; form is replaced on load),
+   the command-palette quick-add (`command-palette.tsx`, incl. `resetForms`), and the Quick Log
+   follow-up composer (`makePendingAction` in `quick-log-dialog.tsx` — untitled rows are still ignored
+   by `actionsDirty`/`reconcileActions`, so the default alone never creates anything). The first two
+   got a ghost **X "Clear due date" button** beside the date input (clearing also inertizes
+   time/notify via the existing `dueDate ? … : null` payload logic); the composer's 3-col row has no
+   room for an X — its native date-picker Clear covers it.
+
+`prepush` (client+server typecheck + 32-table backup guard) + full client `vite build` green. Browser
+verification not possible this session (chrome-devtools MCP couldn't attach — profile already in use);
+server filter verified via curl as above, UI changes are same-pattern swaps of adjacent controls.
+**Mobile note:** the meetings header Select replaces a same-size Switch in an already-wrapping flex row;
+the due-date X buttons are in single-column forms — eyeball 390px if convenient.
+
 ### What Was Just Completed — Dashboard action ownership quick-switch + waiting-items sink (2026-07-07)
 
 Two owner asks for the dashboard actions workflow plus a same-session follow-up ask, **schema-free,
@@ -428,7 +456,12 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is **`ab13a09`** — the **2026-07-07** action ownership quick-switch session
+`main` tip is the **2026-07-07 s2** session (**schema-free, no Turso DDL, no held commits**): a
+meetings-page **"Upcoming only" filter** (the Hide-upcoming Switch became a three-way All / Hide
+upcoming / Upcoming only Select; server gained the complementary `onlyUpcoming` param) and **new
+actions defaulting to due today** with a clearable X (New Action form, command palette, Quick Log
+follow-up composer) — see the top "What Was Just Completed" entry. Before it:
+**`ab13a09`** — the **2026-07-07** action ownership quick-switch session
 (**schema-free, client-only, no Turso DDL, no held commits**): `e2f5a63` (new
 `client/src/components/action-owner-select.tsx` popover on dashboard rows + `dashboard.tsx`
 waiting-sink sort) → `f70886c` (docs) → `ab13a09` (same popover on the `/actions` list page —
@@ -483,7 +516,13 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session (**2026-07-07**) was
+Context for *this* upcoming session specifically: the most recent session (**2026-07-07 s2**) was two
+**owner UX asks** — the `/meetings` list can now filter to **only future meetings** (three-way
+All / Hide upcoming / Upcoming only Select, `?when=` param, server-side `onlyUpcoming` = exact NOT of
+the hide clause), and **every new action defaults to due today** (all three creation surfaces; ghost-X
+clear button on the form + palette; composer relies on the native picker Clear). Schema-free,
+client+server, live on `main`; server filter curl-verified, browser not driven (MCP profile conflict).
+Nothing pending. Before it (**2026-07-07**):
 **owner UX asks** for the actions workflow — a new inline **ownership quick-switch popover**
 (`ActionOwnerSelect`: hand an action off to a linked contact / searched contact / "someone — no name",
 or take it back, all in 1–2 clicks, driving the existing `owedByMe`/`owerContactIds` model — no schema

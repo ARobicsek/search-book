@@ -7,8 +7,9 @@ here.
 
 ### What Was Just Completed — Dashboard action ownership quick-switch + waiting-items sink (2026-07-07)
 
-Two owner asks for the dashboard actions workflow, **schema-free, client-only**, one commit to `main`
-(`e2f5a63`). Owner's scenario: he does his part of "Reach out to John re X" → the ball is now in
+Two owner asks for the dashboard actions workflow plus a same-session follow-up ask, **schema-free,
+client-only**, two feature commits to `main` (`e2f5a63` dashboard, `ab13a09` /actions list page).
+Owner's scenario: he does his part of "Reach out to John re X" → the ball is now in
 John's court → he wants to flip ownership in a couple of clicks from the dashboard, and wants untimed
 "waiting on someone else" items kept at the **bottom** of the Overdue/Today lists.
 
@@ -427,9 +428,12 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is **`e2f5a63`** (+ its docs commit) — the **2026-07-07** dashboard action ownership
-quick-switch + waiting-items sink (**schema-free, client-only, no Turso DDL, no held commits**; new
-`client/src/components/action-owner-select.tsx` + `dashboard.tsx` sort). Before it: **`f1bb55d`** — the **2026-07-06** meeting-log dialog polish (wider default `sm:w-[52rem]` +
+`main` tip is **`ab13a09`** — the **2026-07-07** action ownership quick-switch session
+(**schema-free, client-only, no Turso DDL, no held commits**): `e2f5a63` (new
+`client/src/components/action-owner-select.tsx` popover on dashboard rows + `dashboard.tsx`
+waiting-sink sort) → `f70886c` (docs) → `ab13a09` (same popover on the `/actions` list page —
+desktop "Ownership" column + mobile inline trigger — with its docs folded in). Before it:
+**`f1bb55d`** — the **2026-07-06** meeting-log dialog polish (wider default `sm:w-[52rem]` +
 Ctrl-click a participant name keeps the log open; **schema-free, client-only, no Turso DDL, no held
 commits**). Before it: the **2026-07-04** docs/handoff commit on top of **`28fb55a`** — the meeting-search
 read-only detail view + its "Edit meeting" fix (`182885e` feat → `28fb55a` edit-button; schema-free,
@@ -479,16 +483,16 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session (**2026-07-07**) was two
-**owner UX asks** for the dashboard actions workflow — a new inline **ownership quick-switch popover**
+Context for *this* upcoming session specifically: the most recent session (**2026-07-07**) was
+**owner UX asks** for the actions workflow — a new inline **ownership quick-switch popover**
 (`ActionOwnerSelect`: hand an action off to a linked contact / searched contact / "someone — no name",
 or take it back, all in 1–2 clicks, driving the existing `owedByMe`/`owerContactIds` model — no schema
-change) and **untimed "waiting on someone else" items now sink to the bottom of the dashboard Today +
-Overdue lists**. Schema-free, client-only, live on `main` (`e2f5a63`); verified in-browser desktop +
-390px mobile; nothing pending. Also fixed the drifted local `server/prisma/dev.db` via
-`prisma db push --url` (see caveats). Top "What Was Just Completed" entry above; `SESSION-HISTORY.md`
-2026-07-07. Before it (**2026-07-06**): two small
-**owner UX asks** for the Quick Log / meeting editor — the dialog's **default width** widened to
+change) on **both the dashboard rows and the `/actions` list page**, and **untimed "waiting on someone
+else" items now sink to the bottom of the dashboard Today + Overdue lists**. Schema-free, client-only,
+live on `main` (`e2f5a63` → `ab13a09`); verified in-browser desktop + 390px mobile; nothing pending.
+Also fixed the drifted local `server/prisma/dev.db` via `prisma db push --url` (see caveats). Top
+"What Was Just Completed" entry above; `SESSION-HISTORY.md` 2026-07-07. Before it (**2026-07-06**):
+two small **owner UX asks** for the Quick Log / meeting editor — the dialog's **default width** widened to
 `sm:w-[52rem]` (matching Ideas), and **Ctrl/Cmd-clicking a participant name** now opens that contact in a new
 browser tab **without closing the meeting log** (so you can document about the person while continuing to
 document the meeting); a plain click still navigates + closes as before. Schema-free, client-only, live on

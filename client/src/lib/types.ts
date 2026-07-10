@@ -311,18 +311,22 @@ export interface MentionMeeting {
 /** The minimal shape needed to resolve a meeting's display name. */
 type DisplayNameMeeting = {
   title: string | null;
+  series?: { name: string } | null;
   participants?: { contact: { name: string } }[];
   contact: { name: string } | null;
   company: { name: string } | null;
   attendeesDescription: string | null;
 };
 
-/** Display name precedence for a meeting: title → first participant → contact → company → attendees description.
- *  First participant outranks the legacy anchor contact/company so an untitled
- *  meeting is identified by the first person entered (the owner's mental model). */
+/** Display name precedence for a meeting: title → series name → first participant → contact → company → attendees description.
+ *  A series name stands in for the title when none is given, so logging a
+ *  recurring meeting only needs the series + date (no redundant title). First
+ *  participant then outranks the legacy anchor contact/company so an untitled,
+ *  series-less meeting is identified by the first person entered (the owner's mental model). */
 export function conversationDisplayName(conv: DisplayNameMeeting): string {
   return (
     conv.title ||
+    conv.series?.name ||
     conv.participants?.[0]?.contact.name ||
     conv.contact?.name ||
     conv.company?.name ||

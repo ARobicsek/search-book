@@ -39,7 +39,6 @@ import {
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
-import { TitleAutocomplete } from '@/components/title-autocomplete'
 import { PersonTooltip } from '@/components/person-tooltip'
 import { MarkdownTextarea } from '@/components/markdown-textarea'
 import { SaveStatusIndicator } from '@/components/save-status'
@@ -398,7 +397,6 @@ function QuickLogDialog({
   const [seriesContext, setSeriesContext] = useState<Conversation | null>(null)
 
   // Lookup data, fetched lazily on first open
-  const [titles, setTitles] = useState<string[]>([])
   const [contactOptions, setContactOptions] = useState<ComboboxOption[]>([])
   // Per-contact pronunciation + title + employer for the participant-chip hover tooltip, keyed by id string.
   const [contactMeta, setContactMeta] = useState<Map<string, { pronunciation?: string | null; title?: string | null; employer?: string | null }>>(new Map())
@@ -472,7 +470,6 @@ function QuickLogDialog({
       }
     }
 
-    api.get<string[]>('/conversations/titles').then(setTitles).catch(() => { })
     api.get<{ id: number; name: string }[]>('/series').then(setSeriesOptions).catch(() => { })
     api.get<{ id: number; name: string }[]>('/contacts/favorites').then(setFavorites).catch(() => { })
     api.get<{ id: number; name: string }[]>('/companies/favorites').then(setCompanyFavorites).catch(() => { })
@@ -1471,12 +1468,13 @@ function QuickLogDialog({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="ql-title">Title</Label>
-          <TitleAutocomplete
+          <Input
             id="ql-title"
             value={title}
-            onChange={setTitle}
-            titles={titles}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Meeting title (optional if a series is set)"
             autoFocus={!isEdit}
+            autoComplete="off"
           />
         </div>
         <div className="space-y-2">

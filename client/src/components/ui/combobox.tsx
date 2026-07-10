@@ -27,6 +27,14 @@ export interface ComboboxOption {
   rank?: number;
 }
 
+// Highlight for the active row in a combobox dropdown. An explicit light blue
+// (matching the notes @-mention picker) instead of the near-white `bg-accent`
+// default, whose ~3% contrast was invisible in some browsers/displays (e.g. Edge).
+// `cursor-pointer` makes each offered name read as clickable. cmdk sets
+// `data-selected` on both keyboard- and mouse-hovered items, so this covers both.
+const ITEM_HIGHLIGHT =
+  'cursor-pointer data-[selected=true]:bg-blue-100 data-[selected=true]:text-blue-900 dark:data-[selected=true]:bg-blue-500/30 dark:data-[selected=true]:text-blue-50';
+
 // Sort comparator shared by both combobox variants. When the user is searching, a
 // word-prefix match ("sar" → "Sarah") beats a mid-word hit ("Ce-sar"); within a
 // tier, higher `rank` wins, then alphabetical. With no search / no ranks this is
@@ -121,7 +129,7 @@ export function Combobox({
                 <CommandItem
                   value="__clear__"
                   onSelect={() => handleSelect('', false)}
-                  className="text-muted-foreground"
+                  className={cn(ITEM_HIGHLIGHT, 'text-muted-foreground')}
                 >
                   Clear selection
                 </CommandItem>
@@ -132,6 +140,7 @@ export function Combobox({
                   key={option.value}
                   value={option.value}
                   onSelect={() => handleSelect(option.value, false)}
+                  className={ITEM_HIGHLIGHT}
                 >
                   <Check
                     className={cn(
@@ -147,7 +156,7 @@ export function Combobox({
                 <CommandItem
                   value={`__new__${search}`}
                   onSelect={() => handleSelect(search.trim(), true)}
-                  className="text-primary"
+                  className={cn(ITEM_HIGHLIGHT, 'text-primary')}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Add "{search.trim()}"
@@ -306,7 +315,7 @@ export function MultiCombobox({
                 <CommandItem
                   value="__clear_all__"
                   onSelect={() => onChange([])}
-                  className="text-muted-foreground"
+                  className={cn(ITEM_HIGHLIGHT, 'text-muted-foreground')}
                 >
                   Clear all
                 </CommandItem>
@@ -317,6 +326,7 @@ export function MultiCombobox({
                   key={option.value}
                   value={option.value}
                   onSelect={() => toggleValue(option.value)}
+                  className={ITEM_HIGHLIGHT}
                 >
                   <Check
                     className={cn(
@@ -332,7 +342,7 @@ export function MultiCombobox({
                 <CommandItem
                   value={`__new__${search}`}
                   onSelect={() => addNewValue(search.trim())}
-                  className="text-primary"
+                  className={cn(ITEM_HIGHLIGHT, 'text-primary')}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Add "{search.trim()}"

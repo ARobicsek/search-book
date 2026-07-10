@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { Bold, Building2, Heading3, Italic, List, ListOrdered, UserPlus } from 'lucide-react'
+import { Bold, Building2, Heading3, Italic, Link2, List, ListOrdered, UserPlus } from 'lucide-react'
 import {
   detectMentionQuery,
   looseMentionToken,
@@ -262,6 +262,21 @@ export function MarkdownTextarea({
     },
     [value, apply]
   )
+
+  // Insert a markdown link. The selection (or "text") becomes the link label and
+  // "url" is dropped in as a placeholder, pre-selected so typing/pasting replaces
+  // it immediately. Renders as a clickable link (opens in a new tab) in the note.
+  const insertLink = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const { selectionStart: start, selectionEnd: end } = el
+    const label = value.slice(start, end) || 'text'
+    const link = `[${label}](url)`
+    const next = value.slice(0, start) + link + value.slice(end)
+    // Select the "url" placeholder — it sits right after `[${label}](`.
+    const urlStart = start + label.length + 3
+    apply(next, urlStart, urlStart + 'url'.length)
+  }, [value, apply])
 
   // Toggle a prefix on every line in the selection (headings, list markers)
   const prefixLines = useCallback(
@@ -534,6 +549,7 @@ export function MarkdownTextarea({
     { icon: <Heading3 className="h-3.5 w-3.5" />, title: 'Heading (Ctrl+Alt+3)', onClick: () => insertHeading(3) },
     { icon: <Bold className="h-3.5 w-3.5" />, title: 'Bold (Ctrl+B)', onClick: () => wrapSelection('**') },
     { icon: <Italic className="h-3.5 w-3.5" />, title: 'Italic (Ctrl+I)', onClick: () => wrapSelection('*') },
+    { icon: <Link2 className="h-3.5 w-3.5" />, title: 'Insert link', onClick: insertLink },
     { icon: <List className="h-3.5 w-3.5" />, title: 'Bullet list (Ctrl+Shift+8)', onClick: insertBullets },
     { icon: <ListOrdered className="h-3.5 w-3.5" />, title: 'Numbered list (Ctrl+Shift+7)', onClick: insertNumbered },
   ]

@@ -5,6 +5,17 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Meeting links (real feature) + series-as-title (+ series-only save) + blue picker highlight + dropped title suggestions (2026-07-10)
+
+Four owner UX asks for the meeting log — **four commits to `main`**, three schema-free + one **SCHEMA** (owner applied the Turso DDL). Order matters: the "links" ask was reshaped mid-session from an inline button into a real feature.
+
+1. **Meetings now carry document Links** (`d0ea327`, **SCHEMA**). A real **Links** feature (URL + optional title) using the **shared `Link` model** (the same one on contacts/companies/actions), managed in the Quick Log **"Tags, prep notes, attachments & links"** section and shown as clickable chips there, in the meeting detail dialog, and on `/meetings` cards. New `Link.conversationId` + `Conversation.links` (`onDelete: Cascade`); `/api/links` filters by `conversationId`; both meeting includes (`conversationIncludes` + `meetingListInclude`) return `links`. **`undo.ts` cascade-capture gained `link`→`conversation`** so deleting a meeting cascade-removes its links **and Undo restores them** — verified end-to-end in-browser incl. the delete-cascade + undo round-trip (link + meeting come back with original ids); all test data cleaned up. Add = live `POST`/`DELETE` once the meeting record exists, staged + flushed on finalize before that, unadded draft URL flushed on close. **Backup unchanged** (`Link` already round-trips; `Conversation` restores before `Link` in both paths). **Owner applied the Turso DDL** via the web SQL console — `ALTER TABLE "Link" ADD COLUMN "conversationId" INTEGER REFERENCES "Conversation"("id") ON DELETE CASCADE` — and I pushed only after confirmation. *(A same-session first cut — an inline markdown Insert-link toolbar button on `MarkdownTextarea` — was **reverted** for this per the owner's "move it to the tags/prep/attachments section".)*
+2. **Series name stands in for the title** (`407e22c` display + `059618b` save; schema-free). `conversationDisplayName` falls back to the **series name** when a meeting has no title (title → series → participant → contact → org → attendees), **and** a set series now **satisfies the save "≥1 who/what" gate** on both server (`hasWho()`) and client (`autosaveValid`/`hasMeaningfulContent`/finalize). `059618b` fixes the owner's follow-up report — a **series-only meeting** (series + date, no title/participant) now saves with **no "Add a title" toast** (curl-verified POST with only `seriesId`+date → 201; UI Done closes cleanly). An untitled series meeting shows the series name in both the card heading and the series chip — owner OK'd the duplication.
+3. **Blue combobox dropdown highlight** (`407e22c`, schema-free). The active row in every `Combobox`/`MultiCombobox` (participants, orgs, tags, series…) highlights **light blue** (`bg-blue-100`/`text-blue-900` + dark variant) with `cursor-pointer`, matching the notes `@`-mention picker — replaced the near-white `bg-accent` that was ~invisible in Edge. Command palette untouched.
+4. **Dropped the meeting Title suggestions dropdown** (`407e22c`, schema-free). The Title field is a plain `Input` now — `title-autocomplete.tsx` deleted, `/conversations/titles` fetch removed from the dialog.
+
+`prepush` (client+server typecheck + 32-table backup guard) green on every commit; blue-highlight, series-only save, and the full link add→cascade→undo flow driven live (Chrome DevTools MCP against local SQLite). **Local-DB gotcha re-hit:** `prisma db push` from `server/` wrote the new column to the stray `server/dev.db`, but the runtime opens `server/prisma/dev.db` (db.ts resolves `file:./dev.db` relative to `prisma/`) → 500s until re-pushed with `DATABASE_URL="file:./prisma/dev.db"` (same fix as the `--url` note in the caveats). **Mobile (390px) not separately re-tested** — the Links block is a labeled input row + chips inside the existing collapsible section; eyeball if convenient.
+
 ### What Was Just Completed — Vercel-exit contingency plan (2026-07-09, docs-only)
 
 NCQA IT is unhappy the app is hosted on Vercel (they perceive it as an "AI system" risk). The owner
@@ -479,11 +490,19 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is the **2026-07-07 s2** session (**schema-free, no Turso DDL, no held commits**): a
-meetings-page **"Upcoming only" filter** (the Hide-upcoming Switch became a three-way All / Hide
-upcoming / Upcoming only Select; server gained the complementary `onlyUpcoming` param) and **new
-actions defaulting to due today** with a clearable X (New Action form, command palette, Quick Log
-follow-up composer) — see the top "What Was Just Completed" entry. Before it:
+`main` tip is the **2026-07-10** session (`059618b` + this docs commit): meeting-log **document links**
+(a real `Link`-model feature — the one **SCHEMA** change this session: `Link.conversationId` + FK
+cascade; **Turso DDL applied by owner**), **series name as the meeting title** plus a fix so a
+**series-only meeting saves**, a **blue combobox dropdown highlight**, and the removed **Title
+suggestions dropdown**. Commits `407e22c` (batch 1: highlight + series-display + drop-suggestions +
+a since-reverted inline link button) → `d0ea327` (links reshaped into the shared `Link` model +
+undo cascade) → `059618b` (series-only save fix). See the top "What Was Just Completed" entry.
+**⚠ No held commits; the schema change's Turso DDL is already applied** (`Link.conversationId`
+column exists in Turso). Before it, the **2026-07-07 s2** session (**schema-free, no Turso DDL, no held
+commits**): a meetings-page **"Upcoming only" filter** (the Hide-upcoming Switch became a three-way
+All / Hide upcoming / Upcoming only Select; server gained the complementary `onlyUpcoming` param) and
+**new actions defaulting to due today** with a clearable X (New Action form, command palette, Quick Log
+follow-up composer). Before it:
 **`ab13a09`** — the **2026-07-07** action ownership quick-switch session
 (**schema-free, client-only, no Turso DDL, no held commits**): `e2f5a63` (new
 `client/src/components/action-owner-select.tsx` popover on dashboard rows + `dashboard.tsx`
@@ -539,13 +558,19 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session (**2026-07-07 s2**) was two
-**owner UX asks** — the `/meetings` list can now filter to **only future meetings** (three-way
-All / Hide upcoming / Upcoming only Select, `?when=` param, server-side `onlyUpcoming` = exact NOT of
-the hide clause), and **every new action defaults to due today** (all three creation surfaces; ghost-X
-clear button on the form + palette; composer relies on the native picker Clear). Schema-free,
-client+server, live on `main`; server filter curl-verified, browser not driven (MCP profile conflict).
-Nothing pending. Before it (**2026-07-07**):
+Context for *this* upcoming session specifically: the most recent session (**2026-07-10**) was four
+**owner UX asks** for the meeting log — a real **document-Links feature** on meetings (shared `Link`
+model; `Link.conversationId` + FK cascade — the one SCHEMA change, **Turso DDL applied by owner**;
+managed in the Quick Log "Tags, prep notes, attachments & links" section, chips in the detail dialog
++ list cards, undo-cascade wired); **series name as the meeting title** with a fix so a **series-only
+meeting saves** (server `hasWho` + client validation now count `seriesId`); a **blue combobox
+dropdown highlight** (matches the `@`-mention picker, replaces the Edge-invisible `bg-accent`); and
+**removing the meeting Title suggestions dropdown**. Four commits (`407e22c` → `d0ea327` → `059618b`
++ docs); the link add→cascade→undo flow, blue highlight, and series-only save were driven live in
+Chrome DevTools MCP. **Nothing pending — no held commits, the Turso DDL is applied.** Before it
+(**2026-07-07 s2**) was two owner UX asks — the `/meetings` list "Upcoming only" filter (three-way
+Select, `?when=` param, server `onlyUpcoming` = exact NOT of the hide clause) and **every new action
+defaults to due today** (all three creation surfaces; ghost-X clear on form + palette). Before it (**2026-07-07**):
 **owner UX asks** for the actions workflow — a new inline **ownership quick-switch popover**
 (`ActionOwnerSelect`: hand an action off to a linked contact / searched contact / "someone — no name",
 or take it back, all in 1–2 clicks, driving the existing `owedByMe`/`owerContactIds` model — no schema

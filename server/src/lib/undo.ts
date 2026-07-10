@@ -54,6 +54,7 @@ const CASCADE: Record<string, ChildRel[]> = {
     { model: 'conversationTag', fk: 'conversationId' },
     { model: 'conversationPrepNote', fk: 'conversationId' },
     { model: 'conversationAttachment', fk: 'conversationId' },
+    { model: 'link', fk: 'conversationId' },
   ],
   action: [
     { model: 'actionContact', fk: 'actionId' },

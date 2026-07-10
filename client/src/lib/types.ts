@@ -251,6 +251,7 @@ export interface Conversation {
   actions?: { id: number; title: string; completed: boolean; dueDate: string | null }[];
   prepNotes?: ConversationPrepNote[];
   attachments?: ConversationAttachment[];
+  links?: LinkRecord[];
 }
 
 // ─── Meeting Prep Notes & Attachments ───────────────────────
@@ -385,6 +386,7 @@ export interface LinkRecord {
   contactId: number | null;
   companyId: number | null;
   actionId: number | null;
+  conversationId: number | null;
   createdAt: string;
 }
 

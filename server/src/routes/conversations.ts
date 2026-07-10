@@ -26,6 +26,7 @@ const conversationIncludes = {
   actions: { select: { id: true, title: true, completed: true, dueDate: true } },
   prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
   attachments: true,
+  links: { orderBy: { createdAt: 'asc' as const } },
 };
 
 // Participant input: new shape { contactId, note? }[] via `participants`, or the

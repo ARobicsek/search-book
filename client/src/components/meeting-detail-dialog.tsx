@@ -19,6 +19,7 @@ import {
   FileText,
   Building2,
   Paperclip,
+  Link2,
   Tag as TagIcon,
   Pencil,
 } from 'lucide-react'
@@ -223,6 +224,24 @@ export function MeetingDetailDialog({
                     </a>
                   )
                 )}
+              </div>
+            )}
+
+            {conv.links && conv.links.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {conv.links.map((l) => (
+                  <a
+                    key={l.id}
+                    href={l.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs text-primary hover:underline"
+                    title={l.url}
+                  >
+                    <Link2 className="h-3 w-3" />
+                    <span className="max-w-40 truncate">{l.title}</span>
+                  </a>
+                ))}
               </div>
             )}
 

@@ -7,11 +7,12 @@ const router = Router();
 // GET /api/links — list with optional contactId, companyId, or actionId filter
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { contactId, companyId, actionId } = req.query;
+    const { contactId, companyId, actionId, conversationId } = req.query;
     const where: Record<string, unknown> = {};
     if (contactId) where.contactId = parseInt(contactId as string);
     if (companyId) where.companyId = parseInt(companyId as string);
     if (actionId) where.actionId = parseInt(actionId as string);
+    if (conversationId) where.conversationId = parseInt(conversationId as string);
 
     const links = await prisma.link.findMany({
       where,
@@ -27,7 +28,7 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/links — create
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { url, title, description, contactId, companyId, actionId } = req.body;
+    const { url, title, description, contactId, companyId, actionId, conversationId } = req.body;
     if (!url || typeof url !== 'string' || !url.trim()) {
       res.status(400).json({ error: 'URL is required' });
       return;
@@ -40,6 +41,7 @@ router.post('/', async (req: Request, res: Response) => {
         contactId: contactId || null,
         companyId: companyId || null,
         actionId: actionId || null,
+        conversationId: conversationId || null,
       },
     });
     res.status(201).json(link);

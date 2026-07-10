@@ -206,6 +206,7 @@ model Conversation {
   tags               ConversationTag[]
   prepNotes          ConversationPrepNote[]
   attachments        ConversationAttachment[]
+  links              Link[]
   mentions           ConversationMention[]
 
   @@index([calendarUid])
@@ -465,6 +466,8 @@ model Link {
   company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   actionId    Int?
   action      Action?  @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  conversationId Int?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
 }
 

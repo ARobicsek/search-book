@@ -7,6 +7,7 @@ import type {
   ConversationAttachment,
   ConversationPrepNote,
   ConversationType,
+  LinkRecord,
   Tag,
 } from '@/lib/types'
 import {
@@ -48,7 +49,7 @@ import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import {
-  Check, ChevronDown, ChevronRight, Copy, FileText, ListTodo, Loader2, Paperclip,
+  Check, ChevronDown, ChevronRight, Copy, FileText, Link2, ListTodo, Loader2, Paperclip,
   Pencil, Plus, Star, Trash2, X,
 } from 'lucide-react'
 
@@ -364,6 +365,14 @@ function QuickLogDialog({
   const [uploadingFile, setUploadingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Document links (URL + label) — the same Link model used on contacts/companies/
+  // actions. Live rows once the meeting record exists; staged locally before that
+  // (flushed on finalize, like pending attachments). `newLink*` is the composer.
+  const [links, setLinks] = useState<LinkRecord[]>([])
+  const [pendingLinks, setPendingLinks] = useState<{ url: string; title: string }[]>([])
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkTitle, setNewLinkTitle] = useState('')
+
   // Follow-up actions: existing (edit mode, read-only links) + composer rows that
   // autosave as real Actions once the meeting record exists.
   const [existingActions, setExistingActions] = useState<NonNullable<Conversation['actions']>>([])
@@ -437,6 +446,10 @@ function QuickLogDialog({
     prepSaveChainRef.current = Promise.resolve()
     setAttachments([])
     setPendingAttachments([])
+    setLinks([])
+    setPendingLinks([])
+    setNewLinkUrl('')
+    setNewLinkTitle('')
     setExistingActions([])
     setNewActions([])
     newActionsRef.current = []
@@ -529,6 +542,7 @@ function QuickLogDialog({
           }
           setPrepNotes(conv.prepNotes || [])
           setAttachments(conv.attachments || [])
+          setLinks(conv.links || [])
           setExistingActions(conv.actions || [])
           // Expand sections that already have content. The 1:1 anchor field is
           // gone, but a legacy anchor (conv.companyId/contactId) still means
@@ -540,7 +554,7 @@ function QuickLogDialog({
           setShowSummaryNotes(!!(conv.summary || conv.nextSteps))
           // Prep notes live inside this section on mobile (no side panel), so
           // auto-expand it there when the meeting already has prep notes.
-          setShowTagsPrep(!!(conv.tags?.length || conv.attachments?.length || (conv.prepNotes?.length && !isDesktop)))
+          setShowTagsPrep(!!(conv.tags?.length || conv.attachments?.length || conv.links?.length || (conv.prepNotes?.length && !isDesktop)))
           // Seed the autosave snapshot from the loaded record so opening an edit
           // doesn't trigger an immediate no-op PUT. Mirrors buildAutosaveBody().
           lastSnapshotRef.current = JSON.stringify({
@@ -1014,6 +1028,15 @@ function QuickLogDialog({
         for (const att of pendingAttachments) {
           await api.post('/conversation-attachments', { conversationId, ...att })
         }
+
+        // Persist staged links + any URL still sitting in the composer (typed but
+        // not yet "Added") so nothing is lost on close.
+        const stagedLinks = [...pendingLinks]
+        const draftUrl = newLinkUrl.trim()
+        if (draftUrl) stagedLinks.push({ url: draftUrl, title: newLinkTitle.trim() || draftUrl })
+        for (const link of stagedLinks) {
+          await api.post('/links', { conversationId, url: link.url, title: link.title })
+        }
       })
 
       if (!silent) toast.success(isEdit ? 'Meeting updated' : 'Meeting logged')
@@ -1066,6 +1089,7 @@ function QuickLogDialog({
       tagIds.some((v) => !/^\d+$/.test(v))
     ) return true
     if (pendingPrepNotes.length > 0 || pendingAttachments.length > 0) return true
+    if (pendingLinks.length > 0 || newLinkUrl.trim()) return true
     if (newPrepContent.trim()) return true
     if (actionsDirty(newActions)) return true
     return false
@@ -1358,6 +1382,38 @@ function QuickLogDialog({
       setAttachments((prev) => prev.filter((a) => a.id !== id))
     } catch {
       toast.error('Failed to remove attachment')
+    }
+  }
+
+  // ── Links ─────────────────────────────────────────────────
+  // Add the composer URL as a link. Once the meeting record exists it's POSTed as a
+  // real Link right away; before that it's staged and flushed on finalize (mirrors
+  // attachments). Title defaults to the URL when left blank.
+  async function addLink() {
+    const url = newLinkUrl.trim()
+    if (!url) return
+    const title = newLinkTitle.trim() || url
+    if (savedIdRef.current !== null) {
+      try {
+        const created = await api.post<LinkRecord>('/links', { conversationId: savedIdRef.current, url, title })
+        setLinks((prev) => [...prev, created])
+      } catch {
+        toast.error('Failed to add link')
+        return
+      }
+    } else {
+      setPendingLinks((prev) => [...prev, { url, title }])
+    }
+    setNewLinkUrl('')
+    setNewLinkTitle('')
+  }
+
+  async function deleteLink(id: number) {
+    try {
+      await api.delete(`/links/${id}`)
+      setLinks((prev) => prev.filter((l) => l.id !== id))
+    } catch {
+      toast.error('Failed to remove link')
     }
   }
 
@@ -1909,9 +1965,10 @@ function QuickLogDialog({
         onClick={() => setShowTagsPrep((v) => !v)}
       >
         {showTagsPrep ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        Tags, prep notes &amp; attachments
+        Tags, prep notes, attachments &amp; links
         {(tagIds.length > 0 || prepNotes.length > 0 || pendingPrepNotes.length > 0 ||
-          attachments.length > 0 || pendingAttachments.length > 0) && (
+          attachments.length > 0 || pendingAttachments.length > 0 ||
+          links.length > 0 || pendingLinks.length > 0) && (
             <span className="text-xs text-primary">·</span>
           )}
       </button>
@@ -1999,6 +2056,71 @@ function QuickLogDialog({
               onChange={handleFileSelected}
               className="hidden"
             />
+          </div>
+
+          {/* Links — URLs attached to this meeting (the same Link model as
+              contacts, orgs & actions). Rendered as clickable chips like files. */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1">
+              <Link2 className="h-3.5 w-3.5" /> Links
+            </Label>
+            {(links.length > 0 || pendingLinks.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {links.map((l) => (
+                  <span key={l.id} className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs">
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="max-w-40 truncate text-primary hover:underline"
+                      title={l.url}
+                    >
+                      {l.title}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => deleteLink(l.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                      title="Remove link"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                {pendingLinks.map((l, i) => (
+                  <span key={`pl-${i}`} className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs">
+                    <span className="max-w-40 truncate" title={l.url}>{l.title}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPendingLinks((prev) => prev.filter((_, j) => j !== i))}
+                      className="text-muted-foreground hover:text-destructive"
+                      title="Remove link"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addLink() } }}
+                placeholder="URL (e.g. https://drive.google.com/...)"
+                className="h-8 text-sm sm:flex-1"
+              />
+              <Input
+                value={newLinkTitle}
+                onChange={(e) => setNewLinkTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addLink() } }}
+                placeholder="Label (optional)"
+                className="h-8 text-sm sm:w-44"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={addLink} disabled={!newLinkUrl.trim()}>
+                <Plus className="mr-1 h-3 w-3" /> Add link
+              </Button>
+            </div>
           </div>
         </div>
       )}

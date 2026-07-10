@@ -24,6 +24,7 @@ const meetingListInclude = {
   series: { select: { id: true, name: true } },
   prepNotes: { orderBy: [{ ordering: 'asc' as const }, { date: 'desc' as const }] },
   attachments: true,
+  links: { orderBy: { createdAt: 'asc' as const } },
 };
 
 // Sort whitelist for the list. Maps the client's sortBy to a real column.

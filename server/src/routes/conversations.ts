@@ -45,18 +45,21 @@ function normalizeParticipants(body: Record<string, unknown>): ParticipantInput[
   return undefined;
 }
 
-// A meeting needs at least one "who" facet: title, anchor contact, org anchor,
-// a named participant, or a free-text attendees description.
+// A meeting needs at least one "who/what" facet: title, series (its name stands
+// in for the title), anchor contact, org anchor, a named participant, or a
+// free-text attendees description.
 function hasWho(state: {
   contactId: number | null;
   title: string | null;
   companyId: number | null;
   attendeesDescription: string | null;
   participantCount: number;
+  seriesId: number | null;
 }): boolean {
   return !!(
     state.contactId ||
     state.title?.trim() ||
+    state.seriesId ||
     state.companyId ||
     state.attendeesDescription?.trim() ||
     state.participantCount > 0
@@ -64,7 +67,7 @@ function hasWho(state: {
 }
 
 const WHO_REQUIRED_MESSAGE =
-  'A meeting needs at least one of: title, contact, organization, participants, or attendees description';
+  'A meeting needs at least one of: title, series, contact, organization, participants, or attendees description';
 
 // GET /api/conversations/titles — distinct meeting titles for autocomplete
 // (series key, D4). Most-recently-used first; case-insensitive de-dupe.
@@ -182,6 +185,7 @@ router.post('/', async (req: Request, res: Response) => {
         companyId: anchorCompanyId,
         attendeesDescription: attendeesDescription ?? null,
         participantCount: participants.length,
+        seriesId: seriesId ? Number(seriesId) : null,
       })
     ) {
       res.status(400).json({ error: WHO_REQUIRED_MESSAGE });
@@ -384,6 +388,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         ? data.attendeesDescription
         : existing.attendeesDescription) as string | null,
       participantCount: participants !== undefined ? participants.length : existing.participants.length,
+      seriesId: ('seriesId' in data ? data.seriesId : existing.seriesId) as number | null,
     };
     if (!hasWho(finalState)) {
       res.status(400).json({ error: WHO_REQUIRED_MESSAGE });

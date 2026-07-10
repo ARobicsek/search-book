@@ -631,12 +631,13 @@ function QuickLogDialog({
     }
   }
 
-  // Server `hasWho` accepts a meeting only with a title / org / participant /
-  // attendees description — notes or summary alone are not enough to POST.
+  // Server `hasWho` accepts a meeting only with a title / series / org /
+  // participant / attendees description — notes or summary alone are not enough
+  // to POST. A series counts because its name stands in for the title.
   function autosaveValid(body: ReturnType<typeof buildAutosaveBody>) {
     return !!(
       body.date &&
-      (body.title || body.companyId !== null || body.orgIds.length > 0 ||
+      (body.title || body.seriesId !== null || body.companyId !== null || body.orgIds.length > 0 ||
         body.participants.length > 0 || body.attendeesDescription)
     )
   }
@@ -646,7 +647,7 @@ function QuickLogDialog({
   // an empty meeting. A participant beyond the seeded one also counts.
   function hasMeaningfulContent(body: ReturnType<typeof buildAutosaveBody>) {
     return !!(
-      body.title || body.summary || body.notes || body.nextSteps ||
+      body.title || body.seriesId !== null || body.summary || body.notes || body.nextSteps ||
       body.attendeesDescription || body.companyId !== null || body.orgIds.length > 0 ||
       body.participants.length > seededParticipantCountRef.current
     )
@@ -960,8 +961,8 @@ function QuickLogDialog({
       if (!silent) toast.error('Date is required')
       return false
     }
-    if (!title.trim() && orgValues.length === 0 && participantIds.length === 0 && !attendeesDescription.trim()) {
-      if (!silent) toast.error('Add a title (or someone who was there)')
+    if (!title.trim() && !seriesId && orgValues.length === 0 && participantIds.length === 0 && !attendeesDescription.trim()) {
+      if (!silent) toast.error('Add a title, series, or someone who was there')
       return false
     }
     setSaving(true)

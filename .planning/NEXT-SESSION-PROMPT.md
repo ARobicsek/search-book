@@ -5,6 +5,29 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Vercel-exit contingency plan (2026-07-09, docs-only)
+
+NCQA IT is unhappy the app is hosted on Vercel (they perceive it as an "AI system" risk). The owner
+asked for the best **free** alternative (single user, immediate performance required) and a
+just-in-case migration plan detailed enough for a less powerful model to execute later.
+**Docs-only session — zero code changes, nothing deployed; Vercel remains the live target.**
+
+- **Decision: Google Cloud Run + Google Cloud Storage + Cloud Scheduler, keeping Turso.** The
+  backend already runs as a plain Express server, so the port is mechanical (blob-storage swap,
+  static serving, Dockerfile); the every-minute reminders cron doubles as a free keep-warm ping
+  (request-based billing doesn't charge idle instances), so no user-facing cold starts. Free-tier
+  math uses <5% of every quota. Runner-up Cloudflare Workers rejected mainly for the free plan's
+  **10 ms CPU cap** (hard-failure risk for Express+Prisma) + web-push/multer porting; Render free
+  rejected for 30–60 s cold starts; Fly's free tier is dead; Oracle VM = unmanaged patching burden.
+- **New doc: `.planning/VERCEL-EXIT-PLAN.md`** — 6 phases with exact commands, complete code
+  snippets (storage abstraction, GCS media proxy, backup download proxy, Dockerfile, blob-copy +
+  DB URL-rewrite scripts with `--undo`), verification gates, rollback notes, and the short list of
+  owner-only steps (Google billing account, Vercel env values, fresh Turso token, per-device PWA +
+  push re-enrollment). Phase-1 code changes are env-gated so the same commit would still deploy to
+  Vercel unchanged (safe parallel-run).
+- **Do NOT start executing it unless the owner explicitly says so.** If IT pressure escalates, the
+  kickoff is: "run the Vercel exit plan" → follow the plan's phases in order.
+
 ### What Was Just Completed — Meetings "Upcoming only" filter + new actions default to due today (2026-07-07 s2)
 
 Two owner asks, **schema-free**, two feature commits straight to `main`.

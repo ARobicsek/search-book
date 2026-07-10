@@ -8,6 +8,7 @@ reading **`AGENTS.md`** (repo root) — it's the canonical session protocol and 
 | File | Purpose |
 |------|---------|
 | [NCQA-ADAPTATION-PLAN.md](NCQA-ADAPTATION-PLAN.md) | **Plan of record.** The NCQA CMO stakeholder-management adaptation (Phases 1–2 shipped; Phase 3+ gated on decisions D5–D9). |
+| [VERCEL-EXIT-PLAN.md](VERCEL-EXIT-PLAN.md) | **Contingency (not started).** If IT forces a move off Vercel: full migration plan to Google Cloud Run + GCS + Cloud Scheduler (keep Turso). Execute only on the owner's say-so. |
 
 ## Session system (read/update every session)
 

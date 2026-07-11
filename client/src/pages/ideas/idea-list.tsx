@@ -105,6 +105,31 @@ function formatDate(dateStr: string) {
   })
 }
 
+// Full date + time — used in the hover tooltip so both timestamps are always
+// available precisely, even when the inline label shows a bare date.
+function formatDateTime(dateStr: string) {
+  return new Date(dateStr).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+// True when two timestamps fall on different local calendar days. We suppress the
+// "Updated" label for same-day edits: it would just repeat the created date, so the
+// inline UI stays clean while the tooltip still carries the exact edit time.
+function onDifferentDay(a: string, b: string) {
+  const da = new Date(a)
+  const db = new Date(b)
+  return (
+    da.getFullYear() !== db.getFullYear() ||
+    da.getMonth() !== db.getMonth() ||
+    da.getDate() !== db.getDate()
+  )
+}
+
 export function IdeaListPage() {
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [loading, setLoading] = useState(true)
@@ -593,6 +618,29 @@ export function IdeaListPage() {
         ))
       : null
 
+  // Created + (when edited on a later day) "Updated" line. Both exact timestamps
+  // always live in the hover tooltip, so a user can see created AND last-updated
+  // at a glance or on hover without cluttering the common (never-edited) case.
+  const renderTimestamps = (idea: Idea, className?: string) => {
+    const edited = idea.updatedAt && onDifferentDay(idea.createdAt, idea.updatedAt)
+    const tooltip =
+      `Created ${formatDateTime(idea.createdAt)}` +
+      (idea.updatedAt ? `\nUpdated ${formatDateTime(idea.updatedAt)}` : '')
+    return (
+      // Each date is atomic (whitespace-nowrap); a wrap may fall *between* them on a
+      // narrow card. The list view passes an outer nowrap to keep it one line on desktop.
+      <span className={cn('text-xs text-muted-foreground', className)} title={tooltip}>
+        <span className="whitespace-nowrap">Created {formatDate(idea.createdAt)}</span>
+        {edited && (
+          <span className="whitespace-nowrap text-muted-foreground/70">
+            <span className="mx-1 opacity-50">·</span>
+            <span className="italic">Updated {formatDate(idea.updatedAt!)}</span>
+          </span>
+        )}
+      </span>
+    )
+  }
+
   const renderRelatedChips = (idea: Idea) => (
     <>
       {idea.contacts?.map((ic) => (
@@ -763,9 +811,7 @@ export function IdeaListPage() {
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="hidden whitespace-nowrap text-xs text-muted-foreground sm:inline">
-                      {formatDate(idea.createdAt)}
-                    </span>
+                    {renderTimestamps(idea, 'hidden whitespace-nowrap sm:inline')}
                     {renderIdeaActions(idea)}
                   </div>
                 </div>
@@ -844,7 +890,7 @@ export function IdeaListPage() {
                 )}
               </CardContent>
               <div className="px-6">
-                <p className="text-xs text-muted-foreground">{formatDate(idea.createdAt)}</p>
+                {renderTimestamps(idea)}
               </div>
             </Card>
             )

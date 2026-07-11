@@ -202,6 +202,8 @@ export interface Idea {
   tagLinks?: { tag: { id: number; name: string } }[];
   archived: boolean;
   createdAt: string;
+  /** Auto-maintained by Prisma @updatedAt. Null only for legacy rows not yet backfilled/edited. */
+  updatedAt?: string | null;
   contacts?: { contact: { id: number; name: string } }[];
   companies?: { company: { id: number; name: string } }[];
 }

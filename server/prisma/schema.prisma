@@ -417,6 +417,11 @@ model Idea {
   tags        String?  // Legacy comma-separated tags — superseded by the IdeaTag junction (kept for back-compat; backfilled into IdeaTag)
   archived    Boolean  @default(false) // Soft-archive: hidden from the default Ideas list/search; revealed via the lozenge filter
   createdAt   DateTime @default(now())
+  // Nullable @updatedAt (unlike the non-null variant on Contact/Company/Conversation)
+  // so the column could be added to the already-populated Idea table via a plain
+  // additive ALTER — no table rebuild. Prisma auto-populates it on every create/update,
+  // so new rows always have it; pre-existing rows are backfilled to createdAt by the DDL.
+  updatedAt   DateTime? @updatedAt
 
   contacts    IdeaContact[]
   companies   IdeaCompany[]

@@ -5,6 +5,41 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Ideas now show created **and** last-updated (2026-07-10 s2)
+
+One owner UX ask: on the Ideas list/cards, easily see **both** when an idea was created and when it
+was last edited. **SCHEMA** (owner applied the Turso DDL), one feature commit to `main` (`83c6a8a`).
+
+- **Root gap:** the `Idea` model only ever tracked `createdAt` — there was no update timestamp at all.
+  Added `Idea.updatedAt DateTime? @updatedAt` (**nullable** on purpose, unlike the non-null variant on
+  Contact/Company/Conversation, so the column drops onto the already-populated table via a plain
+  additive `ALTER` — no rebuild). Prisma auto-maintains it on every create/update, so the existing PUT
+  + archive PATCH already bump it with **zero route changes**.
+- **UI (`client/src/pages/ideas/idea-list.tsx`):** new shared `renderTimestamps()` (used by both card
+  and list views) shows **"Created {date}"** always, appending a dimmed/italic **"· Updated {date}"**
+  **only when the edit lands on a different local calendar day** — same-day tweaks would just repeat the
+  date, so they stay clean and noise-free. A **hover tooltip always carries both exact timestamps with
+  the time**, so both are available at a glance or precisely on hover. Each date is atomic
+  (`whitespace-nowrap`) with a wrap allowed *between* the two, so a 390px card can't overflow; the list
+  view passes an outer nowrap to stay one line on desktop (its date column is `hidden sm:inline` as before).
+- **Turso DDL applied by owner** via the web SQL console:
+  `ALTER TABLE "Idea" ADD COLUMN "updatedAt" DATETIME;` then
+  `UPDATE "Idea" SET "updatedAt" = "createdAt" WHERE "updatedAt" IS NULL;` (backfills existing ideas so
+  they read "created-only" until their next real edit). Pushed only after confirmation.
+- **Backup unchanged** — `Idea` round-trips full records in both paths (no field list to touch); the
+  new column rides along automatically. Client type gained `updatedAt?: string | null`.
+- **Behavioral note:** archiving/unarchiving an idea also bumps `updatedAt` (it's a `.update()`). Left
+  as-is (defensible); flagged to owner — make the archive PATCH preserve the timestamp if that's unwanted.
+
+`prepush` (client+server typecheck + 32-table backup guard) + full `npm run build` (client vite + server
+tsc) green. **Local-DB gotcha re-hit** (again): `prisma db execute` from `server/` wrote the column to the
+stray `server/dev.db`, not the runtime's `server/prisma/dev.db` (→ 500s once the client regenerated), fixed
+by ALTERing the correct file directly via better-sqlite3. **Browser not driven** (chrome-devtools MCP
+couldn't attach — the profile's Chrome was already in use); instead verified the endpoint returns
+`updatedAt` (curl) and unit-checked the created-vs-updated render branches (incl. the UTC/local-day
+boundary) in Node against `America/New_York`. Mobile handled by construction (wrap-between-dates); eyeball
+390px if convenient.
+
 ### What Was Just Completed — Meeting links (real feature) + series-as-title (+ series-only save) + blue picker highlight + dropped title suggestions (2026-07-10)
 
 Four owner UX asks for the meeting log — **four commits to `main`**, three schema-free + one **SCHEMA** (owner applied the Turso DDL). Order matters: the "links" ask was reshaped mid-session from an inline button into a real feature.
@@ -490,7 +525,11 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
 
 ### Working branch
 
-`main` tip is the **2026-07-10** session (`059618b` + this docs commit): meeting-log **document links**
+`main` tip is the **2026-07-10 s2** session: **`83c6a8a`** — Ideas now show **created + last-updated**
+(new nullable `Idea.updatedAt @updatedAt`, the one **SCHEMA** change; **Turso DDL applied by owner**;
+list/card footer shows "Created … · Updated …" only on a different-day edit, both exact times in the
+tooltip) — plus this docs commit. **⚠ No held commits; the Turso DDL is already applied** (`Idea.updatedAt`
+exists in Turso). Before it, the **2026-07-10** session (`059618b`): meeting-log **document links**
 (a real `Link`-model feature — the one **SCHEMA** change this session: `Link.conversationId` + FK
 cascade; **Turso DDL applied by owner**), **series name as the meeting title** plus a fix so a
 **series-only meeting saves**, a **blue combobox dropdown highlight**, and the removed **Title
@@ -558,7 +597,12 @@ Durable version (works every session — it defers to the docs, which stay curre
 > Start a SearchBook session: read `AGENTS.md` and follow its "Session start" steps, then summarize
 > where we left off and what's next before doing anything.
 
-Context for *this* upcoming session specifically: the most recent session (**2026-07-10**) was four
+Context for *this* upcoming session specifically: the most recent session (**2026-07-10 s2**) was a
+single **owner UX ask** — the Ideas list/cards now show **both created and last-updated** dates. It
+added the missing `Idea.updatedAt` (nullable `@updatedAt`, the one **SCHEMA** change — **Turso DDL
+applied by owner**) and a shared `renderTimestamps()` that shows "Created {date}" always plus a dimmed
+"· Updated {date}" only on a different-day edit, with both exact timestamps in the hover tooltip
+(`83c6a8a`). Nothing pending. Before it, the **2026-07-10** session was four
 **owner UX asks** for the meeting log — a real **document-Links feature** on meetings (shared `Link`
 model; `Link.conversationId` + FK cascade — the one SCHEMA change, **Turso DDL applied by owner**;
 managed in the Quick Log "Tags, prep notes, attachments & links" section, chips in the detail dialog

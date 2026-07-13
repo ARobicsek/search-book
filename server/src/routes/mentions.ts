@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import {
   resyncConversationMentions,
+  mentionMeetingSelect,
   looseMentionToken,
   resolvedMentionToken,
   looseOrgMentionToken,
@@ -9,41 +10,6 @@ import {
 } from '../lib/mentions';
 
 const router = Router();
-
-// Fields needed to render a meeting's display name + a note snippet in the
-// Mentions review surfaces (mirrors the client's conversationDisplayName inputs).
-const mentionMeetingSelect = {
-  id: true,
-  title: true,
-  date: true,
-  datePrecision: true,
-  type: true,
-  notes: true,
-  nextSteps: true,
-  attendeesDescription: true,
-  updatedAt: true,
-  // Prep notes can hold @-mentions too; needed to snippet a prep-note-only mention.
-  prepNotes: { select: { content: true } },
-  contact: { select: { id: true, name: true } },
-  company: { select: { id: true, name: true } },
-  participants: {
-    select: { contact: { select: { id: true, name: true } } },
-    orderBy: { ordering: 'asc' as const },
-    take: 1,
-  },
-  mentions: {
-    select: {
-      id: true,
-      kind: true,
-      mentionedName: true,
-      contactId: true,
-      contact: { select: { id: true, name: true } },
-      companyId: true,
-      company: { select: { id: true, name: true } },
-    },
-    orderBy: { id: 'asc' as const },
-  },
-};
 
 // GET /api/mentions — meetings that contain at least one @-mention, newest first.
 // Optional `contactId` filters to meetings where THAT contact was mentioned, and
@@ -80,6 +46,78 @@ router.get('/', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching mentions:', error);
     res.status(500).json({ error: 'Failed to fetch mentions' });
+  }
+});
+
+// GET /api/mentions/index?q=&limit= — the distinct people/organizations that have
+// actually BEEN @-mentioned, each with the number of meetings it was mentioned in.
+// This backs the "@" picker in global search: you can't type the exact spelling of a
+// name if you can't see it, so the picker offers the real spellings — including loose
+// names that were never made contacts — and every option is guaranteed to have a hit.
+//
+// Aggregated in JS rather than with groupBy/_count (the Turso adapter gotcha). Mention
+// rows are already one-per-meeting-per-entity, so a row count IS a meeting count.
+router.get('/index', async (req: Request, res: Response) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+    const rows = await prisma.conversationMention.findMany({
+      where: q
+        ? {
+          OR: [
+            { mentionedName: { contains: q } },
+            { contact: { name: { contains: q } } },
+            { contact: { preferredName: { contains: q } } },
+            { company: { name: { contains: q } } },
+          ],
+        }
+        : undefined,
+      select: {
+        kind: true,
+        mentionedName: true,
+        contactId: true,
+        contact: { select: { id: true, name: true } },
+        companyId: true,
+        company: { select: { id: true, name: true } },
+      },
+      take: 500,
+    });
+
+    // One entry per distinct target. A mention bound to a CRM record is keyed by id
+    // (so two people with the same name stay distinct, and a later rename doesn't
+    // split the group); a loose mention is keyed by its lowercased name + kind.
+    type Entry = { key: string; kind: string; name: string; bound: boolean; count: number };
+    const byKey = new Map<string, Entry>();
+    for (const row of rows) {
+      let key: string;
+      let name: string;
+      if (row.contact) {
+        key = `contact:${row.contact.id}`;
+        name = row.contact.name;
+      } else if (row.company) {
+        key = `company:${row.company.id}`;
+        name = row.company.name;
+      } else {
+        const loose = row.kind === 'COMPANY' ? 'org' : 'person';
+        key = `${loose}:${row.mentionedName.trim().toLowerCase()}`;
+        name = row.mentionedName.trim();
+      }
+      const existing = byKey.get(key);
+      if (existing) existing.count += 1;
+      else byKey.set(key, { key, kind: row.kind, name, bound: !!(row.contact || row.company), count: 1 });
+    }
+
+    // Most-mentioned first — with a bare "@" (no query) that makes the picker a
+    // useful "who comes up most" list rather than an arbitrary slice.
+    const data = [...byKey.values()]
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+      .slice(0, limit);
+
+    res.json(data);
+  } catch (error) {
+    console.error('Error building mention index:', error);
+    res.status(500).json({ error: 'Failed to load mentions' });
   }
 });
 

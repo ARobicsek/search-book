@@ -1,5 +1,12 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
+import {
+  humanizeMentions,
+  mentionMeetingSelect,
+  mentionMatchesTarget,
+  mentionTargetClause,
+  parseMentionTarget,
+} from '../lib/mentions';
 
 const router = Router();
 
@@ -7,9 +14,11 @@ const router = Router();
 // User-selectable groups of fields (SEARCH-UPGRADE-PLAN.md decision 3).
 // "people-profile" vs "people-notes" split lets "Boston" find people located
 // in Boston without drowning in every meeting note that mentions Boston.
+// "mentions" searches the ConversationMention index — who was @-mentioned in a
+// meeting note — rather than the note prose (see the mentions block below).
 
-type Scope = 'people-profile' | 'people-notes' | 'useful' | 'orgs' | 'meetings' | 'actions' | 'ideas';
-const ALL_SCOPES: Scope[] = ['people-profile', 'people-notes', 'useful', 'orgs', 'meetings', 'actions', 'ideas'];
+type Scope = 'people-profile' | 'people-notes' | 'useful' | 'orgs' | 'meetings' | 'mentions' | 'actions' | 'ideas';
+const ALL_SCOPES: Scope[] = ['people-profile', 'people-notes', 'useful', 'orgs', 'meetings', 'mentions', 'actions', 'ideas'];
 
 type SortMode = 'relevance' | 'newest' | 'oldest' | 'alpha' | 'recent-contact';
 
@@ -146,13 +155,21 @@ router.get('/', async (req: Request, res: Response) => {
       : [];
     const hasTagFilter = tagIds.length > 0;
 
+    // A mention target picked from the "@" picker pins WHO the search is about
+    // ("every meeting that @-mentions Anne Marie Smith"). It's a search criterion in
+    // its own right — like a tag, no text needed — and it's exact: an id for a CRM
+    // record, a name for a loose mention, never a fuzzy text match on note prose.
+    const mentionTarget = parseMentionTarget(
+      typeof req.query.mention === 'string' ? req.query.mention.trim() : undefined
+    );
+
     const qStr = typeof q === 'string' ? q.trim() : '';
     // Terms are parsed only when there's a real query; a tag-only search runs with
     // no terms (the DB text-clause AND-array is then empty = match-all, intersected
     // with the tag filter).
     const terms = qStr.length >= 2 ? parseTerms(qStr) : [];
-    if (terms.length === 0 && !hasTagFilter) {
-      return res.status(400).json({ error: 'Query must be at least 2 characters (or pick a tag)' });
+    if (terms.length === 0 && !hasTagFilter && !mentionTarget) {
+      return res.status(400).json({ error: 'Query must be at least 2 characters (or pick a tag or an @-mention)' });
     }
 
     const maxResults = Math.min(parseInt(limit as string) || 10, 50);
@@ -171,7 +188,12 @@ router.get('/', async (req: Request, res: Response) => {
     const scopesParam = typeof req.query.scopes === 'string' && req.query.scopes.trim()
       ? (req.query.scopes.split(',').map((s) => s.trim()) as Scope[]).filter((s) => ALL_SCOPES.includes(s))
       : ALL_SCOPES;
-    const scopes = new Set<Scope>(scopesParam.length ? scopesParam : ALL_SCOPES);
+    // A picked @-mention makes the search a mention search, full stop — the other
+    // scopes have nothing to say about "who was @-mentioned", and with no text terms
+    // they'd match every record in the CRM. The client mirrors this in its chips.
+    const scopes = new Set<Scope>(
+      mentionTarget ? ['mentions'] : (scopesParam.length ? scopesParam : ALL_SCOPES)
+    );
 
     const peopleProfile = scopes.has('people-profile');
     const peopleNotes = scopes.has('people-notes');
@@ -420,8 +442,10 @@ router.get('/', async (req: Request, res: Response) => {
       pushField(fields, 'title', c.title, 3);
       for (const t of c.tags || []) if (t.tag.name !== FAVORITE_TAG_NAME) pushField(fields, 'tag', t.tag.name, 2);
       pushField(fields, 'summary', c.summary, 1);
-      pushField(fields, 'notes', c.notes, 1);
-      pushField(fields, 'next steps', c.nextSteps, 1);
+      // Note text is humanized ("[@Ann](/contacts/7)" → "@Ann") so a snippet reads
+      // as prose instead of raw markdown. The name still matches either way.
+      pushField(fields, 'notes', humanizeMentions(c.notes), 1);
+      pushField(fields, 'next steps', humanizeMentions(c.nextSteps), 1);
       pushField(fields, 'attendees', c.attendeesDescription, 1);
       pushField(fields, 'contact', c.contact?.name, 1);
       pushField(fields, 'organization', c.company?.name, 1);
@@ -432,8 +456,88 @@ router.get('/', async (req: Request, res: Response) => {
       }
       for (const cd of c.contactsDiscussed || []) pushField(fields, 'person discussed', cd.contact.name, 1);
       for (const cd of c.companiesDiscussed || []) pushField(fields, 'org discussed', cd.company.name, 1);
-      for (const pn of c.prepNotes || []) pushField(fields, 'prep note', pn.content, 1);
+      for (const pn of c.prepNotes || []) pushField(fields, 'prep note', humanizeMentions(pn.content), 1);
       for (const a of c.attachments || []) pushField(fields, 'attachment', a.name, 1);
+      return fields;
+    };
+
+    // ── @-Mentions ───────────────────────────────────────────
+    // "Show me every time Anne Marie Smith was @-mentioned." Searches the
+    // ConversationMention index (who was flagged with "@" while note-taking), NOT
+    // the note prose — so an incidental sentence about someone doesn't drown out
+    // the meetings where they were actually called out. A hit is a MEETING, which
+    // then carries only the mentions that matched.
+    //
+    // A mention is matched on the name as typed AND on the linked contact/org's
+    // current name, so someone renamed after the note was written is still findable
+    // under either name.
+    const mentionClausesFor = (term: string): Record<string, unknown>[] => [
+      { mentionedName: { contains: term } },
+      { contact: { name: { contains: term } } },
+      { contact: { preferredName: { contains: term } } },
+      { company: { name: { contains: term } } },
+    ];
+
+    // Once the "@" picker has pinned WHO, the query words change job: they narrow
+    // WHERE — the meeting's own text — instead of searching for a name. (Kept in
+    // lockstep with collectMentionMeetingFields below: if the DB matched a field the
+    // JS verifier can't see, the row would be fetched and then silently dropped.)
+    const mentionMeetingTextClausesFor = (term: string): Record<string, unknown>[] => [
+      { title: { contains: term } },
+      { notes: { contains: term } },
+      { nextSteps: { contains: term } },
+      { attendeesDescription: { contains: term } },
+      { prepNotes: { some: { content: { contains: term } } } },
+    ];
+
+    // Without a picked target, all terms must be satisfied by ONE mention row — a
+    // `some` per term would let "Anne Smith" match a meeting that separately mentions
+    // "Anne Jones" and "Bob Smith". With no terms at all (tag-only search) this is
+    // just "has any mention".
+    const mentionWhere = mentionTarget
+      ? {
+        AND: [
+          { mentions: { some: mentionTargetClause(mentionTarget) } },
+          ...terms.map((t) => ({ OR: mentionMeetingTextClausesFor(t) })),
+          ...tagClause('tags'),
+        ],
+      }
+      : {
+        AND: [
+          {
+            mentions: {
+              some: terms.length ? { AND: terms.map((t) => ({ OR: mentionClausesFor(t) })) } : {},
+            },
+          },
+          ...tagClause('tags'),
+        ],
+      };
+
+    const mentionsPromise: Promise<any[]> = scopes.has('mentions')
+      ? prisma.conversation.findMany({
+        where: mentionWhere,
+        select: mentionMeetingSelect,
+        take,
+        orderBy: { date: 'desc' },
+      })
+      : Promise.resolve([]);
+
+    const collectMentionFields = (m: any): FieldVal[] => {
+      const fields: FieldVal[] = [];
+      pushField(fields, 'mentioned', m.mentionedName, 3);
+      pushField(fields, 'mentioned', m.contact?.name, 3);
+      pushField(fields, 'mentioned', m.contact?.preferredName, 3);
+      pushField(fields, 'mentioned', m.company?.name, 3);
+      return fields;
+    };
+
+    const collectMentionMeetingFields = (c: any): FieldVal[] => {
+      const fields: FieldVal[] = [];
+      pushField(fields, 'title', c.title, 3);
+      pushField(fields, 'notes', humanizeMentions(c.notes), 1);
+      pushField(fields, 'next steps', humanizeMentions(c.nextSteps), 1);
+      pushField(fields, 'attendees', c.attendeesDescription, 1);
+      for (const pn of c.prepNotes || []) pushField(fields, 'prep note', humanizeMentions(pn.content), 1);
       return fields;
     };
 
@@ -503,8 +607,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Independent top-level queries run concurrently (one round-trip wave instead
     // of five sequential ones — the other half of the ~20s fix).
-    const [contacts, companies, conversations, actions, ideas] = await Promise.all([
-      contactsPromise, companiesPromise, conversationsPromise, actionsPromise, ideasPromise,
+    const [contacts, companies, conversations, mentionMeetings, actions, ideas] = await Promise.all([
+      contactsPromise, companiesPromise, conversationsPromise, mentionsPromise, actionsPromise, ideasPromise,
     ]);
 
     const collectIdeaFields = (i: any): FieldVal[] => {
@@ -539,6 +643,47 @@ router.get('/', async (req: Request, res: Response) => {
 
     const isoOf = (d: Date | string | null | undefined) =>
       d ? (typeof d === 'string' ? d : d.toISOString()) : '';
+
+    // A mention meeting keeps only the mentions that matched — the card chips who you
+    // searched for, not everyone else the meeting happened to mention. This is also
+    // where case-sensitive filtering lands (the DB LIKE is insensitive, so it handed
+    // back a superset).
+    //
+    // With a picked target the mention match is exact (id, or name equality) and the
+    // terms are verified against the MEETING's text; without one, the terms are what
+    // identify the mention. With neither (tag-only browse) every mention passes.
+    const evMentionMeetings = mentionMeetings
+      .map((conv: any) => {
+        let score = 0;
+        let matches: MatchEvidence[] = [];
+        let matched: any[];
+
+        if (mentionTarget) {
+          const verified = evaluateRecord(collectMentionMeetingFields(conv), terms, caseSensitive);
+          if (!verified) return null;
+          score = verified.score;
+          matches = verified.matches;
+          matched = (conv.mentions || []).filter((m: any) => mentionMatchesTarget(m, mentionTarget));
+        } else {
+          matched = (conv.mentions || []).filter((m: any) => {
+            const r = evaluateRecord(collectMentionFields(m), terms, caseSensitive);
+            if (!r) return false;
+            score = Math.max(score, r.score);
+            return true;
+          });
+        }
+
+        if (matched.length === 0) return null;
+        return {
+          ...conv,
+          mentions: matched,
+          // Only meaningful with a picked target: with none, the "evidence" would just
+          // restate the name already on the chip.
+          _matches: matches,
+          _s: { score, recency: conv.date || '', alpha: matched[0]?.mentionedName || '' },
+        };
+      })
+      .filter((conv): conv is NonNullable<typeof conv> => conv !== null);
 
     let evContacts = evaluate(contacts, collectContactFields, (c) => isoOf(c.updatedAt), (c) => c.name);
     const evCompanies = evaluate(companies, collectCompanyFields, (c) => isoOf(c.updatedAt), (c) => c.name);
@@ -578,6 +723,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
     sortRecords(evCompanies, sort);
     sortRecords(evConversations, sort);
+    sortRecords(evMentionMeetings, sort);
     sortRecords(evActions, sort);
     sortRecords(evIdeas, sort);
 
@@ -585,8 +731,27 @@ router.get('/', async (req: Request, res: Response) => {
     const cappedContacts = cap(evContacts);
     const cappedCompanies = cap(evCompanies);
     const cappedConversations = cap(evConversations);
+    const cappedMentionMeetings = cap(evMentionMeetings);
     const cappedActions = cap(evActions);
     const cappedIdeas = cap(evIdeas);
+
+    // Exact count of meetings in the mentions group. A LOOSE target's DB clause has to
+    // use `contains` (Prisma's `equals` is case-sensitive on SQLite), which can
+    // over-match a longer name — "Anne Marie Smith" is a substring of "Anne Marie
+    // Smithson" — so those rows are verified in JS before counting. Every other case
+    // counts in the DB.
+    const countMentionMeetings = async (): Promise<number> => {
+      if (mentionTarget && !mentionTarget.bound) {
+        const rows = await prisma.conversation.findMany({
+          where: mentionWhere,
+          select: {
+            mentions: { select: { kind: true, contactId: true, companyId: true, mentionedName: true } },
+          },
+        });
+        return rows.filter((r) => r.mentions.some((m) => mentionMatchesTarget(m, mentionTarget))).length;
+      }
+      return prisma.conversation.count({ where: mentionWhere });
+    };
 
     // ── Totals per group (for "show all N" links) ────────────
     // In case-sensitive mode DB counts are an insensitive superset, so report
@@ -597,11 +762,12 @@ router.get('/', async (req: Request, res: Response) => {
         contacts: evContacts.length,
         companies: evCompanies.length,
         conversations: evConversations.length,
+        mentions: evMentionMeetings.length,
         actions: evActions.length,
         ideas: evIdeas.length,
       };
     } else {
-      const [tContacts, tCompanies, tConversations, tActions, tIdeas] = await Promise.all([
+      const [tContacts, tCompanies, tConversations, tMentions, tActions, tIdeas] = await Promise.all([
         anyPeople
           ? prisma.contact.count({ where: { AND: [...terms.map((t) => ({ OR: contactClausesFor(t) })), ...tagClause('tags')] } })
           : 0,
@@ -611,6 +777,7 @@ router.get('/', async (req: Request, res: Response) => {
         scopes.has('meetings')
           ? prisma.conversation.count({ where: { AND: [...terms.map((t) => ({ OR: conversationClausesFor(t) })), ...tagClause('tags')] } })
           : 0,
+        scopes.has('mentions') ? countMentionMeetings() : 0,
         scopes.has('actions') && !hasTagFilter
           ? prisma.action.count({ where: { AND: terms.map((t) => ({ OR: actionClausesFor(t) })) } })
           : 0,
@@ -620,7 +787,7 @@ router.get('/', async (req: Request, res: Response) => {
       ]);
       totals = {
         contacts: tContacts, companies: tCompanies, conversations: tConversations,
-        actions: tActions, ideas: tIdeas,
+        mentions: tMentions, actions: tActions, ideas: tIdeas,
       };
     }
 
@@ -697,12 +864,48 @@ router.get('/', async (req: Request, res: Response) => {
       matches: conv._matches,
     }));
 
+    // Mention hits ship the meeting's note text (notes / next steps / prep notes)
+    // rather than a server-cut snippet: the client already knows how to window the
+    // text around a given mention *without* slicing through a token (lib/mentions.ts
+    // `mentionSnippets`), and reusing it keeps that logic in one place.
+    const mentionResults = cappedMentionMeetings.map(({ _s, _matches, tags, ...conv }: any) => ({
+      ...conv,
+      tags: visibleTags(tags),
+      // Present only when a target was picked AND words were typed — "which of her
+      // mentions was about budget". Otherwise the chip already says why it matched.
+      matches: _matches,
+    }));
+
+    // Echo the picked target back, resolved to a display name, so a deep link
+    // (?mention=contact:440) can label its chip without a second round-trip.
+    let mentionEcho: { key: string; name: string; kind: string; bound: boolean } | null = null;
+    if (mentionTarget) {
+      let name: string;
+      if (mentionTarget.bound) {
+        const rec = mentionTarget.kind === 'COMPANY'
+          ? await prisma.company.findUnique({ where: { id: mentionTarget.id }, select: { name: true } })
+          : await prisma.contact.findUnique({ where: { id: mentionTarget.id }, select: { name: true } });
+        name = rec?.name ?? '';
+      } else {
+        // The key is lowercased (it has to be, to group case variants), so prefer the
+        // name as actually typed in a note — otherwise a deep link's chip shouts
+        // "anne marie smith" back at you.
+        name = mentionResults[0]?.mentions?.[0]?.mentionedName ?? mentionTarget.name;
+      }
+      mentionEcho = {
+        key: String(req.query.mention).trim(),
+        name,
+        kind: mentionTarget.kind,
+        bound: mentionTarget.bound,
+      };
+    }
+
     console.log(
       `[TIMING] search q="${qStr}" terms=${terms.length} tags=${tagIds.length} scopes=${[...scopes].join('+')} ` +
       `cs=${caseSensitive} sort=${sort} → ${Date.now() - tStart}ms ` +
       `(contacts ${contactResults.length}/${totals.contacts}, companies ${companyResults.length}/${totals.companies}, ` +
-      `meetings ${conversationResults.length}/${totals.conversations}, actions ${actionResults.length}/${totals.actions}, ` +
-      `ideas ${ideaResults.length}/${totals.ideas})`
+      `meetings ${conversationResults.length}/${totals.conversations}, mentions ${mentionResults.length}/${totals.mentions}, ` +
+      `actions ${actionResults.length}/${totals.actions}, ideas ${ideaResults.length}/${totals.ideas})`
     );
 
     res.json({
@@ -718,6 +921,8 @@ router.get('/', async (req: Request, res: Response) => {
       actions: actionResults,
       ideas: ideaResults,
       conversations: conversationResults,
+      mentions: mentionResults,
+      mention: mentionEcho,
     });
   } catch (error) {
     console.error('Search error:', error);

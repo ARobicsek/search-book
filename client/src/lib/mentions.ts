@@ -169,6 +169,36 @@ export function mentionSnippets(
   return merged.map((w) => sliceWindow(text, w))
 }
 
+// The note context around a meeting's @-mentions: every snippet in its notes, next
+// steps and prep notes that surrounds one of `mentions`, de-duplicated. The Mentions
+// review page and the search page's "@-Mentions" group both show exactly this — a
+// mention only means something with the sentence it was written in.
+export function meetingMentionSnippets(meeting: {
+  notes: string | null
+  nextSteps: string | null
+  prepNotes: { content: string }[]
+  mentions: { kind: 'CONTACT' | 'COMPANY'; mentionedName: string; contactId: number | null; companyId: number | null }[]
+}): string[] {
+  const matchers: MentionMatcher[] = meeting.mentions.map((m) =>
+    m.contactId != null
+      ? { contactId: m.contactId }
+      : m.companyId != null
+        ? { companyId: m.companyId }
+        : { name: m.mentionedName, kind: m.kind },
+  )
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const text of [meeting.notes, meeting.nextSteps, ...meeting.prepNotes.map((p) => p.content)]) {
+    for (const snippet of mentionSnippets(text, matchers)) {
+      if (!seen.has(snippet)) {
+        seen.add(snippet)
+        out.push(snippet)
+      }
+    }
+  }
+  return out
+}
+
 // Characters allowed inside the in-progress "@query" (names: letters incl.
 // accents, digits, spaces, and . ' -). Anything else ends the mention.
 const QUERY_CHAR = /[\p{L}\p{N} .'’-]/u

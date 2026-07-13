@@ -287,13 +287,15 @@ export interface ConversationMention {
   kind: 'CONTACT' | 'COMPANY';
   mentionedName: string;
   contactId: number | null;
-  contact: { id: number; name: string } | null;
+  contact: { id: number; name: string; preferredName?: string | null } | null;
   companyId: number | null;
   company: { id: number; name: string } | null;
 }
 
 /** A meeting row as returned by the Mentions endpoints (lighter than Conversation;
- *  carries just what the review surfaces render). */
+ *  carries just what the review surfaces render). Also the shape of a hit in the
+ *  search page's "@-Mentions" group — where `mentions` holds only the mentions that
+ *  matched the query, not every mention in the meeting. */
 export interface MentionMeeting {
   id: number;
   title: string | null;
@@ -305,10 +307,27 @@ export interface MentionMeeting {
   attendeesDescription: string | null;
   updatedAt: string;
   prepNotes: { content: string }[];
+  series: { name: string } | null;
   contact: { id: number; name: string } | null;
   company: { id: number; name: string } | null;
   participants: { contact: { id: number; name: string } }[];
+  tags?: { id: number; name: string }[];
   mentions: ConversationMention[];
+  /** Why the meeting matched — present only when a picked @-mention was combined
+   *  with query words, which narrow the meeting's own text. */
+  matches?: SearchMatch[];
+}
+
+/** One row in the "@" picker: a person or organization that has actually been
+ *  @-mentioned somewhere, with the number of meetings mentioning it. `bound` is false
+ *  for a loose name (never made a contact) — it can only be identified by its name,
+ *  which is exactly why the picker exists: to show the real spelling. */
+export interface MentionIndexEntry {
+  key: string;
+  kind: 'CONTACT' | 'COMPANY';
+  name: string;
+  bound: boolean;
+  count: number;
 }
 
 /** The minimal shape needed to resolve a meeting's display name. */
@@ -464,7 +483,7 @@ export interface SearchMatch {
   snippet: string;
 }
 
-export type SearchScope = 'people-profile' | 'people-notes' | 'useful' | 'orgs' | 'meetings' | 'actions' | 'ideas';
+export type SearchScope = 'people-profile' | 'people-notes' | 'useful' | 'orgs' | 'meetings' | 'mentions' | 'actions' | 'ideas';
 export type SearchSort = 'relevance' | 'newest' | 'oldest' | 'alpha' | 'recent-contact';
 
 export interface SearchResult {
@@ -479,12 +498,20 @@ export interface SearchResult {
     actions: number;
     ideas: number;
     conversations: number;
+    mentions: number;
   };
   contacts: ContactSearchResult[];
   companies: CompanySearchResult[];
   actions: ActionSearchResult[];
   ideas: IdeaSearchResult[];
   conversations?: ConversationSearchResult[];
+  /** Meetings that @-mention someone matching the query, each carrying only the
+   *  matching mentions (the "@-Mentions" scope). */
+  mentions?: MentionMeeting[];
+  /** The @-mention target picked from the "@" picker, resolved to a display name so a
+   *  deep link can label its chip. Non-null means the search was pinned to this
+   *  person/org, and only the mentions group was searched. */
+  mention?: { key: string; name: string; kind: 'CONTACT' | 'COMPANY'; bound: boolean } | null;
 }
 
 export interface ConversationSearchResult {

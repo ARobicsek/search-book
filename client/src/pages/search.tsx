@@ -8,19 +8,24 @@ import type {
   SearchSort,
   ContactSearchResult,
   CompanySearchResult,
+  MentionMeeting,
+  MentionIndexEntry,
   Ecosystem,
   ContactStatus,
   CompanyStatus,
   Action,
   Tag,
 } from '@/lib/types'
-import { contactDisplayName } from '@/lib/types'
+import { contactDisplayName, conversationDisplayName } from '@/lib/types'
+import { meetingMentionSnippets, detectMentionQuery } from '@/lib/mentions'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { ActionDateSelect } from '@/components/action-date-select'
 import { HighlightedText } from '@/components/highlighted-text'
+import { MentionChip } from '@/components/mention-chip'
+import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { MeetingDetailDialog } from '@/components/meeting-detail-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -45,6 +50,7 @@ import {
   Users,
   CaseSensitive,
   ArrowRight,
+  AtSign,
   X,
   Tag as TagIcon,
 } from 'lucide-react'
@@ -88,6 +94,7 @@ const SCOPE_OPTIONS: { value: SearchScope; label: string }[] = [
   { value: 'useful', label: 'Useful for' },
   { value: 'orgs', label: 'Organizations' },
   { value: 'meetings', label: 'Meetings' },
+  { value: 'mentions', label: '@-Mentions' },
   { value: 'actions', label: 'Actions' },
   { value: 'ideas', label: 'Ideas' },
 ]
@@ -214,7 +221,8 @@ function totalResults(results: SearchResult): number {
     results.companies.length +
     results.actions.length +
     results.ideas.length +
-    (results.conversations?.length || 0)
+    (results.conversations?.length || 0) +
+    (results.mentions?.length || 0)
   )
 }
 
@@ -253,6 +261,128 @@ function MeetingSearchCard({ conv, ev, onOpen, onTagClick }: { conv: NonNullable
         </p>
         <MatchEvidence matches={conv.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
         <ResultTags tags={conv.tags} onTagClick={onTagClick} />
+      </CardContent>
+    </Card>
+  )
+}
+
+/** The "@" picker: type "@" in the search box and this drops down the people and
+ *  organizations that have actually BEEN @-mentioned, so you pick the exact spelling
+ *  instead of guessing it. Sourced from the mention index, so every option has at
+ *  least one hit and the count says how many. Loose names — mentioned but never made
+ *  a contact — are offered too (dashed), since those are the ones you're least likely
+ *  to spell right from memory. */
+function MentionPicker({
+  options,
+  activeIndex,
+  onPick,
+  onHover,
+}: {
+  options: MentionIndexEntry[]
+  activeIndex: number
+  onPick: (entry: MentionIndexEntry) => void
+  onHover: (i: number) => void
+}) {
+  return (
+    <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md">
+      {options.map((entry, i) => (
+        <li key={entry.key}>
+          <button
+            type="button"
+            // onMouseDown (not onClick) so it fires before the input's blur closes the list.
+            onMouseDown={(e) => { e.preventDefault(); onPick(entry) }}
+            onMouseEnter={() => onHover(i)}
+            className={cn(
+              'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left',
+              i === activeIndex ? 'bg-blue-50 text-blue-900' : 'hover:bg-muted'
+            )}
+          >
+            {entry.kind === 'COMPANY' ? (
+              <Building2 className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+            ) : (
+              <User className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+            )}
+            <span className="truncate font-medium">{entry.name}</span>
+            {!entry.bound && (
+              <span
+                className="shrink-0 rounded border border-dashed border-amber-300 bg-amber-50 px-1 text-[10px] text-amber-700"
+                title={entry.kind === 'COMPANY' ? 'Not an organization yet' : 'Not a contact yet'}
+              >
+                not in CRM
+              </span>
+            )}
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+              {entry.count} meeting{entry.count === 1 ? '' : 's'}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** One "@-Mentions" hit: a meeting where someone matching the query was @-mentioned
+ *  in the notes. Shows who (chips link out to the person/org; a loose name — not in
+ *  the CRM yet — is dashed) and, below, the note text they were mentioned in, which
+ *  is the whole point: a mention is only useful with the sentence around it.
+ *  Only the mentions that MATCHED are chipped, not everyone else the meeting names. */
+function MentionSearchCard({
+  meeting,
+  ev,
+  onOpen,
+  onTagClick,
+}: {
+  meeting: MentionMeeting
+  ev: EvidenceProps
+  onOpen: (id: number) => void
+  onTagClick: (id: number) => void
+}) {
+  const snippets = meetingMentionSnippets(meeting)
+  return (
+    <Card
+      className="mb-2 cursor-pointer transition-colors hover:border-primary/40"
+      onClick={(e) => {
+        // Clicking the card opens the meeting — but let the inner chips/links (which
+        // navigate to the mentioned person or org) do their own thing.
+        if ((e.target as HTMLElement).closest('a,button')) return
+        onOpen(meeting.id)
+      }}
+    >
+      <CardContent className="space-y-1.5 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpen(meeting.id)}
+            className="text-left font-medium hover:underline"
+            title="View full meeting"
+          >
+            <HighlightedText text={conversationDisplayName(meeting)} terms={ev.terms} caseSensitive={ev.caseSensitive} />
+          </button>
+          <span className="text-sm text-muted-foreground">{meeting.date}</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          {meeting.mentions.map((m) => (
+            <MentionChip key={m.id} mention={m} />
+          ))}
+        </div>
+
+        {snippets.map((snippet, i) => (
+          <div
+            key={i}
+            className="prep-note-markdown line-clamp-6 border-l-2 border-muted pl-3 text-sm text-muted-foreground"
+          >
+            <MentionableMarkdown highlightTerms={ev.terms} caseSensitive={ev.caseSensitive}>
+              {snippet}
+            </MentionableMarkdown>
+          </div>
+        ))}
+
+        {/* Only when a picked @-mention was combined with query words: says which part
+            of the meeting those words hit. */}
+        <MatchEvidence matches={meeting.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
+        <ResultTags tags={meeting.tags} onTagClick={onTagClick} />
       </CardContent>
     </Card>
   )
@@ -656,6 +786,20 @@ export function SearchPage() {
   // you discover what tags exist).
   const [tagFilter, setTagFilter] = useState<number[]>(urlTags)
   const [allTags, setAllTags] = useState<Tag[]>([])
+
+  // ── "@" mention filter ──
+  // Pins the search to one person/org that was @-mentioned. Like the tag filter it's a
+  // criterion in its own right (no text needed), and it's exact — an id, or a loose
+  // name — rather than a text guess. `label` is empty when restored from a deep link;
+  // the search response echoes the name back to fill it in.
+  const [mentionFilter, setMentionFilter] = useState<{ key: string; label: string } | null>(
+    searchParams.get('mention') ? { key: searchParams.get('mention')!, label: '' } : null
+  )
+  // The "@…" being typed in the search box right now (null = picker closed).
+  const [mentionQuery, setMentionQuery] = useState<{ query: string; start: number } | null>(null)
+  const [mentionOptions, setMentionOptions] = useState<MentionIndexEntry[]>([])
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const inputRef = React.useRef<HTMLInputElement>(null)
   const [results, setResults] = useState<SearchResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandedEntity, setExpandedEntity] = useState<string | null>(null)
@@ -705,15 +849,79 @@ export function SearchPage() {
     })
   }, [loadRelated])
 
+  // ── "@" picker plumbing ──
+  const mentionOpen = mentionQuery !== null
+  const debouncedMentionQuery = useDebounce(mentionQuery?.query ?? '', 150)
+
+  // Re-read the caret after every edit/move: "@" only triggers at a word boundary, and
+  // the token ends as soon as the caret leaves it (detectMentionQuery owns those rules
+  // — same ones the note editor's @ autocomplete uses).
+  const syncMentionQuery = useCallback((el: HTMLInputElement | null) => {
+    if (!el) return
+    setMentionQuery(detectMentionQuery(el.value, el.selectionStart ?? el.value.length))
+  }, [])
+
+  useEffect(() => {
+    if (!mentionOpen) {
+      setMentionOptions([])
+      return
+    }
+    let cancelled = false
+    api
+      .get<MentionIndexEntry[]>(`/mentions/index?q=${encodeURIComponent(debouncedMentionQuery)}&limit=8`)
+      .then((data) => {
+        if (cancelled) return
+        setMentionOptions(data)
+        setMentionIndex(0)
+      })
+      .catch(() => {
+        if (!cancelled) setMentionOptions([])
+      })
+    return () => { cancelled = true }
+  }, [mentionOpen, debouncedMentionQuery])
+
+  // Picking replaces the typed "@…" with a filter chip: the text box goes back to being
+  // plain words (which now narrow WHICH of that person's meetings), and the chip carries
+  // the exact identity.
+  const pickMention = useCallback((entry: MentionIndexEntry) => {
+    const el = inputRef.current
+    const start = mentionQuery?.start ?? 0
+    const caret = el?.selectionStart ?? query.length
+    const stripped = (query.slice(0, start) + query.slice(caret)).replace(/\s+/g, ' ').trim()
+    setQuery(stripped)
+    setMentionQuery(null)
+    setMentionOptions([])
+    setMentionFilter({ key: entry.key, label: entry.name })
+    setTab('all')
+  }, [mentionQuery, query])
+
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // While the picker is open it owns the arrows / Enter / Tab / Esc.
+    if (!mentionOpen || mentionOptions.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setMentionIndex((i) => (i + 1) % mentionOptions.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setMentionIndex((i) => (i - 1 + mentionOptions.length) % mentionOptions.length)
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      pickMention(mentionOptions[mentionIndex])
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setMentionQuery(null)
+    }
+  }, [mentionOpen, mentionOptions, mentionIndex, pickMention])
+
   const debouncedQuery = useDebounce(query, 300)
   const allScopesOn = scopes.length === ALL_SCOPES.length
 
   // Track the latest search request to discard stale responses
   const currentSearchRef = React.useRef('')
 
-  const doSearch = useCallback(async (searchTerm: string, scopeList: SearchScope[], sortMode: SearchSort, cs: boolean, tagList: number[]) => {
-    // A tag filter alone is enough to search — no text required.
-    if (searchTerm.length < 2 && tagList.length === 0) {
+  const doSearch = useCallback(async (searchTerm: string, scopeList: SearchScope[], sortMode: SearchSort, cs: boolean, tagList: number[], mentionKey: string | null) => {
+    // A tag filter or a picked @-mention is enough to search on its own — no text required.
+    if (searchTerm.length < 2 && tagList.length === 0 && !mentionKey) {
       currentSearchRef.current = ''
       setResults(null)
       setLoading(false)
@@ -725,6 +933,7 @@ export function SearchPage() {
     })
     if (searchTerm.length >= 2) params.set('q', searchTerm)
     if (tagList.length) params.set('tagIds', tagList.join(','))
+    if (mentionKey) params.set('mention', mentionKey)
     // Related entities are now lazy-loaded per card via /search/related/:type/:id
     // (see loadRelated) — keeping them off the hot path is the ~20s search fix.
     if (scopeList.length < ALL_SCOPES.length) params.set('scopes', scopeList.join(','))
@@ -753,14 +962,17 @@ export function SearchPage() {
   useEffect(() => {
     const next = new URLSearchParams()
     if (debouncedQuery) next.set('q', debouncedQuery)
-    if (!allScopesOn) next.set('scopes', scopes.join(','))
+    // A mention filter forces the mentions scope server-side, so the scope list would
+    // be noise in the URL.
+    if (!allScopesOn && !mentionFilter) next.set('scopes', scopes.join(','))
+    if (mentionFilter) next.set('mention', mentionFilter.key)
     if (tagFilter.length) next.set('tags', tagFilter.join(','))
     if (sort !== 'relevance') next.set('sort', sort)
     if (caseSensitive) next.set('cs', '1')
     setSearchParams(next, { replace: true })
     localStorage.setItem(PREFS_KEY, JSON.stringify({ sort, caseSensitive }))
-    doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter)
-  }, [debouncedQuery, scopes, sort, caseSensitive, tagFilter, allScopesOn, setSearchParams, doSearch])
+    doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter?.key ?? null)
+  }, [debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter, allScopesOn, setSearchParams, doSearch])
 
   // Load query from URL on mount
   useEffect(() => {
@@ -788,8 +1000,8 @@ export function SearchPage() {
   }
 
   const refresh = useCallback(() => {
-    doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter)
-  }, [doSearch, debouncedQuery, scopes, sort, caseSensitive, tagFilter])
+    doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter?.key ?? null)
+  }, [doSearch, debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter])
 
   const ev: EvidenceProps = {
     terms: results?.terms || (debouncedQuery ? [debouncedQuery] : []),
@@ -797,14 +1009,21 @@ export function SearchPage() {
   }
 
   const tagOptions = allTags.map((t) => ({ value: t.id.toString(), label: t.name }))
-  // A search runs when there's a query OR a tag filter; the empty-state copy below keys off this.
-  const hasCriteria = debouncedQuery.length >= 2 || tagFilter.length > 0
+  // A search runs on a query, a tag, OR a picked @-mention; the empty-state copy keys off this.
+  const hasCriteria = debouncedQuery.length >= 2 || tagFilter.length > 0 || !!mentionFilter
 
-  const showPeople = scopes.includes('people-profile') || scopes.includes('people-notes') || scopes.includes('useful')
-  const showOrgs = scopes.includes('orgs')
-  const showMeetings = scopes.includes('meetings')
-  const showActions = scopes.includes('actions')
-  const showIdeas = scopes.includes('ideas')
+  // A picked @-mention makes this a mention search and nothing else (the server forces
+  // it too — the other scopes can't answer "who was @-mentioned").
+  const effectiveScopes: SearchScope[] = mentionFilter ? ['mentions'] : scopes
+  const showPeople = effectiveScopes.includes('people-profile') || effectiveScopes.includes('people-notes') || effectiveScopes.includes('useful')
+  const showOrgs = effectiveScopes.includes('orgs')
+  const showMeetings = effectiveScopes.includes('meetings')
+  const showMentions = effectiveScopes.includes('mentions')
+  const showActions = effectiveScopes.includes('actions')
+  const showIdeas = effectiveScopes.includes('ideas')
+
+  // Label for the mention chip. Empty on a deep link until the response echoes the name.
+  const mentionLabel = mentionFilter ? (mentionFilter.label || results?.mention?.name || '…') : ''
 
   const totals = results?.totals
 
@@ -812,13 +1031,21 @@ export function SearchPage() {
     <div className="mx-auto max-w-4xl space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Search</h1>
 
-      {/* Search input */}
+      {/* Search input. Typing "@" opens the mention picker beneath it. */}
       <div className="relative">
         <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
         <Input
+          ref={inputRef}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder='Search everything... (use "quotes" for phrases)'
+          onChange={(e) => { setQuery(e.target.value); syncMentionQuery(e.currentTarget) }}
+          onKeyDown={handleInputKeyDown}
+          // Arrow/click moves the caret out of (or back into) an "@…" token without
+          // changing the text, so the picker has to re-check on selection changes too.
+          onKeyUp={(e) => syncMentionQuery(e.currentTarget)}
+          onClick={(e) => syncMentionQuery(e.currentTarget)}
+          // Delay so a click on an option lands before the list unmounts.
+          onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
+          placeholder='Search everything… (type @ for a mention, "quotes" for phrases)'
           className="pl-10 pr-12 h-12 text-lg"
           autoFocus
         />
@@ -832,41 +1059,73 @@ export function SearchPage() {
             <X className="h-5 w-5" />
           </button>
         )}
+        {mentionOpen && mentionOptions.length > 0 && (
+          <MentionPicker
+            options={mentionOptions}
+            activeIndex={mentionIndex}
+            onPick={pickMention}
+            onHover={setMentionIndex}
+          />
+        )}
       </div>
 
-      {/* Scope chips + sort + case sensitivity */}
+      {/* Scope chips + sort + case sensitivity. A picked @-mention replaces the scope
+          chips: the search is pinned to that person/org, and the words in the box now
+          narrow WHICH of their meetings rather than searching for a name. */}
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setScopes([...ALL_SCOPES])}
-          title="Search everything"
-          className={cn(
-            'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-            allScopesOn
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-input bg-background text-muted-foreground hover:bg-muted'
-          )}
-        >
-          All
-        </button>
-        {SCOPE_OPTIONS.map((s) => {
-          const active = scopes.includes(s.value)
-          return (
+        {mentionFilter ? (
+          <>
+            <span className="text-xs text-muted-foreground">Meetings that @-mention</span>
+            <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-xs text-blue-800">
+              <AtSign className="h-3 w-3" />
+              {mentionLabel}
+              <button
+                type="button"
+                onClick={() => setMentionFilter(null)}
+                aria-label="Clear @-mention filter"
+                title="Clear @-mention filter"
+                className="ml-0.5 rounded hover:bg-blue-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+            <span className="text-xs text-muted-foreground">— add words to narrow to particular meetings</span>
+          </>
+        ) : (
+          <>
             <button
-              key={s.value}
               type="button"
-              onClick={() => toggleScope(s.value)}
+              onClick={() => setScopes([...ALL_SCOPES])}
+              title="Search everything"
               className={cn(
                 'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                active
+                allScopesOn
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-input bg-background text-muted-foreground hover:bg-muted'
               )}
             >
-              {s.label}
+              All
             </button>
-          )
-        })}
+            {SCOPE_OPTIONS.map((s) => {
+              const active = scopes.includes(s.value)
+              return (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => toggleScope(s.value)}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    active
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-input bg-background text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  {s.label}
+                </button>
+              )
+            })}
+          </>
+        )}
         <div className="flex items-center gap-2 sm:ml-auto">
           <button
             type="button"
@@ -922,14 +1181,16 @@ export function SearchPage() {
       {/* No query */}
       {!loading && !results && !hasCriteria && (
         <p className="text-center text-muted-foreground py-8">
-          Enter at least 2 characters, or pick a tag, to search
+          Enter at least 2 characters, pick a tag, or type <span className="font-mono">@</span> to find an @-mention
         </p>
       )}
 
       {/* No results */}
       {!loading && results && totalResults(results) === 0 && (
         <p className="text-center text-muted-foreground py-8">
-          No results found{results.query ? ` for "${results.query}"` : ''}
+          No {mentionFilter ? 'meetings' : 'results'} found
+          {mentionFilter ? ` that @-mention ${mentionLabel}` : ''}
+          {results.query ? ` for "${results.query}"` : ''}
           {tagFilter.length > 0 && ` with ${tagFilter.length === 1 ? 'this tag' : 'these tags'}`}
           {caseSensitive && ' (match case is on)'}
         </p>
@@ -958,6 +1219,12 @@ export function SearchPage() {
               <TabsTrigger value="meetings">
                 <MessageSquare className="mr-1 h-4 w-4" />
                 Meetings ({totals?.conversations ?? results.conversations?.length ?? 0})
+              </TabsTrigger>
+            )}
+            {showMentions && (
+              <TabsTrigger value="mentions">
+                <AtSign className="mr-1 h-4 w-4" />
+                Mentions ({totals?.mentions ?? results.mentions?.length ?? 0})
               </TabsTrigger>
             )}
             {showActions && (
@@ -1036,6 +1303,22 @@ export function SearchPage() {
                 {(results.conversations.length > 5) && (
                   <Button variant="link" className="px-0" onClick={() => setTab('meetings')}>
                     View all {totals?.conversations ?? results.conversations.length} meetings
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {results.mentions && results.mentions.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <AtSign className="h-5 w-5" /> @-Mentions
+                </h2>
+                {results.mentions.slice(0, 5).map((meeting) => (
+                  <MentionSearchCard key={meeting.id} meeting={meeting} ev={ev} onOpen={setOpenMeetingId} onTagClick={addTagFilter} />
+                ))}
+                {results.mentions.length > 5 && (
+                  <Button variant="link" className="px-0" onClick={() => setTab('mentions')}>
+                    View all {totals?.mentions ?? results.mentions.length} meetings with mentions
                   </Button>
                 )}
               </div>
@@ -1128,6 +1411,17 @@ export function SearchPage() {
                 total={totals.conversations}
                 label="in Meetings"
               />
+            )}
+          </TabsContent>
+
+          <TabsContent value="mentions" className="mt-4">
+            {results.mentions?.map((meeting) => (
+              <MentionSearchCard key={meeting.id} meeting={meeting} ev={ev} onOpen={setOpenMeetingId} onTagClick={addTagFilter} />
+            ))}
+            {totals && totals.mentions > (results.mentions?.length ?? 0) && (
+              <p className="text-sm text-muted-foreground">
+                Showing {results.mentions?.length ?? 0} of {totals.mentions} meetings with a matching @-mention — narrow the search to see the rest.
+              </p>
             )}
           </TabsContent>
 

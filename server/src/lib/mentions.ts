@@ -43,6 +43,119 @@ export function resolvedOrgMentionToken(name: string, companyId: number): string
   return `[@${name}](/companies/${companyId})`;
 }
 
+// A mention target picked from the "@" picker in global search, as a URL-safe key:
+//   contact:440  | company:5   → bound to a CRM record (an id, so it survives a
+//                                rename and keeps two same-named people distinct)
+//   person:anne marie smith    → a loose mention (a name that isn't a contact yet),
+//   org:some org                 which can only ever be identified BY its name
+// Returns null for an unparseable key, so a junk URL param degrades to "no filter"
+// rather than a 500.
+export type MentionTarget =
+  | { bound: true; kind: MentionKind; id: number }
+  | { bound: false; kind: MentionKind; name: string };
+
+export function parseMentionTarget(raw: string | undefined): MentionTarget | null {
+  if (!raw) return null;
+  const sep = raw.indexOf(':');
+  if (sep < 1) return null;
+  const prefix = raw.slice(0, sep);
+  const rest = raw.slice(sep + 1).trim();
+  if (!rest) return null;
+
+  if (prefix === 'contact' || prefix === 'company') {
+    const id = Number(rest);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    return { bound: true, kind: prefix === 'company' ? 'COMPANY' : 'CONTACT', id };
+  }
+  if (prefix === 'person' || prefix === 'org') {
+    return { bound: false, kind: prefix === 'org' ? 'COMPANY' : 'CONTACT', name: rest };
+  }
+  return null;
+}
+
+// The ConversationMention filter for a picked target. A loose mention is matched by
+// name with `contains` because SQLite's LIKE is case-insensitive while Prisma's
+// `equals` is not — the exact, case-insensitive name check is re-done in JS
+// (mentionMatchesTarget), which is also what keeps a "Smith" key from matching
+// "Smithson".
+export function mentionTargetClause(target: MentionTarget): Record<string, unknown> {
+  if (target.bound) {
+    return target.kind === 'COMPANY' ? { companyId: target.id } : { contactId: target.id };
+  }
+  return {
+    kind: target.kind,
+    contactId: null,
+    companyId: null,
+    mentionedName: { contains: target.name },
+  };
+}
+
+// Does this mention row actually point at the picked target? Pairs with
+// mentionTargetClause to tighten its deliberately loose `contains` name match.
+export function mentionMatchesTarget(
+  mention: { contactId: number | null; companyId: number | null; kind: string; mentionedName: string },
+  target: MentionTarget,
+): boolean {
+  if (target.bound) {
+    return target.kind === 'COMPANY'
+      ? mention.companyId === target.id
+      : mention.contactId === target.id;
+  }
+  return (
+    mention.contactId == null &&
+    mention.companyId == null &&
+    mention.kind === target.kind &&
+    mention.mentionedName.trim().toLowerCase() === target.name.trim().toLowerCase()
+  );
+}
+
+// Render mention tokens as plain "@Name" — the raw markdown token reads terribly
+// in a search snippet. Term matching is unaffected: the display name survives the
+// rewrite, so a text index into the rewritten string still lines up with a match.
+export function humanizeMentions(text: string | null | undefined): string {
+  if (!text) return '';
+  return text.replace(MENTION_RE, (_token, name: string) => `@${name}`);
+}
+
+// Fields needed to render a meeting's display name, the @-mention chips on it, and
+// the note context around them. Shared by the Mentions review page (routes/mentions.ts)
+// and the "@-Mentions" group in global search (routes/search.ts) — both render the
+// same card, so they need the same shape.
+export const mentionMeetingSelect = {
+  id: true,
+  title: true,
+  date: true,
+  datePrecision: true,
+  type: true,
+  notes: true,
+  nextSteps: true,
+  attendeesDescription: true,
+  updatedAt: true,
+  // Prep notes can hold @-mentions too; needed to snippet a prep-note-only mention.
+  prepNotes: { select: { content: true } },
+  series: { select: { name: true } },
+  contact: { select: { id: true, name: true } },
+  company: { select: { id: true, name: true } },
+  participants: {
+    select: { contact: { select: { id: true, name: true } } },
+    orderBy: { ordering: 'asc' as const },
+    take: 1,
+  },
+  tags: { select: { tag: { select: { id: true, name: true } } } },
+  mentions: {
+    select: {
+      id: true,
+      kind: true,
+      mentionedName: true,
+      contactId: true,
+      contact: { select: { id: true, name: true, preferredName: true } },
+      companyId: true,
+      company: { select: { id: true, name: true } },
+    },
+    orderBy: { id: 'asc' as const },
+  },
+};
+
 export function parseMentions(text: string | null | undefined): ParsedMention[] {
   if (!text) return [];
   const out: ParsedMention[] = [];

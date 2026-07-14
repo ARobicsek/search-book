@@ -1563,7 +1563,7 @@ function QuickLogDialog({
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-[6.75rem]"
+                className="w-[7.5rem]"
               />
               <span className="text-muted-foreground">–</span>
               {/* End time is what makes the "Now" indicator exact rather than a guessed
@@ -1574,7 +1574,7 @@ function QuickLogDialog({
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-[6.75rem]"
+                className="w-[7.5rem]"
               />
               {/* Explicit clear — the native time input's clear control is hard to
                   find (and absent on mobile); this reliably blanks both times, which

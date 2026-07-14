@@ -24,8 +24,27 @@ function paddedWindow(from: string, to: string): { afterISO: string; beforeISO: 
 
 const keyOf = (uid: string, date: string) => `${uid}|${date}`;
 
+type StoredTimes = { startTime: string | null; endTime: string | null };
+
+// Times the feed knows that an already-imported meeting doesn't hold yet — returns null
+// when there's nothing to fill. `endTime` was added to the schema on 2026-07-13, so every
+// meeting imported before then has a null end and the "happening now" marker has to guess
+// a duration for it. Re-import repairs that; it only ever fills blanks, never overwrites.
+// The feed's end is only trusted when it belongs to the start we already hold — a meeting
+// moved after import would otherwise get an end that reads as earlier than its start.
+function missingTimes(row: StoredTimes, ev: CalendarEvent): { startTime?: string; endTime?: string } | null {
+  const patch: { startTime?: string; endTime?: string } = {};
+  if (!row.startTime && ev.startTime) patch.startTime = ev.startTime;
+  const start = row.startTime ?? ev.startTime;
+  if (!row.endTime && ev.endTime && start && ev.startTime === start && ev.endTime > start) {
+    patch.endTime = ev.endTime;
+  }
+  return Object.keys(patch).length ? patch : null;
+}
+
 // GET /api/calendar/events?from=YYYY-MM-DD&to=YYYY-MM-DD
-// Returns the events in the window, each annotated with `alreadyImported`.
+// Returns the events in the window, each annotated with `alreadyImported` and — for those
+// already imported — `needsTimeFix` when the feed carries times the stored meeting lacks.
 router.get('/events', async (req: Request, res: Response) => {
   if (!icsProvider.isConfigured()) {
     res.status(503).json(NOT_CONFIGURED);
@@ -55,21 +74,25 @@ router.get('/events', async (req: Request, res: Response) => {
     const existing = uids.length
       ? await prisma.conversation.findMany({
           where: { calendarUid: { in: uids } },
-          select: { calendarUid: true, date: true },
+          select: { calendarUid: true, date: true, startTime: true, endTime: true },
         })
       : [];
-    const existingSet = new Set(existing.map((r) => keyOf(r.calendarUid as string, r.date)));
+    const existingMap = new Map(existing.map((r) => [keyOf(r.calendarUid as string, r.date), r]));
 
-    const annotated = events.map((e) => ({
-      uid: e.uid,
-      subject: e.subject,
-      date: e.date,
-      startTime: e.startTime,
-      endTime: e.endTime,
-      isAllDay: e.isAllDay,
-      isRecurring: e.isRecurring,
-      alreadyImported: existingSet.has(keyOf(e.uid, e.date)),
-    }));
+    const annotated = events.map((e) => {
+      const row = existingMap.get(keyOf(e.uid, e.date));
+      return {
+        uid: e.uid,
+        subject: e.subject,
+        date: e.date,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        isAllDay: e.isAllDay,
+        isRecurring: e.isRecurring,
+        alreadyImported: !!row,
+        needsTimeFix: !!row && !!missingTimes(row, e),
+      };
+    });
 
     res.json({ events: annotated, timezone: getAppTimezone() });
   } catch (error) {
@@ -81,8 +104,9 @@ router.get('/events', async (req: Request, res: Response) => {
 // POST /api/calendar/import  body: { selections: [{ uid, date }] }
 // Creates future-dated meeting records from the owner's selection. Server re-expands
 // the feed and creates from its own trusted data (not client-supplied fields).
-// Idempotent: skips any (calendarUid, date) that already exists — never overwrites,
-// so notes/attendees the owner added survive a re-import.
+// Idempotent: a (calendarUid, date) that already exists is never overwritten, so notes and
+// attendees the owner added survive a re-import. The one exception is additive — a stored
+// meeting missing a start/end time the feed knows gets that blank filled (see missingTimes).
 router.post('/import', async (req: Request, res: Response) => {
   if (!icsProvider.isConfigured()) {
     res.status(503).json(NOT_CONFIGURED);
@@ -109,26 +133,37 @@ router.post('/import', async (req: Request, res: Response) => {
     const feedMap = new Map<string, CalendarEvent>();
     for (const e of feed) feedMap.set(keyOf(e.uid, e.date), e);
 
-    // What's already imported (so re-import is skip-only).
+    // What's already imported (re-import creates nothing for these — at most it fills in
+    // a start/end time the stored record never got).
     const uids = [...new Set(selections.map((s) => s.uid))];
     const existing = await prisma.conversation.findMany({
       where: { calendarUid: { in: uids } },
-      select: { calendarUid: true, date: true },
+      select: { id: true, calendarUid: true, date: true, startTime: true, endTime: true },
     });
-    const existingSet = new Set(existing.map((r) => keyOf(r.calendarUid as string, r.date)));
+    const existingMap = new Map(existing.map((r) => [keyOf(r.calendarUid as string, r.date), r]));
 
-    const items: Array<{ uid: string; date: string; status: 'created' | 'skipped'; reason?: string; id?: number }> = [];
+    const items: Array<{
+      uid: string;
+      date: string;
+      status: 'created' | 'updated' | 'skipped';
+      reason?: string;
+      id?: number;
+    }> = [];
     const toCreate: CalendarEvent[] = [];
+    const toUpdate: Array<{ id: number; uid: string; date: string; data: { startTime?: string; endTime?: string } }> = [];
     const seen = new Set<string>();
     for (const sel of selections) {
       const k = keyOf(sel.uid, sel.date);
       if (seen.has(k)) continue; // de-dupe within the request
       seen.add(k);
-      if (existingSet.has(k)) {
-        items.push({ uid: sel.uid, date: sel.date, status: 'skipped', reason: 'already_imported' });
+      const ev = feedMap.get(k);
+      const row = existingMap.get(k);
+      if (row) {
+        const data = ev ? missingTimes(row, ev) : null;
+        if (data) toUpdate.push({ id: row.id, uid: sel.uid, date: sel.date, data });
+        else items.push({ uid: sel.uid, date: sel.date, status: 'skipped', reason: 'already_imported' });
         continue;
       }
-      const ev = feedMap.get(k);
       if (!ev) {
         items.push({ uid: sel.uid, date: sel.date, status: 'skipped', reason: 'not_in_feed' });
         continue;
@@ -136,7 +171,7 @@ router.post('/import', async (req: Request, res: Response) => {
       toCreate.push(ev);
     }
 
-    if (toCreate.length) {
+    if (toCreate.length || toUpdate.length) {
       await prisma.$transaction(async (tx) => {
         for (const ev of toCreate) {
           const created = await tx.conversation.create({
@@ -153,12 +188,17 @@ router.post('/import', async (req: Request, res: Response) => {
           });
           items.push({ uid: ev.uid, date: ev.date, status: 'created', id: created.id });
         }
+        for (const u of toUpdate) {
+          await tx.conversation.update({ where: { id: u.id }, data: u.data, select: { id: true } });
+          items.push({ uid: u.uid, date: u.date, status: 'updated', id: u.id });
+        }
       });
     }
 
     const created = items.filter((i) => i.status === 'created').length;
+    const updated = items.filter((i) => i.status === 'updated').length;
     const skipped = items.filter((i) => i.status === 'skipped').length;
-    res.status(201).json({ created, skipped, items });
+    res.status(201).json({ created, updated, skipped, items });
   } catch (error) {
     console.error('Error importing calendar events:', error);
     res.status(502).json({ error: 'Could not import from the Outlook calendar feed. Try again shortly.' });

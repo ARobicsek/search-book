@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarClock, Check, Loader2, Repeat } from 'lucide-react'
+import { CalendarClock, Check, Clock, Loader2, Repeat } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { formatStartTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -25,12 +25,19 @@ type EventRow = {
   isAllDay: boolean
   isRecurring: boolean
   alreadyImported: boolean
+  /** Already imported, but the stored meeting is missing a start/end time the calendar has —
+   *  meetings imported before end times existed have no end, so "happening now" has to guess
+   *  an hour for them. Re-importing fills the blank in (and nothing else). */
+  needsTimeFix: boolean
 }
 
 type Preset = 'today' | 'tomorrow' | 'week' | 'next7' | 'custom'
 
 const RANGE_KEY = 'outlook_import_range'
 const keyOf = (e: { uid: string; date: string }) => `${e.uid}|${e.date}`
+
+// Worth sending to the server: a meeting to create, or one to repair the times of.
+const isActionable = (e: EventRow) => !e.alreadyImported || e.needsTimeFix
 
 function ymd(d: Date): string {
   const y = d.getFullYear()
@@ -129,8 +136,9 @@ export function ImportOutlookDialog({
       )
       setEvents(res.events)
       setTimezone(res.timezone)
-      // Default selection = everything not yet imported (the common path is open → Import).
-      setSelected(new Set(res.events.filter((e) => !e.alreadyImported).map(keyOf)))
+      // Default selection = everything actionable — not yet imported, plus anything imported
+      // whose times we can now fill in (the common path is open → Import).
+      setSelected(new Set(res.events.filter(isActionable).map(keyOf)))
     } catch (e) {
       if (e instanceof ApiError && e.status === 503) {
         setNotConfigured(true)
@@ -155,7 +163,7 @@ export function ImportOutlookDialog({
       return next
     })
 
-  const importable = useMemo(() => events.filter((e) => !e.alreadyImported), [events])
+  const importable = useMemo(() => events.filter(isActionable), [events])
   const selectableKeys = useMemo(() => importable.map(keyOf), [importable])
   const allSelected = selectableKeys.length > 0 && selectableKeys.every((k) => selected.has(k))
   const selectedCount = selected.size
@@ -177,11 +185,18 @@ export function ImportOutlookDialog({
     if (selections.length === 0) return
     setImporting(true)
     try {
-      const res = await api.post<{ created: number; skipped: number }>('/calendar/import', { selections })
+      const res = await api.post<{ created: number; updated: number; skipped: number }>(
+        '/calendar/import',
+        { selections },
+      )
+      const fixed = res.updated ? `filled in times for ${res.updated}` : ''
       if (res.created > 0) {
         toast.success(`Imported ${res.created} meeting${res.created === 1 ? '' : 's'}`, {
-          description: res.skipped ? `${res.skipped} already imported, skipped` : undefined,
+          description: [fixed, res.skipped ? `${res.skipped} already imported` : ''].filter(Boolean).join(' · ') || undefined,
         })
+        window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
+      } else if (res.updated > 0) {
+        toast.success(`Filled in times for ${res.updated} meeting${res.updated === 1 ? '' : 's'}`)
         window.dispatchEvent(new CustomEvent('searchbook:meeting-logged'))
       } else {
         toast.info('Nothing new to import', {
@@ -206,7 +221,8 @@ export function ImportOutlookDialog({
           </DialogTitle>
           <DialogDescription>
             Pre-load meetings from your calendar — subject, date and time. Add attendees and notes
-            later. Re-importing never overwrites meetings you've already edited.
+            later. Re-importing never overwrites meetings you've already edited; it only fills in
+            times they're missing.
           </DialogDescription>
         </DialogHeader>
 
@@ -284,16 +300,17 @@ export function ImportOutlookDialog({
                   </div>
                   {rows.map((e) => {
                     const k = keyOf(e)
+                    const locked = e.alreadyImported && !e.needsTimeFix
                     return (
                       <label
                         key={k}
                         className={`flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 ${
-                          e.alreadyImported ? 'opacity-55' : 'hover:bg-muted/60'
+                          locked ? 'opacity-55' : 'hover:bg-muted/60'
                         }`}
                       >
                         <Checkbox
-                          checked={e.alreadyImported || selected.has(k)}
-                          disabled={e.alreadyImported}
+                          checked={locked || selected.has(k)}
+                          disabled={locked}
                           onCheckedChange={() => toggle(k)}
                         />
                         <span className="w-16 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
@@ -305,9 +322,17 @@ export function ImportOutlookDialog({
                         {e.isRecurring && (
                           <Repeat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Recurring" />
                         )}
-                        {e.alreadyImported && (
+                        {locked && (
                           <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground">
                             <Check className="h-3.5 w-3.5" /> Imported
+                          </span>
+                        )}
+                        {e.needsTimeFix && (
+                          <span
+                            className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-amber-600"
+                            title="Already imported, but without its times — re-import to fill them in (nothing else is touched)"
+                          >
+                            <Clock className="h-3.5 w-3.5" /> Add times
                           </span>
                         )}
                       </label>

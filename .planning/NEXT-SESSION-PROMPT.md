@@ -5,6 +5,68 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — @-mention search (scope + `@` picker) + green "happening NOW" meetings (2026-07-13)
+
+Two owner asks. **Two feature commits to `main`** (`29047b8` schema-free, `861a3f7` **SCHEMA** — owner applied the
+Turso DDL and confirmed live before the push). Owner confirmed both working.
+
+**1. Find every @-mention of a person/org from global search** (`29047b8`, schema-free).
+- **Root gap:** search reached mentions only *by accident* — matching the raw markdown token inside `notes`, which
+  produced snippets full of `[@Ann](/contacts/7)` and could not distinguish "she was **called out** with `@`" from
+  "her name appears in a sentence". The `ConversationMention` index already existed (derived from note text on every
+  save); nothing queried it from search.
+- **New `mentions` scope** on `/api/search`: a hit is a **meeting**, carrying **only the mentions that matched**, plus
+  the note text around them. **All terms must land on ONE mention row** — a `some`-per-term would let "Anne Smith"
+  match a meeting that separately mentions "Anne Jones" and "Bob Smith" (seeded that decoy; it correctly does not match).
+  Matches on the name **as typed** AND the linked record's **current** name, so a renamed contact stays findable.
+- **Owner follow-up mid-session** ("should I use the at-symbol? the dropdown would help me find the exact spelling") →
+  **typing `@` in the search box opens a picker**, fed by new **`GET /api/mentions/index`** (distinct mentioned entities
+  + meeting counts; aggregated in JS, no `groupBy`/`_count` per the Turso gotcha). **Sourced from the mention index, not
+  the contact list** — so every option has ≥1 hit and **loose names** (mentioned but never made contacts — exactly the
+  ones you can't spell from memory) appear, marked "not in CRM". Picking strips the typed `@…` and pins a chip:
+  `?mention=contact:440|company:5` (bound, id-based → survives renames) or `person:<name>|org:<name>` (loose).
+  A pinned target **forces the mentions scope server-side**; words typed after it narrow the **meeting's text**.
+- ⚠ **Loose targets match by name, and Prisma `equals` is case-sensitive on SQLite** → the clause uses `contains`, which
+  **over-matches a longer name** ("Anne Marie Smith" ⊂ "Anne Marie Smithson"). Rows **and counts** are re-verified in app
+  code (`mentionMatchesTarget`) — seeded a `Smithson` decoy; returns 3, not 4.
+- Also: mention tokens **humanized** (`@Ann`, not raw markdown) in meeting search snippets; the Mentions review page
+  refactored onto the now-shared `MentionChip` + `meetingMentionSnippets`.
+- **Known rough edge (left as-is, owner told):** typing `@anne mar` and *ignoring* the dropdown searches that text
+  literally and finds noise. The guided path (pick from the list) clears it. Offer to make an unpicked `@…` match
+  nothing if it annoys him.
+
+**2. Meetings happening RIGHT NOW get a green border** (`861a3f7`, **SCHEMA**).
+- Owner wanted a new colour for in-progress meetings — but **the app couldn't answer the question**: `Conversation`
+  stored only `startTime`, and "happening now" requires knowing when a meeting **ENDS**. Surfaced the gap + two options
+  (assume a fixed duration vs. store a real end time); **owner chose the real end time**.
+- **`Conversation.endTime`** (local `HH:MM`). The **ICS parser was already computing the `DTEND` instant and discarding
+  it** — so Outlook-imported meetings now carry exact end times for free. Quick Log gained an end-time field beside the
+  start; the list shows the range ("7:12 PM–8:12 PM").
+- In-progress → **emerald left border + pulsing "Now" pill**, taking precedence over sky-blue "Upcoming" (mutually
+  exclusive by construction — "upcoming" already requires `startTime > now`). **Null `endTime` → assumed 60 min**
+  (`ASSUMED_MEETING_MINUTES`), tooltip admits the guess. An **untimed** meeting can never be "now". ICS events crossing
+  midnight store `endTime: null` (a single-day record can't hold an end earlier than its start).
+- The list re-renders on a **30s tick** (`useClockTick`) — a "right now" marker that only updates on reload isn't one.
+- **Turso DDL applied by owner:** `ALTER TABLE Conversation ADD COLUMN endTime TEXT;` Backup unchanged (both paths are
+  column-agnostic: `findMany()` / `SELECT *`); the meetings list uses `include:` not `select:`, so `endTime` rides along.
+
+`prepush` + **full `npm run build`** green. Both features driven live in-browser (Chrome DevTools MCP against local
+SQLite) with seeded data + deliberate decoys; **all test data deleted** (local DB back to its original 224 meetings /
+0 mentions). "Now" proven against the **real clock**: a meeting seeded to end 60s out **went dark on its own on an
+untouched page** while one running until 8:12 stayed lit. **390px re-tested** on all three surfaces — caught a cosmetic
+regression (two time inputs at `6.75rem` clipped the AM/PM) and restored them to `7.5rem`.
+
+**⚠ Local-DB gotcha re-hit a THIRD time** (`db push` from `server/` wrote `endTime` to the stray `server/dev.db`, not the
+runtime's `server/prisma/dev.db` → every write 500'd with "column endTime does not exist"). **Now promoted into
+`CLAUDE.md`** (auto-loaded every session; this handoff file is not) with the `--url` fix inline. If you are about to run
+any Prisma CLI command against the local DB, read that note first.
+
+**Heads-up for whoever picks this up:** the local `dev.db` has **0 meetings with a `startTime`** and none from the Outlook
+import, so **"Now" cannot light up locally** — seed a timed meeting to see it. If production looks the same, the marker
+stays quiet until meetings actually carry clock times (which mainly happens via the Outlook import). Already-imported
+meetings keep `endTime = NULL` (import is skip-only by design, so notes survive re-import) and use the 60-min fallback —
+**a backfill of end times for existing imported meetings is an open option the owner has not asked for yet.**
+
 ### What Was Just Completed — Ideas now show created **and** last-updated (2026-07-10 s2)
 
 One owner UX ask: on the Ideas list/cards, easily see **both** when an idea was created and when it
@@ -511,12 +573,23 @@ Toggle-off still works; clearing the date still drops time+notify. Runbook note 
   the search change**. No code change. Don't re-chase this as an app bug.
 - **⚠ The committed Turso rw token in `server/.env` is STALE (hard 401).** Use the Turso web SQL
   console for DDL.
-- **⚠ `prisma db push` local-path gotcha:** from `server/`, `db push` resolves `file:./dev.db` to
-  the stray empty `server/dev.db`, not the populated `server/prisma/dev.db` the server opens.
-  **Verified fix (2026-07-07):** pass the file explicitly —
-  `npx prisma db push --url "file:C:/dev/personal/searchbook/server/prisma/dev.db"` (Prisma 7 flag) —
-  which synced the drifted local DB additively with no data loss. The dual-mode libsql migration
-  script pattern (`server/scripts/archive/`) remains the fallback.
+- **⚠ `prisma db push` local-path gotcha — NOW ALSO IN `CLAUDE.md`** (promoted 2026-07-13 after a
+  **third** consecutive session lost time to it; `CLAUDE.md` is auto-loaded every session, this file
+  is not). From `server/`, `db push`/`db execute` resolves `file:./dev.db` to the stray empty
+  `server/dev.db`, not the populated `server/prisma/dev.db` the server opens — it reports "in sync"
+  and changes nothing the app reads, then every query 500s with *"column X does not exist"*.
+  **Verified fix:** pass the file explicitly —
+  `npx prisma db push --url "file:C:/dev/personal/searchbook/server/prisma/dev.db"` (Prisma 7 flag).
+  Delete any `server/dev.db` that appears; it is never the real database. The dual-mode libsql
+  migration script pattern (`server/scripts/archive/`) remains the fallback.
+- **Meetings "Now" marker can't light up locally:** the local `dev.db` has **0 meetings with a
+  `startTime`** (and none from the Outlook import), so seed a timed meeting to exercise it. Existing
+  *imported* meetings in production have `endTime = NULL` (the import is skip-only by design) and fall
+  back to the assumed 60-min duration — **a backfill of end times for them is an open option the owner
+  has not requested.**
+- **Unpicked `@…` in global search is searched as literal text** (finds noise). The guided path —
+  picking from the `@` dropdown — clears it. Owner told; offer to make an unpicked `@…` match nothing
+  if it becomes annoying.
 - Run `tsc -b` / full `vite build` (not just `npm run prepush`) before every push — it catches
   unused imports the typecheck misses.
 - Dev smoke: server 3001, client 5173. The local app has `APP_PASSWORD` unset → seed any non-empty

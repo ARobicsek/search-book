@@ -299,6 +299,7 @@ function QuickLogDialog({
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
   const [startTime, setStartTime] = useState('') // optional HH:MM (set by Outlook import; editable here)
+  const [endTime, setEndTime] = useState('') // optional HH:MM; with startTime it's what makes the "Now" indicator exact
   const [type, setType] = useState<ConversationType>('MEETING')
   const [summary, setSummary] = useState('')
   const [notes, setNotes] = useState('')
@@ -424,6 +425,7 @@ function QuickLogDialog({
     setTitle('')
     setDate(new Date().toLocaleDateString('en-CA'))
     setStartTime('')
+    setEndTime('')
     setType('MEETING')
     setSummary('')
     setNotes('')
@@ -517,6 +519,7 @@ function QuickLogDialog({
           setTitle(conv.title || '')
           setDate(conv.date)
           setStartTime(conv.startTime || '')
+          setEndTime(conv.endTime || '')
           setType(conv.type as ConversationType)
           setSummary(conv.summary || '')
           setNotes(conv.notes || '')
@@ -561,6 +564,7 @@ function QuickLogDialog({
             title: conv.title?.trim() || null,
             date: conv.date,
             startTime: conv.startTime?.trim() || null,
+            endTime: conv.endTime?.trim() || null,
             type: conv.type,
             summary: conv.summary?.trim() || null,
             notes: conv.notes?.trim() || null,
@@ -618,6 +622,7 @@ function QuickLogDialog({
       title: title.trim() || null,
       date,
       startTime: startTime.trim() || null,
+      endTime: endTime.trim() || null,
       type,
       summary: summary.trim() || null,
       notes: notes.trim() || null,
@@ -1549,8 +1554,8 @@ function QuickLogDialog({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="ql-date">Date &amp; time</Label>
-          <div className="flex gap-2">
-            <Input id="ql-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="flex-1" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Input id="ql-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="min-w-[9rem] flex-1" />
             <div className="flex items-center gap-1">
               <Input
                 aria-label="Start time"
@@ -1558,20 +1563,31 @@ function QuickLogDialog({
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-[7.5rem]"
+                className="w-[6.75rem]"
+              />
+              <span className="text-muted-foreground">–</span>
+              {/* End time is what makes the "Now" indicator exact rather than a guessed
+                  duration. Filled automatically by the Outlook import (ICS DTEND). */}
+              <Input
+                aria-label="End time"
+                title="End time (optional) — drives the “Now” marker on the meetings list"
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-[6.75rem]"
               />
               {/* Explicit clear — the native time input's clear control is hard to
-                  find (and absent on mobile); this reliably blanks the time, which
-                  autosaves as startTime: null. */}
-              {startTime && (
+                  find (and absent on mobile); this reliably blanks both times, which
+                  autosave as startTime/endTime: null. */}
+              {(startTime || endTime) && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                  title="Clear start time"
-                  aria-label="Clear start time"
-                  onClick={() => setStartTime('')}
+                  title="Clear times"
+                  aria-label="Clear times"
+                  onClick={() => { setStartTime(''); setEndTime('') }}
                 >
                   <X className="h-4 w-4" />
                 </Button>

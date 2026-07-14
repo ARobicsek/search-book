@@ -21,6 +21,7 @@ type EventRow = {
   subject: string | null
   date: string
   startTime: string | null
+  endTime: string | null
   isAllDay: boolean
   isRecurring: boolean
   alreadyImported: boolean

@@ -129,6 +129,35 @@ function isUpcomingMeeting(conv: Conversation, today: string, hhmm: string): boo
   return hhmm < END_OF_BUSINESS && !documented
 }
 
+// How long a timed meeting is assumed to run when no end time was recorded — older
+// records, and anything logged by hand without one. Meetings imported from Outlook
+// carry a real endTime (the ICS DTEND), so they don't rely on this.
+const ASSUMED_MEETING_MINUTES = 60
+
+// Add minutes to an HH:MM wall clock, clamped to the end of the day (a meeting can't
+// run past midnight on its own single stored date).
+function addMinutes(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  const total = h * 60 + m + minutes
+  if (!Number.isFinite(total)) return hhmm
+  if (total >= 24 * 60) return '23:59'
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+// A meeting is happening RIGHT NOW when it's today, its start time has passed, and it
+// hasn't ended — the recorded endTime, or start + ASSUMED_MEETING_MINUTES when none was
+// recorded. An untimed meeting can never qualify: with no clock time there's nothing to
+// be in the middle of. Mutually exclusive with "upcoming" by construction (that rule
+// requires startTime > now).
+function isHappeningNow(conv: Conversation, today: string, hhmm: string): boolean {
+  if (conv.date !== today || !conv.startTime) return false
+  const end =
+    conv.endTime && conv.endTime > conv.startTime
+      ? conv.endTime
+      : addMinutes(conv.startTime, ASSUMED_MEETING_MINUTES)
+  return conv.startTime <= hhmm && hhmm < end
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value)
   useEffect(() => {
@@ -136,6 +165,18 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(timer)
   }, [value, delay])
   return debouncedValue
+}
+
+// "Now" has to move on its own: re-render on a timer so a meeting lights up when it
+// starts and dims when it ends, without the owner reloading the page. 30s keeps the
+// marker within half a minute of the truth — the clock is read fresh on each render,
+// this only forces the render.
+function useClockTick(ms = 30_000) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), ms)
+    return () => clearInterval(id)
+  }, [ms])
 }
 
 const PAGE_SIZE = 20
@@ -299,6 +340,7 @@ function MeetingDateSelect({ conv, onUpdate }: { conv: Conversation; onUpdate: (
           <CalendarDays className="h-3.5 w-3.5" />
           {formatConversationDate(conv.date, conv.datePrecision as DatePrecision)}
           {conv.startTime && ` · ${formatStartTime(conv.startTime)}`}
+          {conv.startTime && conv.endTime && `–${formatStartTime(conv.endTime)}`}
           <ChevronDown className="h-3 w-3 opacity-50" />
         </button>
       </PopoverTrigger>
@@ -340,6 +382,7 @@ function MeetingCard({
   conv,
   qTerm,
   upcoming,
+  happeningNow,
   onEdit,
   onDelete,
   onSeriesClick,
@@ -349,6 +392,7 @@ function MeetingCard({
   conv: Conversation
   qTerm: string
   upcoming: boolean
+  happeningNow: boolean
   onEdit: () => void
   onDelete: () => void
   onSeriesClick: (seriesId: number) => void
@@ -381,7 +425,15 @@ function MeetingCard({
   const clamped = !expanded && overflowing
 
   return (
-    <Card className={upcoming ? 'border-l-4 border-l-sky-500' : undefined}>
+    <Card
+      className={
+        happeningNow
+          ? 'border-l-4 border-l-emerald-500'
+          : upcoming
+            ? 'border-l-4 border-l-sky-500'
+            : undefined
+      }
+    >
       <CardContent
         className={`p-4 ${clamped ? 'cursor-pointer' : ''}`}
         onClick={(e) => {
@@ -402,7 +454,23 @@ function MeetingCard({
                 {getLabel(conv.type, CONVERSATION_TYPE_OPTIONS)}
               </Badge>
               <MeetingDateSelect conv={conv} onUpdate={onUpdate} />
-              {upcoming && (
+              {happeningNow ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+                  title={
+                    conv.endTime
+                      ? 'This meeting is happening now'
+                      : 'This meeting is probably happening now (no end time recorded — assuming an hour)'
+                  }
+                >
+                  {/* A live marker should look live: the dot pulses. */}
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  </span>
+                  Now
+                </span>
+              ) : upcoming && (
                 <span
                   className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700"
                   title="This meeting is in the future"
@@ -1001,8 +1069,10 @@ export function MeetingsPage() {
   // term is highlighted only in the card heading — handled inside MeetingCard.
   const qTerm = qFilter.trim()
 
-  // "Now" snapshot (Eastern) for flagging upcoming meetings — computed once per render
-  // so all cards agree on the same instant (and refreshes on every reload/navigation).
+  // "Now" snapshot (Eastern) for flagging upcoming / in-progress meetings — computed
+  // once per render so all cards agree on the same instant. The tick re-renders on a
+  // timer so the "Now" marker turns itself on and off as meetings start and end.
+  useClockTick()
   const { today: todayStr, hhmm: nowHHMM } = easternNowParts()
 
   return (
@@ -1218,6 +1288,7 @@ export function MeetingsPage() {
                 conv={conv}
                 qTerm={qTerm}
                 upcoming={isUpcomingMeeting(conv, todayStr, nowHHMM)}
+                happeningNow={isHappeningNow(conv, todayStr, nowHHMM)}
                 onEdit={() => quickLog.openEdit(conv.id)}
                 onDelete={() => setDeleteId(conv.id)}
                 onSeriesClick={(id) => setParam('seriesId', id.toString())}

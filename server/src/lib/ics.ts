@@ -23,6 +23,11 @@ export interface CalendarEvent {
   end: Date;
   date: string; // YYYY-MM-DD in the app timezone — the stored Conversation.date
   startTime: string | null; // HH:MM in the app timezone (null for all-day)
+  // HH:MM in the app timezone (null for all-day, or when the event ends on a LATER
+  // day — Conversation is single-day, so a wrapped end time would read as "ends
+  // before it starts"). This is what makes "happening now" exact instead of a
+  // guessed duration.
+  endTime: string | null;
   isAllDay: boolean;
   isRecurring: boolean;
   attendees: CalendarAttendee[];
@@ -76,16 +81,23 @@ function toCalendarEvent(
   const endJs: Date = end ? end.toJSDate() : startJs;
   let date: string;
   let startTime: string | null;
+  let endTime: string | null;
   if (isAllDay) {
     date = allDayDate(start);
     startTime = null;
+    endTime = null;
   } else {
     const lp = localParts(startJs, tz);
     date = lp.date;
     startTime = lp.time;
+    // An event that runs past midnight would give an endTime EARLIER than its start
+    // on the meeting's single stored date. Better to have no end time (the UI then
+    // falls back to a default duration) than one that reads as ending before it began.
+    const ep = localParts(endJs, tz);
+    endTime = ep.date === date && ep.time > lp.time ? ep.time : null;
   }
   const subject = typeof summary === 'string' && summary.trim() ? summary.trim() : null;
-  return { uid, subject, start: startJs, end: endJs, date, startTime, isAllDay, isRecurring, attendees: [] };
+  return { uid, subject, start: startJs, end: endJs, date, startTime, endTime, isAllDay, isRecurring, attendees: [] };
 }
 
 // ---- ICS feed fetch with a short in-memory cache ----

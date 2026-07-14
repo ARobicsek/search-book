@@ -192,6 +192,7 @@ model Conversation {
   nextSteps            String?
   photoFile            String?
   startTime            String?  // Local HH:MM start time (meetings are otherwise date-only); set by Outlook import, editable in Quick Log
+  endTime              String?  // Local HH:MM end time (from the ICS DTEND, editable in Quick Log). Drives the "Now" indicator; when null the UI assumes a default duration
   calendarUid          String?  // Outlook ICS UID for idempotent re-import. Dedup key = calendarUid + date (recurring occurrences share one UID)
   seriesId             Int?
   series               Series?  @relation(fields: [seriesId], references: [id], onDelete: SetNull)

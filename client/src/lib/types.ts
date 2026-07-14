@@ -232,6 +232,9 @@ export interface Conversation {
   date: string;
   /** Local HH:MM start time (date-only meetings leave this null). Set by Outlook import; editable in Quick Log. */
   startTime?: string | null;
+  /** Local HH:MM end time (from the ICS DTEND; editable in Quick Log). With startTime this
+   *  is what makes the meetings list's "Now" marker exact; null falls back to an assumed duration. */
+  endTime?: string | null;
   /** Outlook ICS UID for meetings imported from the calendar (idempotent re-import). */
   calendarUid?: string | null;
   datePrecision: DatePrecision;

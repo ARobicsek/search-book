@@ -922,7 +922,16 @@ function QuickLogDialog({
           const idStr = r.id.toString()
           if (!next.includes(idStr)) next.push(idStr)
         }
-        return next
+        // Arrange everyone ascending alphabetically by first name (a pasted list
+        // usually arrives in whatever order Outlook/email had them, which isn't useful).
+        const nameById = new Map<string, string>()
+        for (const o of contactOptions) nameById.set(o.value, o.label)
+        for (const r of results) nameById.set(r.id.toString(), r.name)
+        const firstName = (id: string) =>
+          (nameById.get(id) || id).trim().split(/\s+/)[0].toLowerCase()
+        return next.sort((a, b) =>
+          firstName(a).localeCompare(firstName(b)) || a.localeCompare(b)
+        )
       })
       setContactOptions((prev) => {
         const map = new Map(prev.map((o) => [o.value, o]))

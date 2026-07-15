@@ -24,7 +24,10 @@ function LayoutContent() {
   return (
     <>
       <AppSidebar />
-      <SidebarInset>
+      {/* min-w-0 lets this flex column shrink to the viewport so wide content
+          (e.g. the Actions table) scrolls inside its own box instead of pushing
+          the whole page — and the header/action buttons — off-screen. */}
+      <SidebarInset className="min-w-0">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 !h-4" />

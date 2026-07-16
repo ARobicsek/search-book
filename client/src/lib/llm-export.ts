@@ -84,6 +84,7 @@ export function buildLlmExport(data: Record<string, unknown>): string {
   const conversations = rows(data, 'Conversation');
   const tags = rows(data, 'Tag');
   const series = rows(data, 'Series');
+  const ideas = rows(data, 'Idea');
 
   // ---- Lookup maps (id -> entity) ----
   const contactById = new Map<number, Row>(contacts.map((c) => [c.id as number, c]));
@@ -155,9 +156,54 @@ export function buildLlmExport(data: Record<string, unknown>): string {
         (relationshipsByContact.get(cid) ?? relationshipsByContact.set(cid, []).get(cid)!).push(r);
     }
   }
+  // Contact + company "dossier" prep notes (free-text research/prep prose).
+  const prepNotesByContact = new Map<number, Row[]>();
+  for (const r of rows(data, 'PrepNote')) {
+    const cid = r.contactId as number;
+    (prepNotesByContact.get(cid) ?? prepNotesByContact.set(cid, []).get(cid)!).push(r);
+  }
+  const prepNotesByCompany = new Map<number, Row[]>();
+  for (const r of rows(data, 'CompanyPrepNote')) {
+    const cid = r.companyId as number;
+    (prepNotesByCompany.get(cid) ?? prepNotesByCompany.set(cid, []).get(cid)!).push(r);
+  }
+  // Idea links (people/orgs/tags an idea is associated with).
+  const ideaContactsByIdea = new Map<number, number[]>();
+  for (const r of rows(data, 'IdeaContact')) {
+    const k = r.ideaId as number;
+    (ideaContactsByIdea.get(k) ?? ideaContactsByIdea.set(k, []).get(k)!).push(r.contactId as number);
+  }
+  const ideaCompaniesByIdea = new Map<number, number[]>();
+  for (const r of rows(data, 'IdeaCompany')) {
+    const k = r.ideaId as number;
+    (ideaCompaniesByIdea.get(k) ?? ideaCompaniesByIdea.set(k, []).get(k)!).push(r.companyId as number);
+  }
+  const ideaTagsByIdea = new Map<number, number[]>();
+  for (const r of rows(data, 'IdeaTag')) {
+    const k = r.ideaId as number;
+    (ideaTagsByIdea.get(k) ?? ideaTagsByIdea.set(k, []).get(k)!).push(r.tagId as number);
+  }
 
   const names = (ids: number[] | undefined, fn: (id: number) => string) =>
     (ids ?? []).map(fn).filter(Boolean).join(', ');
+
+  /** Legacy comma-separated idea tags (superseded by IdeaTag, kept for back-compat). */
+  const legacyTags = (raw: unknown) =>
+    str(raw).split(',').map((s) => s.trim()).filter(Boolean).join(', ');
+
+  /** Render a contact's / company's dossier prep notes as a labeled block. */
+  const pushPrepNotes = (target: string[], list: Row[] | undefined) => {
+    const items = (list ?? []).filter((p) => str(p.content));
+    if (!items.length) return;
+    target.push('**Prep notes:**');
+    target.push('');
+    for (const p of items.sort((a, b) => str(a.date).localeCompare(str(b.date)))) {
+      const date = str(p.date) ? `(${str(p.date)}) ` : '';
+      target.push(`${date}${cleanText(str(p.content))}`);
+      if (str(p.url)) target.push(`Link: ${str(p.urlTitle) || str(p.url)} — ${str(p.url)}`);
+      target.push('');
+    }
+  };
 
   const out: string[] = [];
 
@@ -165,13 +211,15 @@ export function buildLlmExport(data: Record<string, unknown>): string {
   out.push('# SearchBook export for search / synthesis');
   out.push('');
   out.push(
-    'Personal CRM export optimized for an LLM agent. Three sections: **Meetings** ' +
-      '(newest first — the primary record of what was said and decided), **People**, and ' +
-      '**Organizations**. Every person and org is named (no IDs). Meeting notes are the ' +
-      'source of truth for what happened; per-attendee lines capture individual takeaways.',
+    'Personal CRM export optimized for an LLM agent. Four sections: **Meetings** ' +
+      '(newest first — the primary record of what was said and decided), **People** ' +
+      '(profiles + dossier prep notes), **Organizations**, and **Ideas**. Every person ' +
+      'and org is named (no IDs). Meeting notes are the source of truth for what happened; ' +
+      'per-attendee lines capture individual takeaways. This is the full prose corpus — for ' +
+      'search and synthesis you should not need any other file.',
   );
   out.push('');
-  out.push(`Generated ${new Date().toISOString()} · ${conversations.length} meetings · ${contacts.length} people · ${companies.length} organizations.`);
+  out.push(`Generated ${new Date().toISOString()} · ${conversations.length} meetings · ${contacts.length} people · ${companies.length} organizations · ${ideas.length} ideas.`);
   out.push('');
 
   // ---- Meetings (newest first) ----
@@ -311,6 +359,11 @@ export function buildLlmExport(data: Record<string, unknown>): string {
     const questions = block('Open questions', c.openQuestions);
     if (questions) out.push(questions);
 
+    if (prepNotesByContact.get(id)?.some((p) => str(p.content))) {
+      out.push('');
+      pushPrepNotes(out, prepNotesByContact.get(id));
+    }
+
     const emp = (employmentByContact.get(id) ?? []).filter(
       (e) => str(e.companyName) || typeof e.companyId === 'number',
     );
@@ -356,7 +409,14 @@ export function buildLlmExport(data: Record<string, unknown>): string {
 
   // ---- Organizations (only those with real content) ----
   const richCompanies = companies
-    .filter((c) => str(c.notes) || str(c.industry) || str(c.website) || str(c.hqLocation))
+    .filter(
+      (c) =>
+        str(c.notes) ||
+        str(c.industry) ||
+        str(c.website) ||
+        str(c.hqLocation) ||
+        prepNotesByCompany.get(c.id as number)?.some((p) => str(p.content)),
+    )
     .sort((a, b) => str(a.name).localeCompare(str(b.name)));
 
   if (richCompanies.length) {
@@ -379,6 +439,47 @@ export function buildLlmExport(data: Record<string, unknown>): string {
       }
       const notes = block('Notes', c.notes);
       if (notes) out.push(notes);
+      if (prepNotesByCompany.get(c.id as number)?.some((p) => str(p.content))) {
+        out.push('');
+        pushPrepNotes(out, prepNotesByCompany.get(c.id as number));
+      }
+      out.push('');
+    }
+  }
+
+  // ---- Ideas (active first, then archived; archived clearly labeled) ----
+  if (ideas.length) {
+    out.push('---');
+    out.push('');
+    out.push('## Ideas');
+    out.push('');
+    const sortedIdeas = [...ideas].sort((a, b) => {
+      const aArch = a.archived ? 1 : 0;
+      const bArch = b.archived ? 1 : 0;
+      if (aArch !== bArch) return aArch - bArch;
+      return str(a.title).localeCompare(str(b.title));
+    });
+    for (const idea of sortedIdeas) {
+      const id = idea.id as number;
+      out.push(`### ${str(idea.title) || `Idea ${id}`}${idea.archived ? ' (archived)' : ''}`);
+      out.push('');
+      const meta: string[] = [];
+      const tagNames =
+        names(ideaTagsByIdea.get(id), (t) => tagNameById.get(t) || '') || legacyTags(idea.tags);
+      if (tagNames) meta.push(`Tags: ${tagNames}`);
+      const people = names(ideaContactsByIdea.get(id), cName);
+      if (people) meta.push(`People: ${people}`);
+      const orgs = names(ideaCompaniesByIdea.get(id), coName);
+      if (orgs) meta.push(`Orgs: ${orgs}`);
+      if (meta.length) {
+        out.push(meta.join(' · '));
+        out.push('');
+      }
+      const desc = cleanText(str(idea.description));
+      if (desc) {
+        out.push(desc);
+        out.push('');
+      }
       out.push('');
     }
   }

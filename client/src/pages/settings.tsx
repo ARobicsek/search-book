@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { exportViaTurso, importViaTurso, type BackupProgress } from '@/lib/backup'
+import { buildLlmExport } from '@/lib/llm-export'
 import { buildBinariesZip } from '@/lib/photo-backup'
 import { Button } from '@/components/ui/button'
 import {
@@ -115,13 +116,28 @@ export function SettingsPage() {
       // Save to project backups/ folder (works locally, silently fails in production)
       api.post('/backup/save-local', data).catch(() => {})
 
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')
       const json = JSON.stringify(data, null, 2)
       downloadBlob(
         new Blob([json], { type: 'application/json' }),
-        `searchbook-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`,
+        `searchbook-backup-${stamp}.json`,
       )
       toast.success('Backup downloaded')
       setShowSaveReminder(true)
+
+      // Third artifact: a markdown rendering of the same data optimized for an LLM
+      // search/synthesis agent (IDs resolved to names, notes as real multi-line
+      // text). Not a restore source — the JSON above is. Best-effort: a failure
+      // here must not abort the binaries ZIP below.
+      try {
+        const markdown = buildLlmExport(data)
+        downloadBlob(
+          new Blob([markdown], { type: 'text/markdown' }),
+          `searchbook-notes-${stamp}.md`,
+        )
+      } catch (err) {
+        console.error('LLM export failed:', err)
+      }
 
       // Bundle the actual binary files (photos, meeting attachments, pasted
       // screenshots) into a single ZIP you keep locally and overwrite each time

@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/resizable'
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PersonTooltip } from '@/components/person-tooltip'
+import { MeetingTimeRange } from '@/components/meeting-time-range'
 import { MarkdownTextarea } from '@/components/markdown-textarea'
 import { SaveStatusIndicator } from '@/components/save-status'
 import type { SaveStatus } from '@/hooks/use-auto-save'
@@ -705,7 +706,7 @@ function QuickLogDialog({
     }, 1500)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, loadingEdit, title, date, type, summary, notes, nextSteps,
+  }, [open, loadingEdit, title, date, startTime, endTime, type, summary, notes, nextSteps,
     attendeesDescription, seriesId, orgValues, participantIds, participantNotes, tagIds])
 
   useEffect(() => () => { if (savedFlashRef.current) clearTimeout(savedFlashRef.current) }, [])
@@ -1565,43 +1566,16 @@ function QuickLogDialog({
           <Label htmlFor="ql-date">Date &amp; time</Label>
           <div className="flex flex-wrap items-center gap-2">
             <Input id="ql-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="min-w-[9rem] flex-1" />
-            <div className="flex items-center gap-1">
-              <Input
-                aria-label="Start time"
-                title="Start time (optional)"
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-[7.5rem]"
-              />
-              <span className="text-muted-foreground">–</span>
-              {/* End time is what makes the "Now" indicator exact rather than a guessed
-                  duration. Filled automatically by the Outlook import (ICS DTEND). */}
-              <Input
-                aria-label="End time"
-                title="End time (optional) — drives the “Now” marker on the meetings list"
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-[7.5rem]"
-              />
-              {/* Explicit clear — the native time input's clear control is hard to
-                  find (and absent on mobile); this reliably blanks both times, which
-                  autosave as startTime/endTime: null. */}
-              {(startTime || endTime) && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                  title="Clear times"
-                  aria-label="Clear times"
-                  onClick={() => { setStartTime(''); setEndTime('') }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+            {/* Type the start (forgiving: "9" → 9:00, "930" → 9:30, "2p" → 2:00 PM),
+                then one tap on a 30/45/60-min chip sets the end — no end typing in
+                the common case. End drives the exact "Now" marker on the meetings list
+                (else a 60-min duration is assumed). */}
+            <MeetingTimeRange
+              startId="ql-start"
+              startTime={startTime}
+              endTime={endTime}
+              onChange={(s, e) => { setStartTime(s); setEndTime(e) }}
+            />
           </div>
         </div>
         <div className="space-y-2">

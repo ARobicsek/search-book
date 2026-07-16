@@ -5,6 +5,38 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Owner UX batch: participant sort, on-screen Add-Action button, faster meeting-time entry, post-create nav (2026-07-16)
+
+Four small owner asks, **all schema-free + client-only**, each developed on
+`claude/meeting-imports-action-button-h0vtu9` and merged `--no-ff` into `main`. Owner confirmed the
+meeting-time redesign live ("works great").
+
+1. **Bulk-pasted meeting participants now sort ascending by first name** (`1fc9cec`→`e22d39d`). Pasting
+   an Outlook recipient list into the Quick Log Participants field used to keep whatever order the paste
+   supplied; the merged id list is now sorted by first name in `handleBulkPasteParticipants`, resolving
+   each name from `contactOptions` + the `/contacts/resolve-participants` results.
+2. **"New Action" button no longer scrolls off-screen** on Actions + Dashboard (same commit). Root cause
+   was **horizontal** overflow: `SidebarInset` (flex child of the sidebar row) lacked `min-w-0`, so a wide
+   table forced the whole content column past the viewport and the right-aligned header/action buttons off
+   the right edge. Fixed with `<SidebarInset className="min-w-0">` in `layout.tsx` — wide tables now scroll
+   in their own `overflow-x-auto` box (the shadcn `Table` already provides one). Fixes every wide page.
+3. **Faster meeting start/end entry** (`c5881ee`→`0391e97`). New **`MeetingTimeRange`**
+   (`client/src/components/meeting-time-range.tsx`) replaces the two native `<input type="time">` fields.
+   Start = the forgiving free-text `TimeInput` from action reminders (`"9"`→9:00, `"930"`→9:30, `"2p"`→2:00
+   PM); End = one tap on a **30m/45m/1h duration chip** computed from the start (chips disabled until a
+   start exists, highlight the matching span, tap-active-to-clear). End stays editable; a typed end
+   at/before the start is bumped 12h so it's always after the start; changing the start preserves the chosen
+   duration. Also added `startTime`/`endTime` to the Quick Log **autosave deps** (a time-only edit didn't
+   save before).
+4. **After creating a new action, return to the `/actions` list** instead of the new action's detail page
+   (`action-form.tsx`, `18fe989`→`7a40f24`); editing still returns to the detail page.
+
+`client tsc` + `check:backup` (32 tables) green on each; server `tsc` green after a one-time
+`npm install` + `prisma generate` in the fresh container; the duration/12h-bump math was unit-checked in
+Node. **Browser not driven this session** (no local server/DB stack up) — the components are
+self-contained and the owner is testing on the live deploy; eyeball 390px on the meeting-time chips if a
+narrow phone wraps them oddly.
+
 ### What Was Just Completed — @-mention search (scope + `@` picker) + green "happening NOW" meetings (2026-07-13)
 
 Two owner asks. **Two feature commits to `main`** (`29047b8` schema-free, `861a3f7` **SCHEMA** — owner applied the

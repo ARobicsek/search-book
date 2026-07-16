@@ -404,7 +404,9 @@ export function ActionFormPage() {
       }
 
       toast.success(isEdit ? 'Action updated' : 'Action created')
-      navigate(`/actions/${actionId}`)
+      // After creating a new action, return to the main Actions list; an edit stays
+      // on the action's detail page (that's where the edit was launched from).
+      navigate(isEdit ? `/actions/${actionId}` : '/actions')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save action')
     } finally {

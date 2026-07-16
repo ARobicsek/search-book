@@ -4,6 +4,12 @@ A reference for an agent that searches SearchBook data out of the JSON backup fi
 (e.g. "tell me everything I know about Vivek Garg", "what did Tricia Elliott tell me
 about Sarah Shih"). SearchBook is a single-user executive networking / stakeholder CRM.
 
+> **For search and synthesis, prefer the markdown export, not this JSON.** A manual backup
+> also produces `searchbook-notes-<timestamp>.md` — IDs resolved to names, notes as real
+> prose — which is the recommended file for almost every question. See
+> [`SEARCH-AGENT-GUIDE.md`](./SEARCH-AGENT-GUIDE.md). Use the JSON documented below only when
+> you need exact structured fields the markdown omits (IDs, timestamps, precise joins).
+
 ---
 
 ## 1. File shape

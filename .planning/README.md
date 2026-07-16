@@ -22,6 +22,8 @@ reading **`AGENTS.md`** (repo root) — it's the canonical session protocol and 
 
 | File | Purpose |
 |------|---------|
+| [SEARCH-AGENT-GUIDE.md](SEARCH-AGENT-GUIDE.md) | For an LLM search/synthesis agent: which export file to use (the `searchbook-notes-*.md` markdown) and how it's structured. Hand this to the agent. |
+| [BACKUP-SCHEMA.md](BACKUP-SCHEMA.md) | Schema of the JSON backup for an agent that needs exact structured fields (fallback to the markdown above). |
 | [BACKUP-COVERAGE-AUDIT.md](BACKUP-COVERAGE-AUDIT.md) | Proof the daily-cron + manual backups capture every table and binary. |
 | [RESTORE-TEST-RUNBOOK.md](RESTORE-TEST-RUNBOOK.md) | How to restore a prod backup into a scratch Turso DB and verify it (executed + passed). |
 | [HOW-IT-WORKS.md](HOW-IT-WORKS.md) | Plain-language tour of the stack/patterns for a non-engineer reader. |

@@ -5,6 +5,46 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — LLM search-agent markdown export (third manual-backup file) + agent guide (2026-07-16 s2)
+
+Owner uses an LLM agent to search/synthesize his notes (e.g. "every org dysfunction I've
+documented", "everyone at CMS I've discussed AI with") and worried the JSON backup was growing
+too fast to stay useful. **Schema-free, client-only; three commits to `main`** (`6291115`→`4de4be6`
+re-signed, `46e5aaf`, `b2dfede`).
+
+- **Diagnosis first (not a bug):** compared the owner's 6/16 vs 7/16 backups — 0.83MB→2.04MB, but a
+  third is just `JSON.stringify(…, null, 2)` pretty-printing, and ~half the real growth is a **one-time
+  NCQA network-onboarding wave** (170 contacts / 309 companies / 514 employment rows), not a run rate.
+  No pathology (no dup rows, no base64 in text). The real problem was **shape, not size**: the JSON is a
+  hostile agent target (notes are single escaped lines, attendees are bare integer IDs).
+- **New third download** from the manual backup (`settings.tsx` `handleBackup`, beside the JSON + the
+  binaries ZIP): **`searchbook-notes-<stamp>.md`**, built client-side from the same in-memory export by
+  new **`client/src/lib/llm-export.ts`** (`buildLlmExport`). A markdown **prose corpus** for the agent:
+  **Meetings** (newest-first; per-attendee takeaway lines), **People** (profiles + dossier prep notes),
+  **Organizations**, **Ideas** (archived included + labeled `(archived)`). Every contact/company/tag/series
+  ID resolved to a name; note markup cleaned (`[@Name](/contacts/7)`→`@Name`, `![screenshot](blob-url)`→
+  `[image]`). ~550KB vs the 2MB JSON, greppable line-by-line, self-contained records. Not a restore source.
+- **Content coverage matters:** first cut shipped only Meetings/People/Orgs; owner's "…or ideas?" probe
+  caught that **Ideas + contact/company prep notes** (~59KB of prose) were silently dropped. Folded all
+  three in so the `.md` is the **complete** prose corpus — the fix removes a *silent cross-file miss*
+  (an agent asked "legal risks in meetings or ideas" would otherwise answer from meetings alone).
+- **Guide for the agent:** new **`.planning/SEARCH-AGENT-GUIDE.md`** — routing rule (prose/themes/ideas/
+  notes → `.md`; exact numbers/dates/history → JSON; image contents → ZIP), the `.md` structure/schema,
+  conventions (`@Name`, `[image]`, per-attendee takeaways, owner shorthand), and how to answer common
+  queries. Cross-linked from `BACKUP-SCHEMA.md` (JSON schema, now marked the fallback) + indexed in
+  `.planning/README.md`. **Source of truth for the `.md` format is `llm-export.ts`** — keep the guide in
+  sync with it on any format change.
+- **Left as an option (not built):** the two CMS company records ("…(CMS)" with 11 people + a bare
+  duplicate) are a data-hygiene merge worth doing so a "CMS" grep can't miss anyone; and the export could
+  later feed the adaptation plan's **Task 6.2 (semantic search over meeting notes)** rather than staying a
+  grep target.
+
+`client tsc` + `check:backup` (32 tables) + **full `npm run build`** green. Verified by transpiling
+`llm-export.ts` and running it against the owner's real 7/16 backup (25 ideas incl. 2 archived, 24
+prep-note blocks, 0 residual blob URLs). Commits are **SSH-signed** (a stop-hook flagged the first as
+Unverified → amended `--reset-author` to sign, force-with-lease'd `main`). Browser not driven (the export
+is a pure data transform, exercised directly against real data).
+
 ### What Was Just Completed — Owner UX batch: participant sort, on-screen Add-Action button, faster meeting-time entry, post-create nav (2026-07-16)
 
 Four small owner asks, **all schema-free + client-only**, each developed on

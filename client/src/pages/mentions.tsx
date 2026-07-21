@@ -41,14 +41,28 @@ function typeLabel(value: string) {
 // One meeting card in the Mentions list: who was @-mentioned (resolved contacts
 // link out; loose names get a one-click "Create contact"), plus the note context.
 function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; onChanged: () => void }) {
-  const [creatingId, setCreatingId] = useState<number | null>(null)
+  // Mentions the owner has chosen to resolve. Hidden optimistically the instant a
+  // "Create" is picked — the control shouldn't linger while the server round-trip
+  // and list reload complete. Restored only if the create actually fails.
+  const [resolvingIds, setResolvingIds] = useState<Set<number>>(new Set())
 
   // The note context shown is the text *surrounding* the @-mentions (notes, next
   // steps, or prep notes), not the whole note.
   const snippets = meetingMentionSnippets(meeting)
 
+  function hide(mentionId: number) {
+    setResolvingIds((prev) => new Set(prev).add(mentionId))
+  }
+  function unhide(mentionId: number) {
+    setResolvingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(mentionId)
+      return next
+    })
+  }
+
   async function createContact(mentionId: number) {
-    setCreatingId(mentionId)
+    hide(mentionId)
     try {
       const { contact } = await api.post<{ contact: { id: number; name: string } }>(
         `/mentions/${mentionId}/create-contact`,
@@ -57,14 +71,13 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
       toast.success(`Created contact “${contact.name}”`)
       onChanged()
     } catch (err) {
+      unhide(mentionId)
       toast.error(err instanceof Error ? err.message : 'Failed to create contact')
-    } finally {
-      setCreatingId(null)
     }
   }
 
   async function createCompany(mentionId: number) {
-    setCreatingId(mentionId)
+    hide(mentionId)
     try {
       const { company } = await api.post<{ company: { id: number; name: string } }>(
         `/mentions/${mentionId}/create-company`,
@@ -73,9 +86,8 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
       toast.success(`Created organization “${company.name}”`)
       onChanged()
     } catch (err) {
+      unhide(mentionId)
       toast.error(err instanceof Error ? err.message : 'Failed to create organization')
-    } finally {
-      setCreatingId(null)
     }
   }
 
@@ -112,13 +124,12 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
           {meeting.mentions.map((m) => (
             <span key={m.id} className="inline-flex items-center gap-1">
               <MentionChip mention={m} />
-              {!m.contact && !m.company && (
+              {!m.contact && !m.company && !resolvingIds.has(m.id) && (
                 <div className="inline-flex items-center rounded-md border border-input">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-6 rounded-r-none px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                    disabled={creatingId === m.id}
                     onClick={() => (m.kind === 'COMPANY' ? createCompany(m.id) : createContact(m.id))}
                     title={
                       m.kind === 'COMPANY'
@@ -126,9 +137,7 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
                         : `Create a contact for ${m.mentionedName}`
                     }
                   >
-                    {creatingId === m.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : m.kind === 'COMPANY' ? (
+                    {m.kind === 'COMPANY' ? (
                       <Building2 className="h-3 w-3" />
                     ) : (
                       <UserPlus className="h-3 w-3" />
@@ -141,7 +150,6 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
                         variant="ghost"
                         size="sm"
                         className="h-6 rounded-l-none border-l border-input px-0.5 text-muted-foreground hover:text-foreground"
-                        disabled={creatingId === m.id}
                         title="Choose contact or organization"
                         aria-label={`Create ${m.mentionedName} as contact or organization`}
                       >

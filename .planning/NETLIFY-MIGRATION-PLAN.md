@@ -260,11 +260,38 @@ All of R1–R11 pass or have a confirmed workaround, **and** the §0.1 LinkedIn 
 Tear down the spike site (or keep it parked). **Only then** proceed to Phase 1. If R1 or R4/R5 fail
 with no workaround, Netlify is not viable — report and reconsider (Appendix B).
 
+### ✅ Phase 0 RESULTS — EXECUTED & PASSED (2026-07-21)
+
+Ran on a throwaway Netlify site (`ari-search-book.netlify.app`, scaffolding in `netlify-spike/`,
+built from GitHub — no CLI), tested from the **NCQA work laptop**. **Gate is GREEN → Phase 1 is clear.**
+
+| Risk | Result | Evidence |
+|---|---|---|
+| R1 reachable | ✅ PASS | `/api/health` returned JSON at work (no block page) |
+| R9 path prefix | ✅ PASS | `incomingPath = "/api/health"` — **full `/api` prefix preserved**, so Express routes match with no rewrite fix. (Phase 1 uses `serverless-http` (classic `event.path`) — sanity-check the prefix there, but the redirect preserves the original path.) |
+| R4/R5 Prisma + Turso | ✅ PASS | **engine-less** client (`engine:"client"`, no Rust binary) returned `contactCount: 509` in 838 ms against prod Turso |
+| R6 Blobs | ✅ PASS | test image written → served via proxy → rendered at work |
+| R7 cold start / bundle | ✅ PASS | sub-second query incl. cold start; `dbcount` graph bundles at **4.9 MB** via esbuild (≪ 50 MB) |
+| R3 browser→OpenAI | ❌ **BLOCKED at work** (`Failed to fetch`) — **rules out option A** |
+| R2 LinkedIn under 10 s | ✅ PASS → **option B** | The *function* reaches OpenAI fine (browser block is irrelevant server-side). A real 38k-char profile trims to ~8.8k and parses in **4.6–5.1 s** across 3 dense exec profiles — half the 10 s cap. The plan's feared 15–25 s doesn't occur because of the existing 30k-char trimming. |
+| R8 response size | ✅ n/a | full-backup path is already browser-direct (`client/src/lib/backup.ts`), bypasses functions |
+| R10 quota | ⏳ verify in Phase 2 | single-user; low-risk. Eyeball Netlify Usage & billing; drop reminders cron to 2–3 min if tight (Appendix A) |
+| R11 cron trigger | ⏳ verify in Phase 2 | low-risk (functions proven reachable); `reminders.mjs` with secret gate is ready |
+
+**Key surprise:** the Netlify **function egress reaches OpenAI even though the work browser cannot** —
+so the fix is the *opposite* of the plan's guess: **not** browser-direct (A), but **keep it
+server-side (B)**. And B needs **no prompt-tightening** — the existing route already fits under 10 s.
+
+**LinkedIn decision (§0.1): → B (server-side, essentially unchanged). Option A is off the table
+(OpenAI blocked at NCQA browser-side); C remains only as a graceful-degradation fallback.**
+
 ---
 
 ## 3. Phase 1 — Code changes (additive, env-gated; Vercel + local unchanged)
 
-> **LinkedIn decision from Phase 0.3: ______ (A / B / C).** Implement that path in 3.6.
+> **LinkedIn decision from Phase 0.3: → B (server-side, unchanged).** Implement that path in 3.6:
+> keep the parse on the server (it fits under 10 s at ~5 s), no prompt-tightening needed, no
+> browser-side move. Option A is ruled out (OpenAI blocked at the NCQA browser). See Phase 0 RESULTS.
 
 Everything gates on a Netlify-only signal so the **same commit** still deploys to Vercel untouched.
 Use `process.env.NETLIFY` (set automatically in the Netlify runtime) or an explicit

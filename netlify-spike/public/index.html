@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SearchBook Netlify Spike — Phase 0</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
+  .card { border: 1px solid #8884; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  code, pre { background: #8881; padding: 0.1rem 0.3rem; border-radius: 4px; }
+  pre { padding: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  a.btn, button { display: inline-block; padding: 0.5rem 0.9rem; border: 1px solid #8886; border-radius: 6px;
+    background: #8881; text-decoration: none; color: inherit; cursor: pointer; font-size: 0.95rem; }
+  input { padding: 0.5rem; width: 100%; box-sizing: border-box; margin: 0.25rem 0; font-family: monospace; }
+  .r { font-size: 0.8rem; opacity: 0.7; }
+  img#blobimg { border: 1px dashed #8886; width: 48px; height: 48px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<h1>SearchBook → Netlify · Phase 0 de-risk spike</h1>
+<p class="r">Throwaway. Open this <strong>on the work (NCQA) laptop</strong> and work top to bottom.
+Each button hits a test function; success criteria are in <code>README.md</code>.</p>
+
+<div class="card">
+  <h2>R1 / R9 — Function reachable + path prefix</h2>
+  <p><a class="btn" href="/api/health" target="_blank">GET /api/health</a>
+     &nbsp;<a class="btn" href="/.netlify/functions/ping" target="_blank">raw ping</a></p>
+  <p class="r">Expect JSON. If you get a <em>block page</em>, STOP — Netlify functions are filtered at work.
+     Record <code>incomingPath</code> for the §3.7 path fix.</p>
+</div>
+
+<div class="card">
+  <h2>R4 / R5 / R7 — Prisma (engine-less) + Turso</h2>
+  <p><a class="btn" href="/.netlify/functions/dbcount" target="_blank">GET dbcount</a></p>
+  <p class="r">Expect <code>{ ok:true, contactCount:N }</code>. Note cold-start in function logs.
+     "could not locate the Query Engine" ⇒ engine-less didn't take (fallback in README).</p>
+</div>
+
+<div class="card">
+  <h2>R2 — LinkedIn parse timing (server-side)</h2>
+  <p><a class="btn" href="/.netlify/functions/linkedin-time" target="_blank">GET linkedin-time</a></p>
+  <p class="r">Reads <code>durationSec</code>. &lt; 8 s ⇒ option B possible; a 502/&gt;10 s ⇒ confirms R2, use A or C.</p>
+</div>
+
+<div class="card">
+  <h2>R3 — Browser-direct OpenAI reachable at work? (option A)</h2>
+  <p>Paste the owner's OpenAI key (stays in this tab only, never sent to our server):</p>
+  <input id="key" type="password" placeholder="sk-..." autocomplete="off" />
+  <button id="openaiBtn">Call api.openai.com directly</button>
+  <pre id="openaiOut" class="r">(result appears here)</pre>
+  <p class="r">✅ a completion ⇒ option A works at NCQA (free, no timeout — the win).
+     ❌ CORS/blocked/timeout ⇒ api.openai.com blocked at work ⇒ fall back to option C.</p>
+</div>
+
+<div class="card">
+  <h2>R6 — Netlify Blobs write → serve → render</h2>
+  <p><button id="blobBtn">1. Write test image</button>
+     <button id="blobLoad">2. Load /photos/spike-test.png</button></p>
+  <pre id="blobOut" class="r">(write result appears here)</pre>
+  <p>Rendered: <img id="blobimg" alt="(not loaded yet)" /></p>
+  <p class="r">Image renders here ⇒ R6 passes (Blobs served through the proxy on the work network).</p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+$("openaiBtn").onclick = async () => {
+  const out = $("openaiOut");
+  const key = $("key").value.trim();
+  if (!key) { out.textContent = "Paste a key first."; return; }
+  out.textContent = "Calling api.openai.com …";
+  const t0 = performance.now();
+  try {
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        messages: [{ role: "user", content: 'Reply with the single word: reachable' }],
+      }),
+    });
+    const ms = Math.round(performance.now() - t0);
+    const j = await r.json();
+    out.textContent = "HTTP " + r.status + " in " + ms + "ms\n" +
+      (j?.choices?.[0]?.message?.content ?? JSON.stringify(j).slice(0, 300));
+  } catch (e) {
+    out.textContent = "❌ BLOCKED/ERROR: " + e + "\n(This is the R3 failure signal — api.openai.com not reachable from here.)";
+  }
+};
+
+$("blobBtn").onclick = async () => {
+  const out = $("blobOut");
+  out.textContent = "Writing …";
+  try {
+    const r = await fetch("/.netlify/functions/blob-put");
+    out.textContent = JSON.stringify(await r.json(), null, 2);
+  } catch (e) { out.textContent = "❌ " + e; }
+};
+$("blobLoad").onclick = () => { $("blobimg").src = "/photos/spike-test.png?t=" + Date.now(); };
+</script>
+</body>
+</html>

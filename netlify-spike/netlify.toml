@@ -1,0 +1,37 @@
+# THROWAWAY spike config — mirrors the redirect shape the real migration will use
+# (NETLIFY-MIGRATION-PLAN.md §3.7) but points each prefix at its own tiny test
+# function instead of one serverless-http catch-all.
+
+[build]
+  # Generate the engine-less Prisma client at build time (tests R4/R7 on Linux).
+  command = "npm install && npm run generate"
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# ── 0.6 Cron trigger (R11) — must come BEFORE the /api/* catch-all (first match wins) ─
+[[redirects]]
+  from = "/api/cron/reminders"
+  to = "/.netlify/functions/reminders"
+  status = 200
+
+# ── 0.1 Function reachability + path prefix (R1, R9) ────────────────────────
+# Everything else under /api/* echoes back the path Express/serverless-http would see.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/ping/:splat"
+  status = 200
+
+# ── 0.4 Netlify Blobs media proxy (R6) ──────────────────────────────────────
+[[redirects]]
+  from = "/photos/*"
+  to = "/.netlify/functions/media/:splat"
+  status = 200
+
+# SPA-style catch-all so the static test page is served at /
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

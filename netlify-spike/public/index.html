@@ -39,9 +39,15 @@ Each button hits a test function; success criteria are in <code>README.md</code>
 </div>
 
 <div class="card">
-  <h2>R2 — LinkedIn parse timing (server-side)</h2>
-  <p><a class="btn" href="/.netlify/functions/linkedin-time" target="_blank">GET linkedin-time</a></p>
-  <p class="r">Reads <code>durationSec</code>. &lt; 8 s ⇒ option B possible; a 502/&gt;10 s ⇒ confirms R2, use A or C.</p>
+  <h2>R2 — LinkedIn parse timing (server-side) · the decision-maker</h2>
+  <p><strong>Paste a REAL, full LinkedIn profile</strong> (open a real profile, expand
+     "Show all experiences", Select-All, copy) to get a representative timing vs. the 10 s cap:</p>
+  <textarea id="liText" rows="6" style="width:100%;box-sizing:border-box;font-family:monospace"
+    placeholder="Paste full LinkedIn profile text here…"></textarea>
+  <button id="liBtn">Time a real parse (server-side)</button>
+  <pre id="liOut" class="r">(result appears here)</pre>
+  <p class="r">&lt; ~9 s ⇒ option B (keep server-side) works. &gt; 10 s / 502 ⇒ option C (import off the work network).
+     &nbsp;(<a href="/.netlify/functions/linkedin-time" target="_blank">tiny built-in sample</a> for a quick smoke test.)</p>
 </div>
 
 <div class="card">
@@ -89,6 +95,21 @@ $("openaiBtn").onclick = async () => {
   } catch (e) {
     out.textContent = "❌ BLOCKED/ERROR: " + e + "\n(This is the R3 failure signal — api.openai.com not reachable from here.)";
   }
+};
+
+$("liBtn").onclick = async () => {
+  const out = $("liOut");
+  const text = $("liText").value;
+  if (text.trim().length < 100) { out.textContent = "Paste a full profile first (>=100 chars)."; return; }
+  out.textContent = "Parsing server-side …";
+  try {
+    const r = await fetch("/.netlify/functions/linkedin-time", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    out.textContent = JSON.stringify(await r.json(), null, 2);
+  } catch (e) { out.textContent = "❌ " + e; }
 };
 
 $("blobBtn").onclick = async () => {

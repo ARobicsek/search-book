@@ -5,6 +5,52 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — @-mention mis-classification recovery + search count-skip speedup (2026-07-21)
+
+Two owner asks, **schema-free**, **three commits to `main`** (`121278d`, `f745a15`, `c7df6f3`). Owner
+confirmed both live (the Create control hides on click; search dropped from ~5.5s → ~1.3–1.6s).
+
+**1. A first-time @-mention accidentally tagged as an org can now be made a contact (and vice versa)**
+(`121278d`, `f745a15`). When you `@`-mention a new name and slip on "organization" instead of "person",
+the note gets a `[@Name](#org-mention)` token → a **loose org mention** whose only recovery was a "Create"
+button that made an *org*. Two-part fix:
+- **Server** (`server/src/routes/mentions.ts`): `create-contact` / `create-company` now accept a loose
+  mention of **either** kind and rewrite **both** loose token forms (`#mention` *and* `#org-mention`) →
+  the bound token, so the note stops re-deriving the wrong kind on the next save. Each still rejects a
+  mention already bound to a real record (converting a *created* org↔contact is a different, destructive
+  op, left out of scope). *(Note: `create-contact` had only ever rewritten `#mention`, so calling it on an
+  org-mention would have silently made an orphan contact — this closes that.)*
+- **Client** (`client/src/pages/mentions.tsx`): the loose "Create" is now a **split button** — primary
+  click keeps the one-click default for the common (correct) case; a caret opens "Create as contact" /
+  "Create as organization" for either type. Follow-up: the control now **hides optimistically the instant
+  a type is chosen** (was lingering with a spinner through the round-trip + reload), restored only on error.
+
+**2. Global search sped up ~4× by skipping redundant COUNT queries** (`c7df6f3`, `server/src/routes/search.ts`).
+- **Owner reported search felt slow; asked if a recent change caused it. It did not** — this session's work
+  never touched search; the only recent change to the search path was the **2026-07-13** `@`-mentions-in-search
+  feature. **Confirmed with the owner's Vercel `[TIMING]` logs** rather than guessing: my first hypothesis
+  (the `mentions` scope's heavy fetch) was **wrong** — with vs. without the mentions scope was only ~250–580ms
+  of a ~5,500ms search.
+- **Real cause (from the logs):** a 2-result search (`"barbara"` → 2 contacts, 1 company) *still* took ~5.3s,
+  so cost is **fixed overhead, not result volume**. Each of ~7 scopes ran a `findMany` **and** a full `count()`
+  (complex `OR` with relation sub-queries) as a second sequential wave over Turso — ~14 round-trips regardless
+  of matches. (Plus general cold-start/Turso-warmth variance — same "evan" query ran 1.5s cold vs 3.6s warm —
+  which is infra, not code.)
+- **Fix:** in the `totals` block, **skip a scope's `count()` when its page came back short** (< `take`) — a
+  short page already *is* the whole result set, so its total is the fetched length. A narrow search (the common
+  case) now runs **zero** count queries. **Pure speedup, zero behavior change**: when `take` didn't truncate,
+  the fetched length equals what `count()` would return (mentions uses the JS-verified length, matching
+  `countMentionMeetings()` for the loose-`@`-target case). Deliberately did **not** speculatively overlap counts
+  with fetches — once short pages skip, that would only waste queries on the narrow searches we're speeding up.
+- **Result confirmed in prod logs:** `/api/search` for "barbara"/"bar" went from ~5,082–5,964ms → **~1,303–1,556ms**.
+- **Next lever if ever wanted:** trim the eager relation loads in the result fetches (`prepNotes` take 20,
+  `participantInConversations` take 50) — not needed at ~1.3s warm.
+
+`prepush` + **full `npm run build`** green. **No Turso DDL** (client + server code only, no schema change).
+Browser not driven from the container (no local server/DB stack); the mention change is standard shadcn
+`DropdownMenu`, and the search change was **verified against production** via the owner's `[TIMING]` logs
+(before/after). Not part of any NCQA-adaptation-plan task, so no task STATUS line to update.
+
 ### What Was Just Completed — LinkedIn "About" gets its own field (out of Notes) (2026-07-20)
 
 Owner ask: the LinkedIn import dropped the profile's **About** text into `notes`, colliding with the

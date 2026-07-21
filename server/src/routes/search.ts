@@ -767,23 +767,37 @@ router.get('/', async (req: Request, res: Response) => {
         ideas: evIdeas.length,
       };
     } else {
+      // Each group's fetch is capped at `take`. If it came back SHORT (< take), the
+      // page already IS the whole result set, so the total is just what we fetched —
+      // no separate COUNT round-trip needed. Only a FULL page (there may be more
+      // behind it) pays for a count. Per the [TIMING] logs these per-group counts are
+      // the dominant fixed cost (a 2-result search still ran ~5s doing all of them),
+      // and a narrow search — the common case — now runs zero of them.
+      //
+      // This is a pure speedup, not a behavior change: when `take` didn't truncate,
+      // the raw fetched length equals what count() would return. Mentions is the lone
+      // exception — a loose @-target over-matches in SQL and is exact-filtered in JS —
+      // so its short-page total is the verified (evaluated) length, which is exactly
+      // what countMentionMeetings() computes for that case anyway.
       const [tContacts, tCompanies, tConversations, tMentions, tActions, tIdeas] = await Promise.all([
-        anyPeople
+        anyPeople && contacts.length >= take
           ? prisma.contact.count({ where: { AND: [...terms.map((t) => ({ OR: contactClausesFor(t) })), ...tagClause('tags')] } })
-          : 0,
-        scopes.has('orgs')
+          : contacts.length,
+        scopes.has('orgs') && companies.length >= take
           ? prisma.company.count({ where: { AND: [...terms.map((t) => ({ OR: companyClausesFor(t) })), ...tagClause('tags')] } })
-          : 0,
-        scopes.has('meetings')
+          : companies.length,
+        scopes.has('meetings') && conversations.length >= take
           ? prisma.conversation.count({ where: { AND: [...terms.map((t) => ({ OR: conversationClausesFor(t) })), ...tagClause('tags')] } })
-          : 0,
-        scopes.has('mentions') ? countMentionMeetings() : 0,
-        scopes.has('actions') && !hasTagFilter
+          : conversations.length,
+        scopes.has('mentions') && mentionMeetings.length >= take
+          ? countMentionMeetings()
+          : evMentionMeetings.length,
+        scopes.has('actions') && !hasTagFilter && actions.length >= take
           ? prisma.action.count({ where: { AND: terms.map((t) => ({ OR: actionClausesFor(t) })) } })
-          : 0,
-        scopes.has('ideas')
+          : actions.length,
+        scopes.has('ideas') && ideas.length >= take
           ? prisma.idea.count({ where: { AND: [...terms.map((t) => ({ OR: ideaClausesFor(t) })), ...tagClause('tagLinks')] } })
-          : 0,
+          : ideas.length,
       ]);
       totals = {
         contacts: tContacts, companies: tCompanies, conversations: tConversations,

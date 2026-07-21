@@ -8,9 +8,15 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { MentionChip } from '@/components/mention-chip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { meetingMentionSnippets } from '@/lib/mentions'
 import { toast } from 'sonner'
-import { AtSign, Building2, Loader2, Pencil, UserPlus } from 'lucide-react'
+import { AtSign, Building2, ChevronDown, Loader2, Pencil, UserPlus } from 'lucide-react'
 
 const PAGE_SIZE = 25
 
@@ -97,34 +103,63 @@ function MentionMeetingCard({ meeting, onChanged }: { meeting: MentionMeeting; o
         </div>
 
         {/* Who / what was mentioned. Loose mentions (not in the CRM yet) get the
-            one-click "Create" that is this page's reason for existing. */}
+            one-click "Create" that is this page's reason for existing. The primary
+            click follows the mention's kind (person vs org), but the caret always
+            offers the other type — so a name first mis-tagged as an organization can
+            be turned into a contact (and vice versa) without editing the note. */}
         <div className="flex flex-wrap items-center gap-1.5">
           <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
           {meeting.mentions.map((m) => (
             <span key={m.id} className="inline-flex items-center gap-1">
               <MentionChip mention={m} />
               {!m.contact && !m.company && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  disabled={creatingId === m.id}
-                  onClick={() => (m.kind === 'COMPANY' ? createCompany(m.id) : createContact(m.id))}
-                  title={
-                    m.kind === 'COMPANY'
-                      ? `Create an organization for ${m.mentionedName}`
-                      : `Create a contact for ${m.mentionedName}`
-                  }
-                >
-                  {creatingId === m.id ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : m.kind === 'COMPANY' ? (
-                    <Building2 className="h-3 w-3" />
-                  ) : (
-                    <UserPlus className="h-3 w-3" />
-                  )}
-                  <span className="ml-1">Create</span>
-                </Button>
+                <div className="inline-flex items-center rounded-md border border-input">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 rounded-r-none px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    disabled={creatingId === m.id}
+                    onClick={() => (m.kind === 'COMPANY' ? createCompany(m.id) : createContact(m.id))}
+                    title={
+                      m.kind === 'COMPANY'
+                        ? `Create an organization for ${m.mentionedName}`
+                        : `Create a contact for ${m.mentionedName}`
+                    }
+                  >
+                    {creatingId === m.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : m.kind === 'COMPANY' ? (
+                      <Building2 className="h-3 w-3" />
+                    ) : (
+                      <UserPlus className="h-3 w-3" />
+                    )}
+                    <span className="ml-1">Create</span>
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 rounded-l-none border-l border-input px-0.5 text-muted-foreground hover:text-foreground"
+                        disabled={creatingId === m.id}
+                        title="Choose contact or organization"
+                        aria-label={`Create ${m.mentionedName} as contact or organization`}
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => createContact(m.id)}>
+                        <UserPlus className="mr-2 h-3.5 w-3.5" />
+                        Create as contact
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => createCompany(m.id)}>
+                        <Building2 className="mr-2 h-3.5 w-3.5" />
+                        Create as organization
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               )}
             </span>
           ))}

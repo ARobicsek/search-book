@@ -122,8 +122,14 @@ router.get('/index', async (req: Request, res: Response) => {
 });
 
 // POST /api/mentions/:id/create-contact — turn a loose mention (a name that isn't
-// a contact yet) into a real contact: create the contact, rewrite the note token
+// in the CRM yet) into a real contact: create the contact, rewrite the note token
 // from loose → bound, and re-sync the meeting's mentions. Returns the new contact.
+//
+// Works on a mention that was loosely tagged as *either* a person OR an organization
+// — mis-picking "organization" for a person on a first-time @-mention is an easy slip,
+// and this is the one-click recovery for it. Both loose token forms (`#mention` and
+// `#org-mention`) are rewritten, so the note stops re-deriving the wrong kind on the
+// next save.
 router.post('/:id/create-contact', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string);
@@ -139,6 +145,12 @@ router.post('/:id/create-contact', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'This mention is already linked to a contact' });
       return;
     }
+    // A mention already bound to a real organization isn't a loose name — turning a
+    // created org into a contact is a different, destructive operation, not this.
+    if (mention.companyId) {
+      res.status(400).json({ error: 'This mention is already linked to an organization' });
+      return;
+    }
 
     const name = mention.mentionedName.trim();
     const conv = mention.conversation;
@@ -151,12 +163,16 @@ router.post('/:id/create-contact', async (req: Request, res: Response) => {
         select: { id: true, name: true },
       });
 
-      // Rewrite every loose token for this exact name → a bound token, wherever
-      // it appears: notes, next steps, AND prep notes. Literal string replace
-      // (split/join) avoids regex-escaping the name.
-      const loose = looseMentionToken(name);
+      // Rewrite every loose token for this exact name → a bound contact token,
+      // wherever it appears: notes, next steps, AND prep notes. Rewrites BOTH the
+      // person (`#mention`) and org (`#org-mention`) loose forms, so a name first
+      // mis-tagged as an organization still resolves to the new contact. Literal
+      // string replace (split/join) avoids regex-escaping the name.
+      const loosePerson = looseMentionToken(name);
+      const looseOrg = looseOrgMentionToken(name);
       const bound = resolvedMentionToken(name, contact.id);
-      const rewrite = (t: string | null) => (t ? t.split(loose).join(bound) : t);
+      const rewrite = (t: string | null) =>
+        t ? t.split(loosePerson).join(bound).split(looseOrg).join(bound) : t;
 
       await tx.conversation.update({
         where: { id: conv.id },
@@ -168,7 +184,7 @@ router.post('/:id/create-contact', async (req: Request, res: Response) => {
         select: { id: true, content: true },
       });
       for (const p of preps) {
-        if (p.content && p.content.includes(loose)) {
+        if (p.content && (p.content.includes(loosePerson) || p.content.includes(looseOrg))) {
           await tx.conversationPrepNote.update({
             where: { id: p.id },
             data: { content: rewrite(p.content)! },
@@ -189,8 +205,12 @@ router.post('/:id/create-contact', async (req: Request, res: Response) => {
 });
 
 // POST /api/mentions/:id/create-company — the org counterpart of create-contact:
-// turn a loose org mention into a real organization, rewrite its tokens
+// turn a loose mention into a real organization, rewrite its tokens
 // (loose → bound) across notes / next steps / prep notes, and re-sync.
+//
+// Symmetric with create-contact: accepts a loose mention tagged as either a person
+// OR an organization, so a name first mis-tagged as a person can still be made into
+// an org here. Both loose token forms are rewritten.
 router.post('/:id/create-company', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id as string);
@@ -202,12 +222,14 @@ router.post('/:id/create-company', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Mention not found' });
       return;
     }
-    if (mention.kind !== 'COMPANY') {
-      res.status(400).json({ error: 'This mention is a person, not an organization' });
-      return;
-    }
     if (mention.companyId) {
       res.status(400).json({ error: 'This mention is already linked to an organization' });
+      return;
+    }
+    // A mention already bound to a real contact isn't a loose name — turning a
+    // created contact into an org is a different, destructive operation, not this.
+    if (mention.contactId) {
+      res.status(400).json({ error: 'This mention is already linked to a contact' });
       return;
     }
 
@@ -221,9 +243,13 @@ router.post('/:id/create-company', async (req: Request, res: Response) => {
         select: { id: true, name: true },
       });
 
-      const loose = looseOrgMentionToken(name);
+      // Rewrite BOTH loose forms (`#mention` and `#org-mention`) → a bound org token,
+      // so a name first mis-tagged as a person still resolves to the new org.
+      const loosePerson = looseMentionToken(name);
+      const looseOrg = looseOrgMentionToken(name);
       const bound = resolvedOrgMentionToken(name, company.id);
-      const rewrite = (t: string | null) => (t ? t.split(loose).join(bound) : t);
+      const rewrite = (t: string | null) =>
+        t ? t.split(loosePerson).join(bound).split(looseOrg).join(bound) : t;
 
       await tx.conversation.update({
         where: { id: conv.id },
@@ -235,7 +261,7 @@ router.post('/:id/create-company', async (req: Request, res: Response) => {
         select: { id: true, content: true },
       });
       for (const p of preps) {
-        if (p.content && p.content.includes(loose)) {
+        if (p.content && (p.content.includes(loosePerson) || p.content.includes(looseOrg))) {
           await tx.conversationPrepNote.update({
             where: { id: p.id },
             data: { content: rewrite(p.content)! },

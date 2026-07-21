@@ -5,6 +5,33 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — LinkedIn "About" gets its own field (out of Notes) (2026-07-20)
+
+Owner ask: the LinkedIn import dropped the profile's **About** text into `notes`, colliding with the
+notes he writes about people. **SCHEMA** (owner applied the Turso DDL, confirmed, before the push),
+**one commit to `main`**.
+
+- **New additive `Contact.linkedinAbout`** (`ALTER TABLE "Contact" ADD COLUMN "linkedinAbout" TEXT`).
+  The import now routes the parsed `about` there (`contact-form.tsx` `onImport`), leaving `notes` alone.
+- **"About (LinkedIn)" section shows only when populated** (i.e. only after an import): a read-only card
+  on the contact detail (`contact-detail.tsx`) and an editable/clearable box on the contact form. Rendered
+  as **verbatim pre-wrapped plain text** (not `ReactMarkdown`) so stray `*`/`#`/`-` in LinkedIn copy aren't
+  mangled.
+- **Import dialog field-merge** for About now compares against a prior `linkedinAbout` (not `notes`),
+  labeled "About (LinkedIn)" (`linkedin-import-dialog.tsx`). Also added an "About (LinkedIn)" block to the
+  **LLM markdown export** (`llm-export.ts`) so the text stays available to the search agent (it used to ride
+  inside notes).
+- **Forward-only** — existing contacts whose About already sits in `notes` are **not** migrated (owner
+  declined a backfill). Backup unchanged (both paths pass all columns; `Contact` already covered).
+- ⚠ **Full-build-catches-what-prepush-misses, again:** making `Contact.linkedinAbout` a **required** field
+  in the client type broke an `as Contact` object-literal cast in `contact-list.tsx` (draft rows) — clean
+  under `prepush`'s `tsc --noEmit`, **failed** `tsc -b`/`vite build`. Fixed by adding the field to that
+  literal. Reaffirms the AGENTS.md "run a full `npm run build` before pushing" rule.
+
+`prepush` + **full `npm run build`** green. **Browser not driven** — this is a data-shaping change and a live
+import needs an OpenAI key; the UI is standard Card/Textarea mirroring the adjacent Notes/Useful-For cards.
+Eyeball 390px on the new card if convenient (it's a labeled card + pre-wrapped text, same as its neighbors).
+
 ### What Was Just Completed — LLM search-agent markdown export (third manual-backup file) + agent guide (2026-07-16 s2)
 
 Owner uses an LLM agent to search/synthesize his notes (e.g. "every org dysfunction I've

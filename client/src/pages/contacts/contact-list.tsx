@@ -503,6 +503,7 @@ export function ContactListPage() {
             whereFound: parsed.whereFound || null,
             openQuestions: parsed.openQuestions || null,
             notes: parsed.notes || null,
+            linkedinAbout: parsed.linkedinAbout || null,
             personalDetails: parsed.personalDetails || null,
             usefulFor: parsed.usefulFor || null,
             flagged: false,

@@ -5,6 +5,7 @@ import type { Contact, Company, LinkRecord } from '@/lib/types'
 import { ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -64,6 +65,7 @@ type FormData = {
   whereFound: string
   openQuestions: string
   notes: string
+  linkedinAbout: string
   personalDetails: string
   usefulFor: string
 }
@@ -89,6 +91,7 @@ const emptyForm: FormData = {
   whereFound: '',
   openQuestions: '',
   notes: '',
+  linkedinAbout: '',
   personalDetails: '',
   usefulFor: '',
 }
@@ -152,6 +155,7 @@ function contactToForm(contact: Contact): FormData {
     whereFound: contact.whereFound ?? '',
     openQuestions: contact.openQuestions ?? '',
     notes: contact.notes ?? '',
+    linkedinAbout: contact.linkedinAbout ?? '',
     personalDetails: contact.personalDetails ?? '',
     usefulFor: contact.usefulFor ?? '',
   }
@@ -184,6 +188,7 @@ function formToPayload(form: FormData, companyEntries: { id: number; isCurrent: 
     whereFound: form.whereFound.trim() || null,
     openQuestions: form.openQuestions.trim() || null,
     notes: form.notes.trim() || null,
+    linkedinAbout: form.linkedinAbout.trim() || null,
     personalDetails: form.personalDetails.trim() || null,
     usefulFor: form.usefulFor.trim() || null,
   }
@@ -1045,6 +1050,30 @@ export function ContactFormPage() {
           </CardContent>
         </Card>
 
+        {/* About (LinkedIn) — the profile's "About" text captured on import. Only shown
+            once populated (i.e. after a LinkedIn import), so it stays out of the way for
+            manually-created contacts. Editable/clearable here; kept apart from Notes. */}
+        {form.linkedinAbout.trim() && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Linkedin className="h-4 w-4 text-[#0a66c2]" />
+                About (LinkedIn)
+              </CardTitle>
+              <CardDescription>Imported from LinkedIn. Clear this field to remove the section.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                id="linkedinAbout"
+                value={form.linkedinAbout}
+                onChange={(e) => set('linkedinAbout', e.target.value)}
+                rows={6}
+                className="text-sm leading-relaxed"
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Useful For — what this person could help NCQA with in future. Non-empty
             marks them a "useful person" (drives the contacts filter + search). */}
         <Card>
@@ -1241,7 +1270,7 @@ export function ContactFormPage() {
           name: form.name,
           title: form.title,
           location: form.location,
-          notes: form.notes,
+          linkedinAbout: form.linkedinAbout,
           linkedinUrl: form.linkedinUrl
         }}
         onImport={async (data: import('@/components/linkedin-import-dialog').LinkedInParsedData) => {
@@ -1253,7 +1282,8 @@ export function ContactFormPage() {
             title: data.title !== undefined ? data.title : prev.title,
             location: data.location !== undefined ? data.location : prev.location,
             linkedinUrl: data.linkedinUrl !== undefined ? data.linkedinUrl : prev.linkedinUrl,
-            notes: data.about !== undefined ? data.about : prev.notes,
+            // LinkedIn "About" lands in its own field so it never overwrites the owner's Notes.
+            linkedinAbout: data.about !== undefined ? data.about : prev.linkedinAbout,
           }))
           if (data.linkedinUrl || form.linkedinUrl) setContactDetailsOpen(true)
 

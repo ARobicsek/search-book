@@ -31,6 +31,7 @@ export interface Contact {
   whereFound: string | null;
   openQuestions: string | null;
   notes: string | null;
+  linkedinAbout: string | null; // "About" section from a LinkedIn import; kept separate from `notes`
   personalDetails: string | null;
   usefulFor: string | null; // What this person could help with in future; non-empty = a "useful person"
   flagged: boolean;

@@ -78,6 +78,7 @@ import {
   ArrowDown,
   Building2,
   Lightbulb,
+  Linkedin,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -783,6 +784,23 @@ export function ContactDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* About (LinkedIn) — the imported profile "About". Only rendered when a
+              LinkedIn import populated it. Verbatim LinkedIn text, so shown as plain
+              pre-wrapped text (not markdown) to avoid mangling stray * / # / - chars. */}
+          {contact.linkedinAbout && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Linkedin className="h-4 w-4 text-[#0a66c2]" />
+                  About (LinkedIn)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm whitespace-pre-line text-muted-foreground">{contact.linkedinAbout}</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Useful For — surfaced when set; recall via the contacts "Useful people" filter + search */}
           {contact.usefulFor && (

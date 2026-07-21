@@ -40,6 +40,7 @@ model Contact {
   whereFound        String?
   openQuestions     String?
   notes             String?
+  linkedinAbout     String?  // The "About" section pulled from a LinkedIn import. Kept separate from `notes` (the owner's own notes). Only populated by the LinkedIn import flow.
   personalDetails   String?
   usefulFor         String?  // Free text: what this person could help NCQA with in future (topic/collaboration). Non-empty = a "useful person"; drives the contacts "Useful people" filter + search.
   flagged           Boolean  @default(false)

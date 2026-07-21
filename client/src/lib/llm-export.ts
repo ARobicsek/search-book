@@ -352,6 +352,8 @@ export function buildLlmExport(data: Record<string, unknown>): string {
 
     const notes = block('Notes', c.notes);
     if (notes) out.push(notes);
+    const linkedinAbout = block('About (LinkedIn)', c.linkedinAbout);
+    if (linkedinAbout) out.push(linkedinAbout);
     const personal = block('Personal details', c.personalDetails);
     if (personal) out.push(personal);
     const useful = block('Useful for', c.usefulFor);

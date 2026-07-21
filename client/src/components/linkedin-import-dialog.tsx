@@ -47,7 +47,7 @@ export type LinkedInImportExistingData = {
   name?: string
   title?: string
   location?: string
-  notes?: string
+  linkedinAbout?: string
   linkedinUrl?: string
 }
 
@@ -171,7 +171,9 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
       checkField('title', 'Title')
       checkField('location', 'Location')
       checkField('linkedinUrl', 'LinkedIn URL', 'linkedinUrl')
-      checkField('notes', 'Notes / About', 'about', true)
+      // The imported "About" now has its own dedicated field (linkedinAbout), so it only
+      // conflicts with a previously-imported About — never with the owner's Notes.
+      checkField('linkedinAbout', 'About (LinkedIn)', 'about')
 
       if (conflicts.length > 0) {
         setMergeFields(conflicts)
@@ -201,10 +203,13 @@ export function LinkedInImportDialog({ open, onOpenChange, onImport, existingDat
 
     mergeFields.forEach((conflict) => {
       const sel = mergeSelections[conflict.key]
+      // The About conflict is stored under the existing-data key `linkedinAbout` but the
+      // parsed value lives on `about`; every other field shares its key with the parse.
+      const parsedKey = (conflict.key === 'linkedinAbout' ? 'about' : conflict.key) as keyof LinkedInParsedData
       if (sel === 1) {
-        delete mergedData[conflict.key === 'notes' ? 'about' : conflict.key as keyof LinkedInParsedData]
-      } else if (sel === 'both' && conflict.key === 'notes') {
-        mergedData.about = `${existingData!.notes}\n\n---\nLinkedIn About:\n${parsed.about}`
+        delete mergedData[parsedKey]
+      } else if (sel === 'both' && conflict.key === 'linkedinAbout') {
+        mergedData.about = `${existingData!.linkedinAbout}\n\n---\n${parsed.about}`
       }
     })
 

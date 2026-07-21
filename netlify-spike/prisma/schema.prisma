@@ -1,0 +1,16 @@
+// Minimal schema for the spike. Only needs enough of the real Contact table for a
+// read-only `prisma.contact.count()` (COUNT(*) references no columns beyond the table).
+// The real migration reuses server/prisma/schema.prisma unchanged.
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Contact {
+  id   Int    @id @default(autoincrement())
+  name String
+}

@@ -13,8 +13,10 @@ const isProduction = !!process.env.BLOB_READ_WRITE_TOKEN;
 const UPLOAD_DIR = path.join(process.cwd(), 'data', 'photos');
 const FILES_DIR = path.join(process.cwd(), 'data', 'files');
 
-// Ensure upload directories exist (local only)
-if (!isProduction) {
+// Ensure upload directories exist (true local-disk mode only). Skip when a cloud
+// store is active — Vercel Blob (isProduction) OR Netlify Blobs — since Netlify's
+// filesystem is read-only and mkdir would crash the function at module load.
+if (!isProduction && !netlifyBlobsEnabled()) {
   for (const dir of [UPLOAD_DIR, FILES_DIR]) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   }

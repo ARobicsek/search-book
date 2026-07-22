@@ -1,10 +1,12 @@
 # NETLIFY-MIGRATION-PLAN — migrate SearchBook off Vercel to Netlify
 
-**STATUS: PLANNED — not started.** Written 2026-07-21 after live network testing proved that NCQA's
-web proxy **blocks `*.run.app` (Google Cloud Run) but allows `*.netlify.app`**, while Vercel access
-is granted only by exception and is being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud
-Run) as the migration target of record. Cloud Run is off the table *for this user* because its
-default domain is unreachable at work.
+**STATUS: Phase 0 (de-risk spike) ✅ complete & merged. Phase 1 (additive, env-gated code) ✅
+complete (branch `claude/netlify-migration-plan-8lim9k`) — Vercel/local untouched, all new code
+dormant without the Netlify gate. Next up: Phase 2 (owner provisions the Netlify site).** Written
+2026-07-21 after live network testing proved that NCQA's web proxy **blocks `*.run.app` (Google
+Cloud Run) but allows `*.netlify.app`**, while Vercel access is granted only by exception and is
+being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud Run) as the migration target of
+record. Cloud Run is off the table *for this user* because its default domain is unreachable at work.
 
 **Two hard requirements from the owner (2026-07-21), baked into the phase order:**
 
@@ -382,6 +384,32 @@ code change required (add the netlify.app origin to the static list if convenien
    new code is dormant without the Netlify gate). Confirm the live Vercel app still works after deploy.
 
 **Rollback:** revert the commit — every change is dormant without the gate.
+
+### ✅ Phase 1 RESULTS — IMPLEMENTED (2026-07-22, branch `claude/netlify-migration-plan-8lim9k`)
+
+All §3 code changes landed, additive and env-gated (`netlifyBlobsEnabled()` = `STORAGE=netlify`
+or the runtime `NETLIFY` signal). LinkedIn = decision **B** → route left server-side, unchanged.
+
+| § | Change | Files |
+|---|---|---|
+| 3.1 | Storage abstraction (`putObject/getObject/listObjects/listObjectsWithMeta/deleteObjects`, dynamic-imports `@netlify/blobs`) | `server/src/lib/storage.ts` (new) |
+| 3.2 | Uploads three-way branch (Netlify Blobs → Vercel Blob → local disk); relative `/photos`·`/files` paths | `server/src/routes/upload.ts` |
+| 3.3 | Media proxy `GET /photos/:name`·`/files/:name`, mounted at root outside the `/api` gate | `server/src/routes/media.ts` (new) + `server/src/app.ts` |
+| 3.4 | Auto-backups Netlify branch on `/cron`+`/list`; new authed `GET /download/:name` | `server/src/routes/backup.ts` |
+| 3.5 | `api.downloadBlob()` + Settings button for private `/api/...` backup URLs (anchor kept for Vercel) | `client/src/lib/api.ts`, `client/src/pages/settings.tsx` |
+| 3.7 | Function entry (`serverless-http` wraps the same app) + `netlify.toml` + `build:netlify` | `netlify/functions/api.ts` (new), `netlify.toml` (new), `package.json` |
+| 0.2 | Prisma switched to **engine-less** (`engine: "client"`) — no Rust binary to bundle | `server/prisma.config.ts` |
+
+**Verified locally (Phase 1 gate):** `npm run typecheck` ✅, `npm run check:backup` ✅ (32 tables),
+`npm run build --prefix client` ✅, engine-less `prisma generate` ✅, and a runtime smoke test of the
+engine-less client against the **local better-sqlite3 adapter** (`SELECT 1` → `[{ok:1}]`) ✅ — so the
+engine switch didn't break local. `@netlify/blobs` (server) + `serverless-http` (root) added;
+`better-sqlite3`/`@prisma/adapter-better-sqlite3` externalized in `netlify.toml` (native, dev-only,
+never runs on Netlify). Deps `npm install`ed but runtime upload/backup/media paths on Netlify are
+first exercised in Phase 2 (owner-gated deploy).
+
+**Deploy-branch note:** the actual working branch is `claude/netlify-migration-plan-8lim9k` (the
+plan's older `claude/vercel-migration-plan-9d5ytl` references below mean this branch).
 
 ---
 

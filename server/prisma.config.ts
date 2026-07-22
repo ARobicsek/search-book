@@ -9,7 +9,13 @@ export default defineConfig({
   migrations: {
     path: "prisma/migrations",
   },
-  engine: "classic",
+  // Engine-less client (NETLIFY-MIGRATION-PLAN.md §0.2, proven in Phase 0): the app
+  // always connects through a driver adapter (PrismaLibSql for Turso, better-sqlite3
+  // locally — see db.ts), so no Rust query-engine binary is needed. This drops the
+  // .node binary that otherwise won't bundle into a Netlify Function (risks R4/R7).
+  // Runtime-equivalent on Vercel/local (same adapter query path); the generated
+  // client is gitignored and regenerated per build, so this is parallel-run safe.
+  engine: "client",
   datasource: {
     url: env("DATABASE_URL"),
   },

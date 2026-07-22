@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",
+    "@netlify/blobs": "^10.7.9",
     "@prisma/adapter-libsql": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "@sentry/node": "^10.56.0",

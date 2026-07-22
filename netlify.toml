@@ -1,0 +1,48 @@
+# Netlify build + routing config (NETLIFY-MIGRATION-PLAN.md §3.7).
+#
+# INERT ON VERCEL — Vercel ignores this file, so committing it is parallel-run safe:
+# the same commit deploys to Vercel (via vercel.json / api/index.ts) unchanged and to
+# Netlify via this config. Nothing here affects local `npm start`.
+
+[build]
+  command = "npm run build:netlify"
+  publish = "client/dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  # Prisma 7 + Vite need a modern Node; pin it (matches the Phase 0 spike).
+  NODE_VERSION = "20"
+
+[functions]
+  # esbuild bundles the TS function + its import graph (Express app, engine-less
+  # Prisma client). Phase 0.2 proved the engine-less client bundles at ~4.9 MB with
+  # no Rust binary, so no included_files are needed.
+  node_bundler = "esbuild"
+  # better-sqlite3 is a NATIVE module used only by the local-dev adapter (db.ts,
+  # behind `!TURSO_DATABASE_URL`). Turso is always set on Netlify, so that branch
+  # never runs — but its static require would otherwise pull the .node binary into
+  # the bundle. Externalize so esbuild skips it.
+  external_node_modules = ["better-sqlite3", "@prisma/adapter-better-sqlite3"]
+
+# ── API: all /api/* → the Express app (path preserved, Phase 0.1) ──────────────
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# ── Media: private Netlify Blobs served through the same app's proxy routes ────
+[[redirects]]
+  from = "/photos/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/files/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# ── SPA fallback — everything else serves the built client ─────────────────────
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -295,13 +295,32 @@ export function SettingsPage() {
                       <p className="truncate font-medium">{formatBackupDate(b.uploadedAt)}</p>
                       <p className="text-xs text-muted-foreground">{formatBytes(b.size)}</p>
                     </div>
-                    <a
-                      href={b.url}
-                      className="shrink-0 text-primary hover:underline"
-                      download
-                    >
-                      Download
-                    </a>
+                    {b.url.startsWith('/api/') ? (
+                      // Netlify: private, password-gated blob — fetch with auth then save.
+                      <button
+                        type="button"
+                        className="shrink-0 text-primary hover:underline"
+                        onClick={async () => {
+                          try {
+                            const blob = await api.downloadBlob(b.url)
+                            downloadBlob(blob, b.name)
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : 'Download failed')
+                          }
+                        }}
+                      >
+                        Download
+                      </button>
+                    ) : (
+                      // Vercel: absolute public Blob URL — a plain anchor works.
+                      <a
+                        href={b.url}
+                        className="shrink-0 text-primary hover:underline"
+                        download
+                      >
+                        Download
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>

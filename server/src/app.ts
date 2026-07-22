@@ -36,6 +36,7 @@ import calendarRouter from './routes/calendar';
 import undoRouter from './routes/undo';
 import pushRouter from './routes/push';
 import remindersRouter from './routes/reminders';
+import mediaRouter from './routes/media';
 
 const app = express();
 
@@ -169,6 +170,12 @@ if (process.env.NODE_ENV !== 'production') {
   app.use('/photos', express.static(path.join(process.cwd(), 'data', 'photos')));
   app.use('/files', express.static(path.join(process.cwd(), 'data', 'files')));
 }
+
+// Netlify Blobs media proxy (NETLIFY-MIGRATION-PLAN.md §3.3). Mounted at the root,
+// OUTSIDE the /api password gate, so <img>/<a> tags can load /photos/* and /files/*
+// (Blobs have no public URL). Dormant unless the Netlify gate is on — in local dev
+// the static handlers above serve these paths first, and on Vercel it 404s.
+app.use('/', mediaRouter);
 
 // Health check — verifies DB connectivity so the uptime monitor catches
 // Turso outages, not just whether the web server is up. Returns no secrets.

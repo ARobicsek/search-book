@@ -106,6 +106,21 @@ export const api = {
       body: formData, // No Content-Type header - browser sets it with boundary
     }).then(handleResponse<{ path: string }>);
   },
+  // Fetch a private, password-gated server blob (e.g. a Netlify-hosted backup at
+  // /api/backup/download/<name>) with the auth header, returning a Blob the caller
+  // can trigger a download for. A plain <a download> can't send x-app-password, and
+  // Netlify Blobs have no public URL — so authenticated backup downloads route here.
+  async downloadBlob(path: string): Promise<Blob> {
+    const res = await fetchWithTimeout(path);
+    if (!res.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem(PASSWORD_STORAGE_KEY);
+        window.dispatchEvent(new CustomEvent('searchbook:unauthorized'));
+      }
+      throw new ApiError(res.status, `Download failed with status ${res.status}`);
+    }
+    return res.blob();
+  },
   // Generic file upload (meeting attachments): broader types than photos, 4MB cap
   uploadGenericFile(file: File): Promise<{ path: string; name: string; mimeType: string; size: number }> {
     const formData = new FormData();

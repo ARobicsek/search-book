@@ -424,10 +424,17 @@ Vercel stays the live app throughout. Netlify comes up **alongside** it, sharing
    `main`/Vercel keeps shipping normally). Record the `*.netlify.app` URL.
 2. **Env vars** (Netlify dashboard → Site settings → Environment): copy from Vercel —
    `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `APP_PASSWORD`, `CRON_SECRET`, `REMINDERS_CRON_SECRET`,
-   `OPENAI_API_KEY` (unless fix A moved it client-side), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+   `OPENAI_API_KEY` (unless fix A moved it client-side), **`OUTLOOK_CALENDAR_ICS_URL`**,
+   `APP_TIMEZONE` (optional; defaults `America/New_York`), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
    `VAPID_SUBJECT`, `REMINDER_TZ`, `SENTRY_DSN` (if set). Set the storage gate (`STORAGE=netlify` or
    rely on `NETLIFY`). Set `CLIENT_URL=<netlify-url>`. **Do NOT set `BLOB_READ_WRITE_TOKEN`** (that
    would route Netlify to Vercel Blob).
+
+   ⚠ **This list is the authority — do not rebuild it from `server/.env.example`.** The 2026-07-22
+   soak surfaced "Outlook calendar not connected" on Netlify precisely because
+   `OUTLOOK_CALENDAR_ICS_URL` was undocumented in `.env.example` and so never made the copy list.
+   Both are now documented; if a *new* `process.env.*` read is added to the server, add it to both.
+   Cross-check with: `rg -o 'process\.env\.[A-Z0-9_]+' server/src`.
 3. Trigger deploy. 
 
 ### Phase 2 gate

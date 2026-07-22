@@ -15,7 +15,24 @@ import serverless from 'serverless-http';
 import { connectLambda } from '../../server/src/lib/netlify-blobs-context';
 import app from '../../server/src/app';
 
-const wrapped = serverless(app);
+// serverless-http treats a response as binary (base64-encoded, so Netlify passes the
+// bytes through intact) only for content-types matching this list — otherwise it
+// utf8-encodes the body and corrupts binary data. Without it, the media proxy served
+// mangled images/attachments (upload succeeded, but the photo wouldn't render). Text
+// and JSON stay utf8 (leaner responses). Globs: '*' → '.*' in serverless-http.
+const BINARY_CONTENT_TYPES = [
+  'image/*',
+  'application/pdf',
+  'application/zip',
+  'application/octet-stream',
+  'application/msword',
+  'application/vnd.*', // office openxml (docx/xlsx/pptx), ms-outlook (.msg), etc.
+  'font/*',
+  'audio/*',
+  'video/*',
+];
+
+const wrapped = serverless(app, { binary: BINARY_CONTENT_TYPES });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const handler = (event: any, context: any) => {

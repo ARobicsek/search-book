@@ -486,6 +486,20 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 
 **Gate:** every feature verified on Netlify from the work network; no regressions; timings normal.
 
+### ⏳ Phase 3 — IN PROGRESS (soak running; branch `claude/netlify-migration-phase-3-tggjko`)
+
+- **Deployment health re-verified from the internet (2026-07-22):** Netlify `/api/health` →
+  `{"status":"ok","db":"ok"}` (function + Turso + engine-less Prisma all live), `/api/contacts` 401s
+  without the password (auth gate intact); Vercel (daily driver) still healthy and untouched. The
+  human/work-network parts of the §5 checklist (login, CRUD, photo upload+render, meetings, actions,
+  push, LinkedIn, PWA on desktop+mobile) remain owner-driven and are the actual soak.
+- **Phase 4 cutover scripts pre-written & syntax-checked (NOT run):**
+  `server/scripts/migrate-blobs-to-netlify.mjs` and `server/scripts/rewrite-blob-urls.mjs` now exist
+  so cutover is unblocked the moment the soak passes. Neither touches prod until the owner runs it in
+  the Phase 4 window. The migrate script stamps each copied object with `{ contentType, size,
+  uploadedAt }` metadata — parity with what the runtime reads (media proxy needs `contentType`; the
+  backup list needs `size`/`uploadedAt`).
+
 ---
 
 ## 6. Phase 4 — Migrate binaries + rewrite DB URLs (point of no return)
@@ -495,9 +509,13 @@ Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
 
 1. **Safety net:** Settings → **Back up now** + download the full manual ZIP (includes binaries). Keep both.
 2. **Copy every Vercel Blob object → Netlify Blobs** — script `server/scripts/migrate-blobs-to-netlify.mjs`
-   (uses `@vercel/blob` `list()` to read + `@netlify/blobs` `getStore({ siteID, token })` to write;
-   copies `photos/`, `files/`, **and** `backups/`). Idempotent. Record the Blob host it prints.
-3. **Rewrite URLs in Turso** — script `server/scripts/rewrite-blob-urls.mjs <BLOB_HOST>` rewrites
+   **(written, Phase 3)** — uses `@vercel/blob` `list()` to read + `@netlify/blobs`
+   `getStore({ name: 'media', siteID, token })` to write; copies `photos/`, `files/`, **and** `backups/`,
+   stamping each with `{ contentType, size, uploadedAt }` metadata for runtime parity. Idempotent (skips
+   objects already present). Env: `BLOB_READ_WRITE_TOKEN`, `NETLIFY_SITE_ID`, `NETLIFY_AUTH_TOKEN`.
+   Record the Blob host it prints at the end.
+3. **Rewrite URLs in Turso** — script `server/scripts/rewrite-blob-urls.mjs <BLOB_HOST>` **(written,
+   Phase 3)** rewrites
    `https://<host>/photos/x` → `/photos/x` (and `/files/`) across **every text column of every table**
    (covers `Contact.photoUrl/photoFile`, `Company.photoFile`, `ConversationAttachment.url`, and
    markdown-embedded images in any notes column). Same script/approach as the Cloud Run plan §4.2,

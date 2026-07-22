@@ -3,7 +3,7 @@ import 'dotenv/config';
 // Task 17: must load before express/http so Sentry can instrument them (no-op
 // unless SENTRY_DSN is set).
 import { Sentry, sentryEnabled } from './sentry';
-import express from 'express';
+import express, { type Request } from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
@@ -117,6 +117,23 @@ app.use('/api', (req, res, next) => {
 // Sits before the auth gate so it also throttles password brute-forcing. The
 // in-memory store is per-serverless-instance (resets on cold start) — imperfect
 // on Vercel, but ample friction against abuse for a single-user app.
+// Client-IP resolution for the limiters. `req.ip` is derived from the socket's
+// remoteAddress (+ `trust proxy`), but under serverless-http on Netlify the Lambda
+// event carries NO socket address, so req.ip is `undefined` — express-rate-limit's
+// default keyGenerator then logs ERR_ERL_UNDEFINED_IP_ADDRESS once and keys EVERY
+// request to the same `undefined` bucket. That silently removes the per-IP throttle
+// in front of the password gate, so we resolve the IP from headers instead:
+//   x-nf-client-connection-ip  Netlify's real client IP
+//   x-forwarded-for            Vercel / any standard proxy (first hop = client)
+//   req.ip                     local dev / anything with a real socket
+function clientIp(req: Request): string {
+  const netlifyIp = req.header('x-nf-client-connection-ip');
+  if (netlifyIp) return netlifyIp.trim();
+  const forwarded = req.header('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.ip ?? 'unknown';
+}
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   limit: 1000,              // per IP — high enough that heavy real browsing (each
@@ -124,6 +141,7 @@ const generalLimiter = rateLimit({
                             // to throttle scraping / password brute-forcing.
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientIp,
   skip: (req) => req.path === '/health', // never throttle the uptime monitor
 });
 app.use('/api', generalLimiter);
@@ -135,6 +153,7 @@ const linkedinLimiter = rateLimit({
   limit: 40,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientIp,
 });
 app.use('/api/linkedin', linkedinLimiter);
 

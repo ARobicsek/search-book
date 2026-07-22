@@ -17,6 +17,9 @@
     "db:studio": "cd server && npx prisma studio"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.2",
+    "@prisma/adapter-libsql": "^7.5.0",
+    "@prisma/client": "^7.5.0",
     "serverless-http": "^4.0.0"
   },
   "devDependencies": {

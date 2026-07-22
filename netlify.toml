@@ -18,11 +18,21 @@
   # Prisma client). Phase 0.2 proved the engine-less client bundles at ~4.9 MB with
   # no Rust binary, so no included_files are needed.
   node_bundler = "esbuild"
-  # better-sqlite3 is a NATIVE module used only by the local-dev adapter (db.ts,
-  # behind `!TURSO_DATABASE_URL`). Turso is always set on Netlify, so that branch
-  # never runs — but its static require would otherwise pull the .node binary into
-  # the bundle. Externalize so esbuild skips it.
-  external_node_modules = ["better-sqlite3", "@prisma/adapter-better-sqlite3"]
+  # Externalize (copy whole from node_modules instead of bundling) the packages
+  # esbuild can't inline correctly:
+  #  - @libsql/client + @prisma/adapter-libsql: the Turso runtime. @libsql/client
+  #    loads a NATIVE binding (@libsql/linux-x64-gnu) via a dynamic require esbuild
+  #    can't trace, so inlining leaves it dangling ("Cannot find module
+  #    '@libsql/linux-x64-gnu'"). External = Netlify ships the package + its native
+  #    dep intact.
+  #  - better-sqlite3 + its adapter: native, local-dev only (db.ts branch behind
+  #    `!TURSO_DATABASE_URL`, which never runs on Netlify). Kept out of the bundle.
+  external_node_modules = [
+    "@libsql/client",
+    "@prisma/adapter-libsql",
+    "better-sqlite3",
+    "@prisma/adapter-better-sqlite3",
+  ]
 
 # ── API: all /api/* → the Express app (path preserved, Phase 0.1) ──────────────
 [[redirects]]

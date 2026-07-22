@@ -5,6 +5,70 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Netlify migration Phases 1 & 2: code + first parallel deploy, LIVE on Netlify (2026-07-22)
+
+Executed **NETLIFY-MIGRATION-PLAN.md** Phase 1 (additive, env-gated code) **and** Phase 2 (owner
+provisioned the Netlify site + first parallel deploy). The app now runs on
+**`ari-search-book.netlify.app`** from the NCQA work network, **in parallel with Vercel**, sharing
+the same Turso DB. Owner drove the browser checks: login, contacts, **photo upload + render**, paste,
+manual backup (3 files) all work.
+
+⚠ **ALL migration work is on branch `claude/netlify-migration-plan-8lim9k`, NOT `main`.** This is
+deliberate — the parallel-run guarantee keeps **`main` → Vercel** as the untouched daily driver until
+cutover (Phase 5). **Do not merge to `main` yet.** The Netlify site's production branch is set to
+this branch. (Every code change is env-gated on `netlifyBlobsEnabled()` = `STORAGE=netlify` or the
+runtime `NETLIFY` signal, so the same commits are dormant on Vercel/local anyway.)
+
+- **Phase 1 (§3):** storage abstraction over Netlify Blobs (`server/src/lib/storage.ts`), three-way
+  upload branch (Netlify Blobs → Vercel Blob → local disk, relative `/photos`·`/files` paths), media
+  proxy (`routes/media.ts`, mounted outside the `/api` gate), backup `/cron`+`/list` Netlify branches
+  + authed `GET /backup/download/:name`, client `api.downloadBlob()` + Settings button, the
+  serverless-http function entry (`netlify/functions/api.ts`) + `netlify.toml` + `build:netlify`, and
+  **Prisma switched to the engine-less client** (`engine: "client"`, no Rust binary to bundle).
+- **Phase 2 env (owner set in Netlify dashboard):** `STORAGE=netlify`, `APP_PASSWORD` (= the login
+  password), `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `OPENAI_API_KEY`, `CLIENT_URL`,
+  `REMINDERS_CRON_SECRET`. **No `BLOB_READ_WRITE_TOKEN`** (that would route to Vercel Blob). **VAPID_\*
+  + `CRON_SECRET` deferred to Phase 5** (push UI auto-hides when VAPID absent; cron isn't wired yet).
+
+**Six Netlify-runtime bugs found live during bring-up and fixed (all on the branch):**
+1. 502 `Cannot find module '@prisma/client/runtime/client'` → **hoist `@prisma/client` +
+   `@prisma/adapter-libsql` + `@libsql/client` to the ROOT `package.json`** (the function is at repo
+   root but those deps lived only in `server/node_modules`; Netlify externalizes them and resolves
+   from the function root).
+2. 502 `Cannot find module '@libsql/linux-x64-gnu'` → **externalize `@libsql/client` +
+   `@prisma/adapter-libsql`** in `netlify.toml` (native binding loaded via a dynamic require esbuild
+   can't trace; external = Netlify ships it whole).
+3. 502 `ENOENT mkdir '/var/task/data/photos'` → **guard the local upload-dir `mkdir`** on
+   `!isProduction && !netlifyBlobsEnabled()` (Netlify FS is read-only; it crashed at import).
+4. 500 on `/photos/*` → **`connectLambda(event)`** in the function entry (serverless-http uses the AWS
+   Lambda signature, so Netlify Blobs doesn't auto-inject its context). Re-exported via
+   `server/src/lib/netlify-blobs-context.ts` so it shares the one `@netlify/blobs` module instance.
+5. Images served corrupted → **serverless-http `binary` content-type allow-list** (it utf8-encodes
+   responses by default, mangling binary).
+6. Photos never displayed (upload toast OK) → **render relative `/photos` paths in production**
+   (`photo-upload.tsx`, `contact-detail.tsx`) — the old `import.meta.env.DEV ? photoFile : null` guard
+   (a Vercel-era assumption) hid Netlify's relative paths so the `<img>` was never even requested.
+
+**What's next — Phase 3 (parallel soak):** owner uses both a few days, **Vercel stays the daily
+driver**; exercise Netlify as a shadow (full §5 checklist, desktop + mobile, from work). Then Phase 4
+(migrate Vercel-Blob binaries → Netlify Blobs + rewrite DB URLs to relative — point of no return),
+Phase 5 (cutover: crons, VAPID push, per-device PWA reinstall), Phase 6 (decommission Vercel).
+
+**Carry-overs / open items:**
+- **Soak caveat:** a photo uploaded *via Netlify* stores a **relative** path, so it renders on Netlify
+  but **not** on the Vercel app (and Vercel uploads' absolute URLs render on both). Keep real uploads
+  on Vercel during the soak, or treat Netlify uploads as disposable. Resolves at Phase 4.
+- **VAPID + cron are unset on Netlify** → push reminders + the daily backup cron don't fire there yet
+  (Phase 5). Turso is shared, so data is safe.
+- **>~4.5 MB photos** may exceed Netlify's ~6 MB Lambda response cap once base64-inflated (normal
+  contact photos are far under this; noted, not blocking).
+- **Free compute quota (R10)** unverified — eyeball Netlify Usage; drop reminders cron to 2–3 min if
+  tight (Appendix A) once cron is wired in Phase 5.
+
+**Kickoff for next migration session:** "continue the Netlify migration — Phase 3 soak" (work on
+branch `claude/netlify-migration-plan-8lim9k`; site `ari-search-book.netlify.app`). For unrelated
+owner asks, that work still goes to `main`/Vercel as usual — only the migration lives on the branch.
+
 ### What Was Just Completed — @-mention mis-classification recovery + search count-skip speedup (2026-07-21)
 
 Two owner asks, **schema-free**, **three commits to `main`** (`121278d`, `f745a15`, `c7df6f3`). Owner

@@ -506,6 +506,28 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
   the Phase 4 window. The migrate script stamps each copied object with `{ contentType, size,
   uploadedAt }` metadata — parity with what the runtime reads (media proxy needs `contentType`; the
   backup list needs `size`/`uploadedAt`).
+- **Soak bugs found & fixed on-branch (2026-07-22), deployed by fast-forwarding the build branch
+  `claude/netlify-migration-plan-8lim9k` up to the phase-3 tip:**
+  1. **Outlook import failed: "could not read the Outlook calendar feed" (Netlify runtime bug #8).**
+     Microsoft returned **HTTP 500** to the `.ics` fetch (our route then 502s to the browser). *Not* a
+     stale value / firewall block (that's 403) / timeout / throttle — the same URL works from Vercel and
+     a 30-min wait didn't clear it. **Root cause: the malformed `User-Agent` `'Mozilla/5.0 SearchBook'`**
+     — Microsoft's edge accepts it from Vercel's egress but bot-filters it (500) from Netlify's
+     datacenter IP. Fixed with a real browser UA, plus a single 5xx retry and logging of Microsoft's
+     `x-ms-diagnostics`/body on failure. **Owner confirmed the import works on Netlify after deploy.**
+     (`baf26fc`, `server/src/lib/ics.ts`.) ⚠ This would have been a *real* outage post-cutover, not a
+     shadow one — the soak caught it.
+  2. **Rate limiting silently disabled (Netlify runtime bug #7).** Function logs showed
+     `ERR_ERL_UNDEFINED_IP_ADDRESS`: `req.ip` is undefined under serverless-http (the Lambda event has no
+     socket address, so `trust proxy` has nothing to read), so express-rate-limit keyed **every** request
+     to one `undefined` bucket — removing the per-IP throttle that sits in front of the password gate.
+     Requests still succeeded, so nothing looked broken. Fixed by resolving the client IP from
+     `x-nf-client-connection-ip` (Netlify) / `x-forwarded-for` (Vercel) / `req.ip` (local). (`eabbef7`,
+     `server/src/app.ts`.)
+  3. **`OUTLOOK_CALENDAR_ICS_URL` (+ `APP_TIMEZONE`) missing from the env checklist.** Undocumented in
+     `server/.env.example`, so Phase 2's "copy from Vercel" list never included them → "Outlook calendar
+     not connected" on Netlify. Owner set `OUTLOOK_CALENDAR_ICS_URL`; both now documented and the Phase 2
+     list marked authoritative (§4.2). (`8ad7fa6`.)
 
 ---
 

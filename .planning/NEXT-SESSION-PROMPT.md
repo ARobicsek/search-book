@@ -5,6 +5,29 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Netlify migration Phase 3 soak: 3 bugs found & fixed live (2026-07-22 s2)
+
+Owner soaking the Netlify shadow app (`ari-search-book.netlify.app`) surfaced three issues; all fixed
+on the migration branches and **deployed** (fast-forwarded the build branch
+`claude/netlify-migration-plan-8lim9k` up to the phase-3 tip `baf26fc`). **Vercel/`main` untouched.**
+
+1. **Outlook import → HTTP 500 from Microsoft (Netlify bug #8), NOW WORKING.** Root cause = the
+   malformed `User-Agent` `'Mozilla/5.0 SearchBook'` — accepted from Vercel's egress, bot-filtered (500)
+   from Netlify's datacenter IP. Fixed with a real browser UA + one 5xx retry + logging Microsoft's
+   `x-ms-diagnostics`/body on failure. **Owner confirmed the import works on Netlify.** (`baf26fc`,
+   `server/src/lib/ics.ts`.) Would have been a *real* outage post-cutover — the soak caught it.
+2. **Rate limiting silently disabled (Netlify bug #7).** `req.ip` undefined under serverless-http →
+   `ERR_ERL_UNDEFINED_IP_ADDRESS`, every request keyed to one `undefined` bucket (no per-IP throttle in
+   front of the password gate). Fixed to resolve IP from `x-nf-client-connection-ip`/`x-forwarded-for`/
+   `req.ip`. (`eabbef7`, `server/src/app.ts`.)
+3. **`OUTLOOK_CALENDAR_ICS_URL` + `APP_TIMEZONE` were undocumented** in `server/.env.example`, so the
+   Phase 2 env checklist omitted them → "Outlook calendar not connected". Owner set the var; both now
+   documented and the plan's Phase 2 list marked authoritative. (`8ad7fa6`.)
+
+**Soak still in progress** — reminders on Netlify are expected to be serviced by Vercel's cron (VAPID
+unset on Netlify by design until Phase 5), so a reminder set on Netlify fires from the Vercel origin;
+that is correct, not a bug. Full Phase 3 detail in `NETLIFY-MIGRATION-PLAN.md` §5 (Phase 3 IN PROGRESS).
+
 ### What Was Just Completed — Netlify migration Phases 1 & 2: code + first parallel deploy, LIVE on Netlify (2026-07-22)
 
 Executed **NETLIFY-MIGRATION-PLAN.md** Phase 1 (additive, env-gated code) **and** Phase 2 (owner

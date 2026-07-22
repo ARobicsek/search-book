@@ -418,9 +418,9 @@ export function ContactDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               {(() => {
-                // In production, only http URLs work. Local /photos/ paths only work in dev.
-                const photoSrc = contact.photoUrl ||
-                  (import.meta.env.DEV ? contact.photoFile : null)
+                // Absolute (http) photoUrl or a relative /photos photoFile — the latter
+                // is served by the media proxy on Netlify (and express-static in dev).
+                const photoSrc = contact.photoUrl || contact.photoFile || null
                 return photoSrc ? (
                   <img
                     src={photoSrc}

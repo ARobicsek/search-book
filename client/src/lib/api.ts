@@ -58,8 +58,17 @@ export const api = {
     return fetchWithTimeout(`${API_BASE}${path}`)
       .then(handleResponse<T>)
       .catch((error) => {
-        // Auto-retry GET requests once on timeout/server error (transient DB issues)
-        if (error.message.includes('timed out') || error.message.includes('504') || error.message.includes('500')) {
+        // Auto-retry GET requests once on a timeout or a transient upstream 5xx.
+        // GETs are idempotent, so a second attempt is safe. The retry usually lands
+        // on a now-warm serverless instance and succeeds.
+        //   500/504 = the Vercel paths (app-level 12s timeout, transient DB error).
+        //   502/503 = Netlify: a function that exceeds the hard 10s free-plan cap is
+        //   killed and returned as a 502 BEFORE the app's own retryable 504 can fire
+        //   (a cold/idle search's connection-rebuild+retry wave can exceed 10s). Without
+        //   this, that 502 didn't self-heal and the user had to retry by hand.
+        const status = error instanceof ApiError ? error.status : 0;
+        const isRetryable = error.message.includes('timed out') || [500, 502, 503, 504].includes(status);
+        if (isRetryable) {
           console.log(`[api] Retrying GET ${path} after error: ${error.message}`);
           return fetchWithTimeout(`${API_BASE}${path}`).then(handleResponse<T>);
         }

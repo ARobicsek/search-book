@@ -97,17 +97,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// Request-level timeout — 12s so client gets two attempts within Vercel's 30s limit
-// LinkedIn parse is exempt: AI model calls can take 15-25s
+// Request-level timeout. On Vercel (30s cap) 12s gives the client two attempts.
+// On Netlify the function is HARD-killed at ~10s (free plan) and returned as a 502 —
+// which is NOT the app's own retryable 504, so a cold/idle request (whose Turso
+// connection-rebuild+retry wave can push global search past 10s) failed without
+// self-healing. Fire our own 504 at 9s on Netlify so it wins that race, leaving ~1s
+// to actually emit the response before Netlify's cap; warm requests (~1-3s) are
+// unaffected. LinkedIn parse is exempt: AI model calls can take 15-25s.
+const API_TIMEOUT_MS = process.env.NETLIFY ? 9000 : 12000;
 app.use('/api', (req, res, next) => {
   // LinkedIn (AI parse) and calendar (Outlook ICS fetch) can legitimately run long.
   if (req.path.startsWith('/linkedin') || req.path.startsWith('/calendar')) return next();
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
-      console.error(`[TIMEOUT] ${req.method} ${req.path} exceeded 12s`);
+      console.error(`[TIMEOUT] ${req.method} ${req.path} exceeded ${API_TIMEOUT_MS}ms`);
       res.status(504).json({ error: 'Request timed out. Please try again.' });
     }
-  }, 12000);
+  }, API_TIMEOUT_MS);
   res.on('finish', () => clearTimeout(timeout));
   res.on('close', () => clearTimeout(timeout));
   next();

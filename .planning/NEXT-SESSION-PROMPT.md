@@ -5,6 +5,30 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Netlify Phase 3 soak: global-search timeout self-heal (bug #9) (2026-07-23)
+
+Owner soaking the Netlify shadow app hit an **intermittent global-search timeout**: a fresh "karen"
+search timed out (twice), then worked on a manual retry; "Providence" was slow-but-worked; the same
+search on Vercel worked (slowly). **Root cause = Netlify free's hard 10 s function cap.** Cold/idle-thawed,
+the search's multi-query fan-out fails its first wave (dead Turso connection), `db.ts` `runWithRetry`
+rebuilds + retries the whole wave (double the round-trips), and occasionally exceeds 10 s → Netlify kills
+the function → **502** — NOT the app's own retryable 504, which never fires (the 12 s app-timeout loses
+to the 10 s cap). The client only auto-retried 500/504/'timed out', so a 502 didn't self-heal. Vercel's
+30 s cap masks it (its 12 s app-504 fires → client retries → "slow but works").
+
+Two parallel-run-safe fixes (**Vercel/`main` untouched**), `05d1368`, deploy branch ff'd `baf26fc..05d1368`:
+- **client** (`api.ts`): GET auto-retry now covers transient 5xx (500/502/503/504) → the cold 502
+  self-heals on the automatic retry against a now-warm instance. Covers search + command palette.
+- **server** (`app.ts`): fire the app's own 504 at **9 s** when `process.env.NETLIFY` is set (beats the
+  10 s 502, clean message); 12 s stays on Vercel. Warm requests (~1-3 s) unaffected.
+
+`prepush` + full `npm run build` green. Verified deployed (new bundle `index-h7Ztfbze.js` carries the
+`502,503,504` retry marker; `/api/health` 200). ⚠ **NOT yet owner-confirmed live** — to confirm: idle the
+app ~2 min, then search "karen" fresh → should render on its own, no manual retry. **First cold hit is
+still slow (~10-13 s: killed attempt + warm retry)** — the durable cure is a **keep-warm ping** (free
+cron-job.org → `/api/health` every few min), deferred to Phase 5 cron; offered to owner, not yet wired.
+Docs pushed to **both** the phase-3 branch and `main` (docs only — no migration code on `main`).
+
 ### What Was Just Completed — Netlify migration Phase 3 soak: 3 bugs found & fixed live (2026-07-22 s2)
 
 Owner soaking the Netlify shadow app (`ari-search-book.netlify.app`) surfaced three issues; all fixed

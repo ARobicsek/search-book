@@ -506,8 +506,8 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
   the Phase 4 window. The migrate script stamps each copied object with `{ contentType, size,
   uploadedAt }` metadata — parity with what the runtime reads (media proxy needs `contentType`; the
   backup list needs `size`/`uploadedAt`).
-- **Soak bugs found & fixed on-branch (2026-07-22), deployed by fast-forwarding the build branch
-  `claude/netlify-migration-plan-8lim9k` up to the phase-3 tip:**
+- **Soak bugs found & fixed on-branch (2026-07-22 – 07-23), deployed by fast-forwarding the build
+  branch `claude/netlify-migration-plan-8lim9k` up to the phase-3 tip:**
   1. **Outlook import failed: "could not read the Outlook calendar feed" (Netlify runtime bug #8).**
      Microsoft returned **HTTP 500** to the `.ics` fetch (our route then 502s to the browser). *Not* a
      stale value / firewall block (that's 403) / timeout / throttle — the same URL works from Vercel and
@@ -528,6 +528,30 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
      `server/.env.example`, so Phase 2's "copy from Vercel" list never included them → "Outlook calendar
      not connected" on Netlify. Owner set `OUTLOOK_CALENDAR_ICS_URL`; both now documented and the Phase 2
      list marked authoritative (§4.2). (`8ad7fa6`.)
+  4. **Global search intermittently timed out (Netlify runtime bug #9) — DEPLOYED 2026-07-23, awaiting
+     owner live confirmation.** On the shadow app a fresh global search ("karen") timed out on the first
+     try(ies) then worked on a manual retry; "Providence" was slow-but-worked; the same query on Vercel
+     worked (slowly). **Root cause: Netlify free's hard 10 s function cap.** Global search is the one
+     ordinary endpoint that can exceed it when the Lambda is cold/idle-thawed — its Turso connection is
+     dead, so the search's multi-query fan-out fails its whole first wave and `db.ts` `runWithRetry`
+     rebuilds the client and retries the wave (doubling the round-trips), occasionally past 10 s. Netlify
+     then kills the function and returns a **502** — NOT the app's own retryable 504, which never fires
+     (the 12 s app-timeout in `app.ts` loses the race to the 10 s cap). The client only auto-retried
+     500/504/'timed out', so the 502 didn't self-heal → the user had to retry by hand. **Vercel's 30 s
+     cap masks it** (its 12 s app-504 fires and the client retries → "slow but works"). Corroborated live:
+     even a single-`SELECT 1` `/api/health` took ~3-4 s cold, so a 7-query fan-out + rebuild-retry easily
+     tops 10 s. Two parallel-run-safe fixes (**Vercel/`main` behavior unchanged**), `05d1368`, deploy
+     branch ff'd `baf26fc..05d1368`: **(client, `client/src/lib/api.ts`)** GET auto-retry now covers
+     transient 5xx (500/502/503/504), so a cold 502 self-heals on the automatic retry against a now-warm
+     instance (covers the search page + command palette); **(server, `server/src/app.ts`)** fire the
+     app's own 504 at **9 s** when `process.env.NETLIFY` is set (the signal `storage.ts` already uses),
+     beating the 10 s 502 and giving a clean message — 12 s stays on Vercel; warm requests (~1-3 s)
+     unaffected. `prepush` + full `npm run build` green; verified deployed (new bundle `index-h7Ztfbze.js`
+     carries the `502,503,504` retry marker; `/api/health` 200). ⚠ **The FIRST cold hit is still slow
+     (~10-13 s: one killed attempt + a warm retry)** — the durable cure is a **keep-warm ping** (a free
+     cron-job.org ping to `/api/health` every few min to keep the Lambda + Turso connection warm),
+     deferred to Phase 5 cron; offered to owner, not yet wired. Owner has **not** yet confirmed the live
+     self-heal (idle the app ~2 min, then search "karen" fresh → should render on its own, no manual retry).
 
 ---
 

@@ -424,10 +424,17 @@ Vercel stays the live app throughout. Netlify comes up **alongside** it, sharing
    `main`/Vercel keeps shipping normally). Record the `*.netlify.app` URL.
 2. **Env vars** (Netlify dashboard → Site settings → Environment): copy from Vercel —
    `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `APP_PASSWORD`, `CRON_SECRET`, `REMINDERS_CRON_SECRET`,
-   `OPENAI_API_KEY` (unless fix A moved it client-side), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+   `OPENAI_API_KEY` (unless fix A moved it client-side), **`OUTLOOK_CALENDAR_ICS_URL`**,
+   `APP_TIMEZONE` (optional; defaults `America/New_York`), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
    `VAPID_SUBJECT`, `REMINDER_TZ`, `SENTRY_DSN` (if set). Set the storage gate (`STORAGE=netlify` or
    rely on `NETLIFY`). Set `CLIENT_URL=<netlify-url>`. **Do NOT set `BLOB_READ_WRITE_TOKEN`** (that
    would route Netlify to Vercel Blob).
+
+   ⚠ **This list is the authority — do not rebuild it from `server/.env.example`.** The 2026-07-22
+   soak surfaced "Outlook calendar not connected" on Netlify precisely because
+   `OUTLOOK_CALENDAR_ICS_URL` was undocumented in `.env.example` and so never made the copy list.
+   Both are now documented; if a *new* `process.env.*` read is added to the server, add it to both.
+   Cross-check with: `rg -o 'process\.env\.[A-Z0-9_]+' server/src`.
 3. Trigger deploy. 
 
 ### Phase 2 gate
@@ -486,6 +493,42 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 
 **Gate:** every feature verified on Netlify from the work network; no regressions; timings normal.
 
+### ⏳ Phase 3 — IN PROGRESS (soak running; branch `claude/netlify-migration-phase-3-tggjko`)
+
+- **Deployment health re-verified from the internet (2026-07-22):** Netlify `/api/health` →
+  `{"status":"ok","db":"ok"}` (function + Turso + engine-less Prisma all live), `/api/contacts` 401s
+  without the password (auth gate intact); Vercel (daily driver) still healthy and untouched. The
+  human/work-network parts of the §5 checklist (login, CRUD, photo upload+render, meetings, actions,
+  push, LinkedIn, PWA on desktop+mobile) remain owner-driven and are the actual soak.
+- **Phase 4 cutover scripts pre-written & syntax-checked (NOT run):**
+  `server/scripts/migrate-blobs-to-netlify.mjs` and `server/scripts/rewrite-blob-urls.mjs` now exist
+  so cutover is unblocked the moment the soak passes. Neither touches prod until the owner runs it in
+  the Phase 4 window. The migrate script stamps each copied object with `{ contentType, size,
+  uploadedAt }` metadata — parity with what the runtime reads (media proxy needs `contentType`; the
+  backup list needs `size`/`uploadedAt`).
+- **Soak bugs found & fixed on-branch (2026-07-22), deployed by fast-forwarding the build branch
+  `claude/netlify-migration-plan-8lim9k` up to the phase-3 tip:**
+  1. **Outlook import failed: "could not read the Outlook calendar feed" (Netlify runtime bug #8).**
+     Microsoft returned **HTTP 500** to the `.ics` fetch (our route then 502s to the browser). *Not* a
+     stale value / firewall block (that's 403) / timeout / throttle — the same URL works from Vercel and
+     a 30-min wait didn't clear it. **Root cause: the malformed `User-Agent` `'Mozilla/5.0 SearchBook'`**
+     — Microsoft's edge accepts it from Vercel's egress but bot-filters it (500) from Netlify's
+     datacenter IP. Fixed with a real browser UA, plus a single 5xx retry and logging of Microsoft's
+     `x-ms-diagnostics`/body on failure. **Owner confirmed the import works on Netlify after deploy.**
+     (`baf26fc`, `server/src/lib/ics.ts`.) ⚠ This would have been a *real* outage post-cutover, not a
+     shadow one — the soak caught it.
+  2. **Rate limiting silently disabled (Netlify runtime bug #7).** Function logs showed
+     `ERR_ERL_UNDEFINED_IP_ADDRESS`: `req.ip` is undefined under serverless-http (the Lambda event has no
+     socket address, so `trust proxy` has nothing to read), so express-rate-limit keyed **every** request
+     to one `undefined` bucket — removing the per-IP throttle that sits in front of the password gate.
+     Requests still succeeded, so nothing looked broken. Fixed by resolving the client IP from
+     `x-nf-client-connection-ip` (Netlify) / `x-forwarded-for` (Vercel) / `req.ip` (local). (`eabbef7`,
+     `server/src/app.ts`.)
+  3. **`OUTLOOK_CALENDAR_ICS_URL` (+ `APP_TIMEZONE`) missing from the env checklist.** Undocumented in
+     `server/.env.example`, so Phase 2's "copy from Vercel" list never included them → "Outlook calendar
+     not connected" on Netlify. Owner set `OUTLOOK_CALENDAR_ICS_URL`; both now documented and the Phase 2
+     list marked authoritative (§4.2). (`8ad7fa6`.)
+
 ---
 
 ## 6. Phase 4 — Migrate binaries + rewrite DB URLs (point of no return)
@@ -495,9 +538,13 @@ Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
 
 1. **Safety net:** Settings → **Back up now** + download the full manual ZIP (includes binaries). Keep both.
 2. **Copy every Vercel Blob object → Netlify Blobs** — script `server/scripts/migrate-blobs-to-netlify.mjs`
-   (uses `@vercel/blob` `list()` to read + `@netlify/blobs` `getStore({ siteID, token })` to write;
-   copies `photos/`, `files/`, **and** `backups/`). Idempotent. Record the Blob host it prints.
-3. **Rewrite URLs in Turso** — script `server/scripts/rewrite-blob-urls.mjs <BLOB_HOST>` rewrites
+   **(written, Phase 3)** — uses `@vercel/blob` `list()` to read + `@netlify/blobs`
+   `getStore({ name: 'media', siteID, token })` to write; copies `photos/`, `files/`, **and** `backups/`,
+   stamping each with `{ contentType, size, uploadedAt }` metadata for runtime parity. Idempotent (skips
+   objects already present). Env: `BLOB_READ_WRITE_TOKEN`, `NETLIFY_SITE_ID`, `NETLIFY_AUTH_TOKEN`.
+   Record the Blob host it prints at the end.
+3. **Rewrite URLs in Turso** — script `server/scripts/rewrite-blob-urls.mjs <BLOB_HOST>` **(written,
+   Phase 3)** rewrites
    `https://<host>/photos/x` → `/photos/x` (and `/files/`) across **every text column of every table**
    (covers `Contact.photoUrl/photoFile`, `Company.photoFile`, `ConversationAttachment.url`, and
    markdown-embedded images in any notes column). Same script/approach as the Cloud Run plan §4.2,

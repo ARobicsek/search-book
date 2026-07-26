@@ -577,21 +577,39 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
   6. **Opening an attachment in the installed PWA stranded the app (Netlify runtime bug #11).** Immediately
      after the #10 fix: attachments open correctly on Netlify desktop, but in the iPhone PWA the file opened
      with **no way back — the owner had to force-close the app.** Root cause is the *other* half of the same
-     relative-path consequence: iOS standalone mode has **no browser chrome and no new tab**, so a
-     same-origin `target="_blank"` navigates the app window itself into the file viewer. Fixing #10 (so the
-     file actually loads) is what exposed this. Two rules, in new `client/src/lib/attachments.ts`:
-     **(a) image attachments never navigate** — they now open in the **existing app-wide lightbox**
-     (`note-image-lightbox.tsx`, already used for pasted note screenshots), tagged via
-     `data-image-attachment`, so closing it returns the user exactly where they were on every platform;
-     **(b) non-image attachments** (PDF/deck/doc) get `download={name}` **only when `isStandalone()`**, so
-     iOS shows its save/share sheet instead of navigating, while a normal browser tab keeps today's
-     new-tab behavior. `download` also restores the **original filename** — the stored blob name is
-     `${Date.now()}-${rand}${ext}`, so a plain save used to land as "1753…-a1b2.pdf".
-     Also fixed a **latent bug in the lightbox itself**: a Radix modal `Dialog` sets `pointer-events: none`
-     on `<body>`, and the lightbox renders outside the dialog at the app root, so it inherited the block and
-     could only be dismissed with **Esc** — which the PWA has no way to press. Added `pointer-events-auto`.
+     relative-path consequence: iOS standalone mode has **no browser chrome, no tab bar and no back
+     button**, so a same-origin navigation replaces the app with the file. Fixing #10 (so the file actually
+     loads) is what exposed this.
+     ⚠ **The first attempt did not work and was replaced — record it so nobody retries it:** giving
+     non-image attachments the **`download` attribute** in standalone mode. The theory was that iOS would
+     raise its save sheet instead of navigating. **It ignores `download` there** — the owner re-tested and
+     was trapped again on a PDF. `target="_blank"` is equally useless (standalone has no second tab to open
+     into).
+     **The rule that holds is NEVER NAVIGATE**, for *every* attachment type. Final shape:
+     `client/src/lib/attachments.ts` marks each attachment link `data-attachment-view` +
+     `data-attachment-kind`, and the app-wide overlay (`components/media-lightbox.tsx`, renamed from
+     `note-image-lightbox.tsx` since it is no longer notes-only) intercepts the click on the capture phase:
+     **images** render inline with the existing zoom (on every platform — it beats a bare browser tab), and
+     **non-images** render an `<iframe>` preview plus an explicit **Save** button that hands the file to
+     `navigator.share({ files })` — Web Share Level 2, the one route that reliably gets a file out of an
+     iOS PWA — falling back to a blob-URL `<a download>` on desktop. Non-images are only intercepted
+     **when `isStandalone()`**; in a browser tab they keep the plain new-tab behavior, which is better
+     there and always has a way back. The `href` (and `download`) stay on the anchor as a no-JS fallback.
+     Escape is deliberately over-provisioned — X, backdrop tap, Close button **and** Esc — because a PWA
+     has neither an Esc key nor a back button.
+     Also fixed a **latent bug in the overlay itself**: a Radix modal `Dialog` sets `pointer-events: none`
+     on `<body>`, and the overlay renders outside the dialog at the app root, so it inherited the block and
+     could only be dismissed with **Esc** — which the PWA cannot press. Added `pointer-events-auto`;
+     **confirmed live in Chrome** (`body` computes `none`, the overlay computes `auto`, backdrop click
+     closes it, and the Quick Log dialog is still open underneath).
      The two byte-identical attachment blocks in `meetings.tsx` and `meeting-detail-dialog.tsx` were
      extracted to `components/attachment-chips.tsx` so this behavior lives in one place.
+     **Verified before deploy** (local dev, disposable image+PDF attachments on meeting 451, all test rows
+     and files removed after; DB back to its baseline 1 attachment / 348 meetings): the branch matrix
+     unit-checked across type × display-mode; the image overlay opens with a decoded 120×60 image and does
+     not navigate; the same chip works from **inside** the Radix dialog; and with `display-mode: standalone`
+     emulated, the PDF is intercepted (`kind=file`, no `target`) and opens the preview + Save card — checked
+     at **390 px**.
 
 #### Phase 3 gate scorecard (owner-verified from the work network unless noted)
 

@@ -29,18 +29,37 @@ that Vercel had it too was reasonable but it's **Netlify-only in practice** (Ver
 Blob URLs are never SW-intercepted; dev PWA allowlists only `/`).
 
 **Netlify runtime bug #11 — opening an attachment in the iPhone PWA stranded the app** (found immediately
-after #10: desktop fine, but in standalone mode the file opened with **no way back**, requiring a force-close).
-Same relative-path consequence, other half: iOS standalone has **no chrome and no new tab**, so a same-origin
-`target="_blank"` navigates the app window itself. Fixing #10 is what exposed it. New `client/src/lib/
-attachments.ts`: **image attachments never navigate** — they open in the **existing app-wide lightbox**
-(`note-image-lightbox.tsx`, already used for pasted note screenshots) via a `data-image-attachment` tag, so
-closing returns you where you were on every platform; **non-images** get `download={name}` **only when
-`isStandalone()`** (iOS save/share sheet instead of navigation; normal tabs keep new-tab behavior), which
-also restores the **original filename** instead of the stored `1753…-a1b2.pdf`. Also fixed a **latent
-lightbox bug**: Radix modal dialogs set `pointer-events: none` on `<body>` and the lightbox renders outside
-them at the app root, so it inherited the block and could only be closed with **Esc** — which a PWA can't
-press. Added `pointer-events-auto`. The two byte-identical attachment blocks in `meetings.tsx` and
-`meeting-detail-dialog.tsx` collapsed into `components/attachment-chips.tsx`.
+after #10: desktop fine, but in standalone mode the file opened with **no way back**, requiring a force-quit).
+Same relative-path consequence, other half: iOS standalone has **no chrome, no tab bar and no back button**,
+so a same-origin navigation replaces the app with the file. Fixing #10 is what exposed it.
+
+⚠ **Took two attempts — don't retry the first.** Attempt 1 gave non-images the **`download` attribute** in
+standalone mode, expecting iOS to raise its save sheet. **iOS ignores `download` there** and the owner was
+trapped again on a PDF. `target="_blank"` is equally useless (no second tab to open into).
+
+**The rule that holds is NEVER NAVIGATE, for every attachment type.** `client/src/lib/attachments.ts` marks
+each link `data-attachment-view` + `data-attachment-kind`; the app-wide overlay
+(`components/media-lightbox.tsx`, **renamed** from `note-image-lightbox.tsx` — no longer notes-only)
+intercepts on the capture phase. **Images** render inline with the existing zoom, on every platform.
+**Non-images** render an `<iframe>` preview + a **Save** button using `navigator.share({ files })` (Web Share
+Level 2 — the one route that reliably gets a file out of an iOS PWA), falling back to a blob-URL
+`<a download>` on desktop; intercepted **only when `isStandalone()`**, so browser tabs keep the nicer
+new-tab behavior. Escape is over-provisioned (X, backdrop, Close, Esc) because a PWA has neither Esc nor back.
+
+Also fixed a **latent overlay bug**: Radix modal dialogs set `pointer-events: none` on `<body>` and the
+overlay renders outside them at the app root, so it inherited the block and could only be closed with **Esc**
+— which a PWA can't press. Added `pointer-events-auto`. The two byte-identical attachment blocks in
+`meetings.tsx` and `meeting-detail-dialog.tsx` collapsed into `components/attachment-chips.tsx`.
+
+**Verified in-browser before deploy** (local dev, disposable image+PDF attachments on meeting 451, **all test
+rows/files removed after** — DB back to baseline 1 attachment / 348 meetings): branch matrix unit-checked
+across type × display-mode; image overlay opens with a decoded image and does **not** navigate; the same chip
+works from **inside** the Radix dialog (`body` computes `none`, overlay computes `auto`, backdrop closes it,
+Quick Log still open underneath); with `display-mode: standalone` emulated the PDF is intercepted and opens
+the preview + Save card, checked at **390 px**.
+⚠ **`prepush` passed but the full `npm run build` failed** — `tsc -b` rejects a truthiness check on
+`navigator.canShare` (TS declares it always defined). Fixed with a `typeof` guard, which is what the runtime
+needs anyway for older Safari. **The AGENTS.md full-build rule earned its keep again.**
 
 **Keep-warm ping — DEFERRED to Phase 5, owner's call and it's the right one.** Phase 5 repoints the
 every-minute reminders cron to Netlify, which pings `/api/cron/reminders` and warms the same function + libSQL

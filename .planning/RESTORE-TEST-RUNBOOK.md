@@ -176,6 +176,12 @@ node server/scripts/rewrite-blob-urls.mjs <BLOB_HOST> \
 node server/scripts/app-smoke.mjs
 ```
 
+> Step 5 is only needed when the stored URLs are **absolute** and that host is gone. `rewrite-blob-urls.mjs`
+> was written for the Netlify cutover and currently lives on the migration branch only — on `main` it
+> arrives with the cutover merge, so until then either cherry-pick it or run the equivalent
+> `UPDATE … SET col = REPLACE(col, 'https://<host>/', '/')` over each text column by hand. Steps 1–4 and 6
+> need nothing from the migration branch.
+
 **PASS criteria:** step 5 ends with "no rows still reference the Vercel Blob host ✅", `app-smoke`
 is all ✓ (including the photo fetch), and the app renders contact photos, meeting attachments and
 pasted screenshots with the cloud unreachable.

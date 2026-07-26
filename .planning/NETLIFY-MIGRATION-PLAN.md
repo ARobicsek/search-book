@@ -3,12 +3,13 @@
 **STATUS: Phase 0 (spike) ✅ · Phase 1 (env-gated code) ✅ · Phase 2 (first parallel deploy) ✅ — the
 app is LIVE on `ari-search-book.netlify.app` alongside Vercel, sharing the Turso DB, all on branch
 `claude/netlify-migration-plan-8lim9k` (NOT `main` — Vercel stays the daily driver until Phase 5).
-Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS), plus four more during the
-soak (#7–#10, §5). **Phase 3's gate is GREEN as of 2026-07-26** — the whole §5 checklist is owner-verified
-except (a) the bug #10 attachment-open re-check on the updated service worker and (b) push reminders,
-which Phase 3 structurally *cannot* test (VAPID unset on Netlify by design → Phase 5). **Next up: Phase 4**
-(migrate binaries + rewrite DB URLs — point of no return; scripts written & rehearsed, restore drill
-passed). Do NOT merge to `main` before cutover.** Written
+Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS), plus five more during the
+soak (#7–#11, §5). **Phase 3 is COMPLETE — gate GREEN as of 2026-07-26**: the whole §5 checklist is
+owner-verified on desktop and iPhone, the one exception being push reminders, which Phase 3 structurally
+*cannot* test (VAPID unset on Netlify by design → Phase 5) and which is an accepted carve-out rather than
+an open bug. **NEXT UP: Phase 4** (§6 — migrate binaries + rewrite DB URLs; the point of no return).
+Scripts are written, the rewrite is rehearsed, the offline restore drill passed; it is blocked only on the
+four credentials in **§6.0**. Do NOT merge to `main` before cutover.** Written
 2026-07-21 after live network testing proved that NCQA's web proxy **blocks `*.run.app` (Google
 Cloud Run) but allows `*.netlify.app`**, while Vercel access is granted only by exception and is
 being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud Run) as the migration target of
@@ -619,7 +620,7 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 | Contacts list (filters, search, sort), contact detail | ✅ |
 | Photo upload on a contact; company logo | ✅ |
 | Meetings: create/edit, participants, orgs, prep notes, attachment **upload** | ✅ |
-| Meetings: attachment **download/open** | ✅ desktop (bug #10 fixed & confirmed) · ⏳ PWA fixed (bug #11) — re-verify on the iPhone |
+| Meetings: attachment **download/open** | ✅ desktop **and** iPhone PWA (bugs #10 + #11 fixed, owner-confirmed 2026-07-26) |
 | Actions: create, recurring → next occurrence, ownership switch | ✅ |
 | Reminder push arrives | ⛔ **cannot be tested in Phase 3** — VAPID unset on Netlify by design; first exercised at Phase 5. Structurally deferred; does **not** gate Phase 4 |
 | LinkedIn import (decision B, server-side) | ✅ |
@@ -629,9 +630,21 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 | PWA install, mobile layout | ✅ iPhone |
 | Global search timings normal / self-heal | ✅ (bug #9 confirmed resolved) |
 
-**Verdict: the Phase 3 gate is GREEN except the bug #11 PWA re-check.** Push is a known, accepted carve-out
-to Phase 5. **Phase 4 is clear to run once the owner confirms an image attachment opens in the iPhone PWA
-and closes back into the app.**
+### ✅ Phase 3 COMPLETE — gate GREEN (2026-07-26)
+
+Every §5 checklist item above is owner-verified from the work network, desktop **and** iPhone. The single
+exception is **reminder push**, which Phase 3 structurally *cannot* test — VAPID is deliberately unset on
+Netlify until Phase 5, so a reminder set on Netlify is serviced by Vercel's cron. That is an **accepted
+carve-out, not an open bug**, and it does not gate Phase 4; push gets its first real exercise at cutover
+(§7 step 4), which is why that step includes an explicit end-to-end reminder test.
+
+Ten Netlify-runtime bugs were found and fixed across bring-up and soak (#1–#6 in Phase 2 RESULTS, #7–#11
+above). At least two — the Outlook `User-Agent` bot-filter (#8) and the attachment/service-worker pair
+(#10, #11) — would have been **real outages after cutover** rather than shadow ones. The soak paid for itself.
+
+**→ Phase 4 is clear to run.** It is the point of no return, and its own prerequisites are already
+retired: both scripts are written, the URL rewrite has been rehearsed against a scratch DB, and a full
+offline restore drill recovered 238/238 binaries. The only thing missing is the four credentials in §6.0.
 
 #### Keep-warm ping — DEFERRED to Phase 5 by the owner (2026-07-26)
 
@@ -659,6 +672,31 @@ that actually caused #9). ~8,640 invocations/month.
 
 ⚠ After the URL rewrite, photos render on Netlify but appear **broken on Vercel**. Do this only after
 Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
+
+**STATUS (2026-07-26): NOT STARTED — cleared to run; Phase 3's gate is green. This is the next session's
+work.** Both scripts exist and are syntax-checked, the rewrite has been rehearsed on a scratch DB, and the
+offline restore drill passed. Blocked only on §6.0.
+
+### 6.0 Prerequisites the owner must supply (the agent cannot obtain these)
+
+Set them as env vars in the shell that will run the scripts — **do not paste them into chat or commit them.**
+
+| Var | Where to get it | Used by |
+|---|---|---|
+| `BLOB_READ_WRITE_TOKEN` | Vercel dashboard → Storage → Blob | §6.2 (read the source objects) |
+| `NETLIFY_SITE_ID` | Netlify → Site settings → General → Site ID | §6.2 (write target) |
+| `NETLIFY_AUTH_TOKEN` | Netlify → User settings → Applications → new personal access token | §6.2 (write target) |
+| `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` | Turso dashboard — **must be a FRESH token** | §6.3 (the URL rewrite) |
+
+⚠ The Turso rw token committed (commented) in `server/.env` is **stale and returns a hard 401** — see
+`CLAUDE.md`. Assume it will not work and get a new one.
+
+Also decide the **timing**: nothing should be uploaded between §6.2 and §6.3, so pick a quiet window.
+
+**Scale check (as of the 2026-07-26 audit): 235 of 238 binaries are still absolute
+`…vercel-storage.com` URLs**, so the live Netlify app currently depends on Vercel Blob for its images.
+That dependency is exactly what this phase removes. **Do not let the Vercel Blob store be deleted before
+§6.2 has copied the bytes** — deletion is sequenced into Phase 6 (§8 step 2) for that reason.
 
 1. **Safety net:** Settings → **Back up now** + download the full manual ZIP (includes binaries). Keep both.
    The ZIP is now a *usable* safety net, not just a copy: **`server/scripts/restore-binaries-from-zip.mjs`**

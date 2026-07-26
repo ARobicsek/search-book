@@ -574,6 +574,25 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
      intercepts, and the dev-mode PWA uses `navigateFallbackAllowlist: [/^\/$/]` so only `/` falls back.
      Not a routing problem: `curl /files/x.jpeg` on Netlify correctly returns the media proxy's 404.
 
+  6. **Opening an attachment in the installed PWA stranded the app (Netlify runtime bug #11).** Immediately
+     after the #10 fix: attachments open correctly on Netlify desktop, but in the iPhone PWA the file opened
+     with **no way back — the owner had to force-close the app.** Root cause is the *other* half of the same
+     relative-path consequence: iOS standalone mode has **no browser chrome and no new tab**, so a
+     same-origin `target="_blank"` navigates the app window itself into the file viewer. Fixing #10 (so the
+     file actually loads) is what exposed this. Two rules, in new `client/src/lib/attachments.ts`:
+     **(a) image attachments never navigate** — they now open in the **existing app-wide lightbox**
+     (`note-image-lightbox.tsx`, already used for pasted note screenshots), tagged via
+     `data-image-attachment`, so closing it returns the user exactly where they were on every platform;
+     **(b) non-image attachments** (PDF/deck/doc) get `download={name}` **only when `isStandalone()`**, so
+     iOS shows its save/share sheet instead of navigating, while a normal browser tab keeps today's
+     new-tab behavior. `download` also restores the **original filename** — the stored blob name is
+     `${Date.now()}-${rand}${ext}`, so a plain save used to land as "1753…-a1b2.pdf".
+     Also fixed a **latent bug in the lightbox itself**: a Radix modal `Dialog` sets `pointer-events: none`
+     on `<body>`, and the lightbox renders outside the dialog at the app root, so it inherited the block and
+     could only be dismissed with **Esc** — which the PWA has no way to press. Added `pointer-events-auto`.
+     The two byte-identical attachment blocks in `meetings.tsx` and `meeting-detail-dialog.tsx` were
+     extracted to `components/attachment-chips.tsx` so this behavior lives in one place.
+
 #### Phase 3 gate scorecard (owner-verified from the work network unless noted)
 
 | §5 checklist item | Status |
@@ -582,7 +601,7 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 | Contacts list (filters, search, sort), contact detail | ✅ |
 | Photo upload on a contact; company logo | ✅ |
 | Meetings: create/edit, participants, orgs, prep notes, attachment **upload** | ✅ |
-| Meetings: attachment **download/open** | ⏳ fixed (bug #10) — re-verify after the SW updates |
+| Meetings: attachment **download/open** | ✅ desktop (bug #10 fixed & confirmed) · ⏳ PWA fixed (bug #11) — re-verify on the iPhone |
 | Actions: create, recurring → next occurrence, ownership switch | ✅ |
 | Reminder push arrives | ⛔ **cannot be tested in Phase 3** — VAPID unset on Netlify by design; first exercised at Phase 5. Structurally deferred; does **not** gate Phase 4 |
 | LinkedIn import (decision B, server-side) | ✅ |
@@ -592,27 +611,29 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 | PWA install, mobile layout | ✅ iPhone |
 | Global search timings normal / self-heal | ✅ (bug #9 confirmed resolved) |
 
-**Verdict: the Phase 3 gate is GREEN except the bug #10 re-check.** Push is a known, accepted carve-out
-to Phase 5. **Phase 4 is clear to run once the owner confirms an attachment opens on the updated SW.**
+**Verdict: the Phase 3 gate is GREEN except the bug #11 PWA re-check.** Push is a known, accepted carve-out
+to Phase 5. **Phase 4 is clear to run once the owner confirms an image attachment opens in the iPhone PWA
+and closes back into the app.**
 
-#### Keep-warm ping — owner approved 2026-07-26
+#### Keep-warm ping — DEFERRED to Phase 5 by the owner (2026-07-26)
 
 Cold `/api/health` measured **3.37 s on Netlify vs 0.38 s on Vercel** (2026-07-26), so the cold-start tax
-behind bug #9 is real even after the self-heal. **Mechanism = cron-job.org** (already the project's cron,
+behind bug #9 is real even after the self-heal. **The owner declined to wire a temporary keep-warm during
+the soak**, on the correct reasoning that Phase 5 solves it anyway: repointing the every-minute reminders
+cron to Netlify pings `/api/cron/reminders`, which warms the same function and the same libSQL connection.
+So **no separate keep-warm job is needed at all** unless the free compute quota (R10) forces reminders down
+to every 2–3 min — in which case add the job below at 5 min. Until Phase 5, expect the first hit after an
+idle period to take ~3–13 s on Netlify; the bug #9 self-heal makes it slow rather than broken.
+
+Config if it is ever wanted: **mechanism = cron-job.org** (already the project's cron,
 already proven against Netlify per R11, observable execution history, and **1 invocation per tick** — a
 Netlify Scheduled Function would cost 2, since the scheduler runs in a *separate* function that must then
 HTTP-ping the `/api` one to warm it, and Netlify's docs emphasise `@hourly` as the shortest *named*
 interval, which would be useless here).
-
-Config: **GET `https://ari-search-book.netlify.app/api/health` every 5 minutes**, no auth header —
+**GET `https://ari-search-book.netlify.app/api/health` every 5 minutes**, no auth header —
 `/api/health` is deliberately exempt from both the password gate (`app.ts:183`) and the rate limiter
 (`app.ts:151`), and it runs `SELECT 1`, so it warms the Lambda **and** the libSQL connection (the thing
 that actually caused #9). ~8,640 invocations/month.
-
-⚠ **At Phase 5 this becomes redundant**: the reminders cron pings `/api/cron/reminders` every minute and
-warms the same function + connection. So at cutover either delete the keep-warm job, **or** — if the free
-compute quota (R10) turns out tight — keep it at 5 min and drop reminders to every 2–3 min (Appendix A)
-rather than running both.
 
 ---
 

@@ -16,6 +16,7 @@ import {
   CONVERSATION_TYPE_OPTIONS,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { attachmentLinkProps } from '@/lib/attachments'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -2006,9 +2007,7 @@ function QuickLogDialog({
               {attachments.map((att) => (
                 <span key={att.id} className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs">
                   <a
-                    href={att.url}
-                    target="_blank"
-                    rel="noreferrer"
+                    {...attachmentLinkProps(att)}
                     className="max-w-40 truncate text-primary hover:underline"
                     title={att.name}
                   >
@@ -2029,9 +2028,7 @@ function QuickLogDialog({
                   {/* Already uploaded (only the DB row is pending), so it opens
                       like a saved attachment. */}
                   <a
-                    href={att.url}
-                    target="_blank"
-                    rel="noreferrer"
+                    {...attachmentLinkProps(att)}
                     className="max-w-40 truncate text-primary hover:underline"
                     title={att.name}
                   >

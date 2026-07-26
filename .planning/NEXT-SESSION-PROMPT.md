@@ -28,16 +28,30 @@ activate** — accept the refresh prompt (`registerType: 'prompt'`); on iOS full
 that Vercel had it too was reasonable but it's **Netlify-only in practice** (Vercel's absolute cross-origin
 Blob URLs are never SW-intercepted; dev PWA allowlists only `/`).
 
-**Keep-warm ping approved** → **cron-job.org, GET `/api/health` every 5 min**, no auth header (that route is
-exempt from both the password gate and the rate limiter, and runs `SELECT 1`, so it warms the Lambda *and*
-the libSQL connection). Measured cold: **Netlify 3.37 s vs Vercel 0.38 s**. Chose cron-job.org over a Netlify
-Scheduled Function (1 invocation/tick vs 2; already proven per R11). ⚠ **Redundant at Phase 5** — the
-every-minute reminders cron warms the same function; delete it then, or keep it and drop reminders to 2–3 min
-if quota (R10) is tight. **Owner action: create the job.**
+**Netlify runtime bug #11 — opening an attachment in the iPhone PWA stranded the app** (found immediately
+after #10: desktop fine, but in standalone mode the file opened with **no way back**, requiring a force-close).
+Same relative-path consequence, other half: iOS standalone has **no chrome and no new tab**, so a same-origin
+`target="_blank"` navigates the app window itself. Fixing #10 is what exposed it. New `client/src/lib/
+attachments.ts`: **image attachments never navigate** — they open in the **existing app-wide lightbox**
+(`note-image-lightbox.tsx`, already used for pasted note screenshots) via a `data-image-attachment` tag, so
+closing returns you where you were on every platform; **non-images** get `download={name}` **only when
+`isStandalone()`** (iOS save/share sheet instead of navigation; normal tabs keep new-tab behavior), which
+also restores the **original filename** instead of the stored `1753…-a1b2.pdf`. Also fixed a **latent
+lightbox bug**: Radix modal dialogs set `pointer-events: none` on `<body>` and the lightbox renders outside
+them at the app root, so it inherited the block and could only be closed with **Esc** — which a PWA can't
+press. Added `pointer-events-auto`. The two byte-identical attachment blocks in `meetings.tsx` and
+`meeting-detail-dialog.tsx` collapsed into `components/attachment-chips.tsx`.
 
-`prepush` + full `npm run build` green.
+**Keep-warm ping — DEFERRED to Phase 5, owner's call and it's the right one.** Phase 5 repoints the
+every-minute reminders cron to Netlify, which pings `/api/cron/reminders` and warms the same function + libSQL
+connection, so a separate keep-warm job is **unnecessary** unless quota (R10) forces reminders to 2–3 min.
+Until then the first hit after idle takes ~3–13 s (measured cold: **Netlify 3.37 s vs Vercel 0.38 s**); the
+bug #9 self-heal makes that slow, not broken. Config is recorded in the plan if ever needed.
 
-**What's next:** owner confirms an attachment opens after the SW updates → **Phase 4** (migrate Vercel-Blob
+`prepush` + full `npm run build` green (twice — once per fix).
+
+**What's next:** owner confirms an image attachment opens *and closes back into the app* in the iPhone PWA
+→ **Phase 4** (migrate Vercel-Blob
 binaries → Netlify Blobs, rewrite DB URLs to relative — point of no return; both scripts written, the
 rewrite rehearsed on a scratch DB, offline restore drill passed) → Phase 5 (cutover: crons, VAPID push,
 per-device PWA reinstall) → Phase 6 (decommission Vercel).

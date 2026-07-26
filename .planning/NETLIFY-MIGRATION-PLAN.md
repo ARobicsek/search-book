@@ -561,6 +561,12 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
 
 1. **Safety net:** Settings → **Back up now** + download the full manual ZIP (includes binaries). Keep both.
+   The ZIP is now a *usable* safety net, not just a copy: **`server/scripts/restore-binaries-from-zip.mjs`**
+   replays its `manifest.json` back into the served `/photos/` · `/files/` paths. (Until 2026-07-26 nothing
+   mapped ZIP entries — named after the source record, "Contact 42.png" — to the URLs the DB references, so
+   a restore could rebuild every row and still show every image broken.) **Drill executed 2026-07-26 against
+   a real Netlify backup: 238/238 binaries recovered and served with the cloud unreachable** — see
+   `RESTORE-TEST-RUNBOOK.md` Option C.
 2. **Copy every Vercel Blob object → Netlify Blobs** — script `server/scripts/migrate-blobs-to-netlify.mjs`
    **(written, Phase 3)** — uses `@vercel/blob` `list()` to read + `@netlify/blobs`
    `getStore({ name: 'media', siteID, token })` to write; copies `photos/`, `files/`, **and** `backups/`,
@@ -573,6 +579,9 @@ Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
    (covers `Contact.photoUrl/photoFile`, `Company.photoFile`, `ConversationAttachment.url`, and
    markdown-embedded images in any notes column). Same script/approach as the Cloud Run plan §4.2,
    including the `--undo` emergency path and the "no ⚠ REMAINING" verification.
+  **Rehearse it first:** the script now takes `--db file:/abs/path/to/scratch.db`, so the identical rewrite
+  can be dry-run against a restored scratch SQLite DB before it touches Turso. Done 2026-07-26 (218 rows
+  rewritten, "no ⚠ REMAINING") — worth repeating on the day, since this step is the point of no return.
 
 **Gate:** no `⚠ REMAINING`; on Netlify a contact photo, a meeting attachment, and a pasted-image note
 all render.

@@ -5,6 +5,52 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Pre-cutover restore drill vs a NETLIFY backup: PASSED, incl. binaries (2026-07-26)
+
+Owner ask, before cutover: prove the app can be **fully** restored in a dev environment from the three
+files downloaded off `ari-search-book.netlify.app` (`searchbook-backup-2026-07-26T06-24-43.json`,
+`searchbook-files (1).zip`, `searchbook-notes-…md`). **Answer: yes.** One commit, `bc40156`, on
+**`netlify-migration-phase-3`**.
+
+Restored into a **scratch** local SQLite DB — the owner's `dev.db`, `server/data/photos/`, `server/.env`
+and Turso were never touched (re-verified after: `dev.db` unchanged, photos back to the baseline 12,
+no scratch files left).
+
+| Check | Result |
+|---|---|
+| Artifact audit (models / columns / FK orphans / ZIP integrity) | 32/32 models, 0 missing columns, **0 orphans across 47 FK edges**, ZIP == manifest, no zero-byte entries |
+| `POST /api/backup/import` (dev Prisma path) | 200 in 0.9 s |
+| `restore-test.mjs` (mirrors prod browser-direct `importViaTurso`) | 32/32 tables, 5,844 rows |
+| **Round-trip field diff** (re-export vs source, DateTime/bool normalised) | **62,309 values, 0 differences** |
+| Binaries recovered from the ZIP alone | **238/238** on disk, **238/238** served over localhost, zero cloud dependency |
+| App booted on restored data | contacts 544 · companies 877 · meetings 348 · actions 406 · 61 mention-meetings · analytics sparklines · photo + a pasted screenshot render · **0 console errors** |
+
+**Two defects the drill exposed (both fixed):**
+1. **The restore test was lying.** `restore-test.mjs` still listed the **27 Vercel-era tables** against a
+   v7/32 backup — it skipped `Series`, `IdeaTag`, `ConversationMention`, `DismissedDuplicate`,
+   `DuplicateMergeRule` (364 rows, incl. all 277 mentions), left them **un-wiped and un-restored**, and
+   still printed a green *"27/27 tables match"*. **The 2026-06-14 "PASSED" run had this same blind spot.**
+   Fixed, and `check-backup-coverage.mjs` now guards that array as a **5th enumeration** (negative-tested).
+2. **The binaries had no restore path at all.** The ZIP names entries after the *source record*
+   ("Contact 42.png"), not the URL the DB stores, so nothing mapped them back — a restore could rebuild
+   every row and still show 238 broken images. New **`server/scripts/restore-binaries-from-zip.mjs`**
+   (replays the ZIP's `manifest.json` into the served `/photos/`·`/files/` paths; dependency-free, since a
+   real recovery may start from a bare checkout). Procedure = `RESTORE-TEST-RUNBOOK.md` **Option C**.
+
+Also: `rewrite-blob-urls.mjs` takes `--db file:…` so the **Phase 4 point-of-no-return** rewrite can be
+rehearsed on a scratch DB (done: 218 rows, "no ⚠ REMAINING"); `app-smoke.mjs` no longer reports two
+**phantom failures** (`/api/analytics` has no root route — use `/overview`; a 1-char search `q` is a
+deliberate 400) and now fetches a photo. Two apparent count shortfalls reconciled as correct-by-design:
+`/ideas` defaults to active-only (23 of 25) and `/tags` hides the reserved `Favorite` (5 of 6 rows).
+
+⚠ **Cutover-relevant:** **235 of the 238 binaries are still absolute `…vercel-storage.com` URLs** — Phase 4
+hasn't run, as planned — so the live Netlify app currently depends on Vercel Blob. The plan already
+sequences Blob-store deletion into **Phase 6** (§8 step 2: after Phase 4 + Phase 5 + a few normal days +
+confirming `backups/` history is in Netlify Blobs), so no new rule is needed; the ZIP is a complete offline
+copy regardless. **Do not let the Vercel Blob store be deleted before Phase 4 has migrated the bytes.**
+
+**Not an NCQA-adaptation-plan task**, so no task STATUS line to update.
+
 ### What Was Just Completed — Netlify Phase 3 soak: global-search timeout self-heal (bug #9) (2026-07-23)
 
 Owner soaking the Netlify shadow app hit an **intermittent global-search timeout**: a fresh "karen"

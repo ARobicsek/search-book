@@ -3,8 +3,13 @@
 **STATUS: Phase 0 (spike) ✅ · Phase 1 (env-gated code) ✅ · Phase 2 (first parallel deploy) ✅ — the
 app is LIVE on `ari-search-book.netlify.app` alongside Vercel, sharing the Turso DB, all on branch
 `claude/netlify-migration-plan-8lim9k` (NOT `main` — Vercel stays the daily driver until Phase 5).
-Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS). Next up: Phase 3
-(parallel soak). Do NOT merge to `main` before cutover.** Written
+Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS), plus five more during the
+soak (#7–#11, §5). **Phase 3 is COMPLETE — gate GREEN as of 2026-07-26**: the whole §5 checklist is
+owner-verified on desktop and iPhone, the one exception being push reminders, which Phase 3 structurally
+*cannot* test (VAPID unset on Netlify by design → Phase 5) and which is an accepted carve-out rather than
+an open bug. **NEXT UP: Phase 4** (§6 — migrate binaries + rewrite DB URLs; the point of no return).
+Scripts are written, the rewrite is rehearsed, the offline restore drill passed; it is blocked only on the
+four credentials in **§6.0**. Do NOT merge to `main` before cutover.** Written
 2026-07-21 after live network testing proved that NCQA's web proxy **blocks `*.run.app` (Google
 Cloud Run) but allows `*.netlify.app`**, while Vercel access is granted only by exception and is
 being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud Run) as the migration target of
@@ -552,6 +557,114 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
      cron-job.org ping to `/api/health` every few min to keep the Lambda + Turso connection warm),
      deferred to Phase 5 cron; offered to owner, not yet wired. Owner has **not** yet confirmed the live
      self-heal (idle the app ~2 min, then search "karen" fresh → should render on its own, no manual retry).
+     **→ CONFIRMED RESOLVED by the owner 2026-07-26.**
+  5. **Clicking a meeting attachment opened the DASHBOARD instead of the file (Netlify runtime bug #10).**
+     Uploading worked; the chip's link didn't. **Root cause: the PWA service worker's SPA
+     navigate-fallback.** `vite-plugin-pwa` generates
+     `new NavigationRoute(createHandlerBoundToURL("index.html"))` with **no denylist**, so *every*
+     top-level navigation is answered with the precached app shell. An attachment link is a relative
+     `/files/<name>` **navigation**, so the SW served `index.html`, React Router matched nothing, and
+     `App.tsx`'s `<Route path="*" element={<Navigate to="/" replace />} />` redirected to the dashboard —
+     the file was never requested. `<img src="/photos/…">` was unaffected (image requests aren't
+     `mode: 'navigate'`), which is exactly why photos looked fine and only *attachments* broke.
+     Fixed with `navigateFallbackDenylist: [/^\/api\//, /^\/photos\//, /^\/files\//]` in
+     `client/vite.config.ts`; verified compiled into `dist/sw.js`. Pending attachment chips (uploaded but
+     the DB row not yet created) were a plain `<span>` — now the same link. ⚠ **Needs the SW update to
+     activate** (`registerType: 'prompt'` → accept the refresh prompt; on iOS fully close the PWA first).
+     **Netlify-only in practice** — Vercel stores absolute cross-origin Blob URLs, which the SW never
+     intercepts, and the dev-mode PWA uses `navigateFallbackAllowlist: [/^\/$/]` so only `/` falls back.
+     Not a routing problem: `curl /files/x.jpeg` on Netlify correctly returns the media proxy's 404.
+
+  6. **Opening an attachment in the installed PWA stranded the app (Netlify runtime bug #11).** Immediately
+     after the #10 fix: attachments open correctly on Netlify desktop, but in the iPhone PWA the file opened
+     with **no way back — the owner had to force-close the app.** Root cause is the *other* half of the same
+     relative-path consequence: iOS standalone mode has **no browser chrome, no tab bar and no back
+     button**, so a same-origin navigation replaces the app with the file. Fixing #10 (so the file actually
+     loads) is what exposed this.
+     ⚠ **The first attempt did not work and was replaced — record it so nobody retries it:** giving
+     non-image attachments the **`download` attribute** in standalone mode. The theory was that iOS would
+     raise its save sheet instead of navigating. **It ignores `download` there** — the owner re-tested and
+     was trapped again on a PDF. `target="_blank"` is equally useless (standalone has no second tab to open
+     into).
+     **The rule that holds is NEVER NAVIGATE**, for *every* attachment type. Final shape:
+     `client/src/lib/attachments.ts` marks each attachment link `data-attachment-view` +
+     `data-attachment-kind`, and the app-wide overlay (`components/media-lightbox.tsx`, renamed from
+     `note-image-lightbox.tsx` since it is no longer notes-only) intercepts the click on the capture phase:
+     **images** render inline with the existing zoom (on every platform — it beats a bare browser tab), and
+     **non-images** render an `<iframe>` preview plus an explicit **Save** button that hands the file to
+     `navigator.share({ files })` — Web Share Level 2, the one route that reliably gets a file out of an
+     iOS PWA — falling back to a blob-URL `<a download>` on desktop. Non-images are only intercepted
+     **when `isStandalone()`**; in a browser tab they keep the plain new-tab behavior, which is better
+     there and always has a way back. The `href` (and `download`) stay on the anchor as a no-JS fallback.
+     Escape is deliberately over-provisioned — X, backdrop tap, Close button **and** Esc — because a PWA
+     has neither an Esc key nor a back button.
+     Also fixed a **latent bug in the overlay itself**: a Radix modal `Dialog` sets `pointer-events: none`
+     on `<body>`, and the overlay renders outside the dialog at the app root, so it inherited the block and
+     could only be dismissed with **Esc** — which the PWA cannot press. Added `pointer-events-auto`;
+     **confirmed live in Chrome** (`body` computes `none`, the overlay computes `auto`, backdrop click
+     closes it, and the Quick Log dialog is still open underneath).
+     The two byte-identical attachment blocks in `meetings.tsx` and `meeting-detail-dialog.tsx` were
+     extracted to `components/attachment-chips.tsx` so this behavior lives in one place.
+     **Verified before deploy** (local dev, disposable image+PDF attachments on meeting 451, all test rows
+     and files removed after; DB back to its baseline 1 attachment / 348 meetings): the branch matrix
+     unit-checked across type × display-mode; the image overlay opens with a decoded 120×60 image and does
+     not navigate; the same chip works from **inside** the Radix dialog; and with `display-mode: standalone`
+     emulated, the PDF is intercepted (`kind=file`, no `target`) and opens the preview + Save card — checked
+     at **390 px**.
+
+#### Phase 3 gate scorecard (owner-verified from the work network unless noted)
+
+| §5 checklist item | Status |
+|---|---|
+| Login / 401 → re-prompt | ✅ |
+| Contacts list (filters, search, sort), contact detail | ✅ |
+| Photo upload on a contact; company logo | ✅ |
+| Meetings: create/edit, participants, orgs, prep notes, attachment **upload** | ✅ |
+| Meetings: attachment **download/open** | ✅ desktop **and** iPhone PWA (bugs #10 + #11 fixed, owner-confirmed 2026-07-26) |
+| Actions: create, recurring → next occurrence, ownership switch | ✅ |
+| Reminder push arrives | ⛔ **cannot be tested in Phase 3** — VAPID unset on Netlify by design; first exercised at Phase 5. Structurally deferred; does **not** gate Phase 4 |
+| LinkedIn import (decision B, server-side) | ✅ |
+| Calendar / ICS fetch | ✅ (bug #8 fix confirmed live) |
+| Undo delete | ✅ |
+| Settings backups: manual backup **and restore** | ✅ (+ the full offline restore drill, 2026-07-26) |
+| PWA install, mobile layout | ✅ iPhone |
+| Global search timings normal / self-heal | ✅ (bug #9 confirmed resolved) |
+
+### ✅ Phase 3 COMPLETE — gate GREEN (2026-07-26)
+
+Every §5 checklist item above is owner-verified from the work network, desktop **and** iPhone. The single
+exception is **reminder push**, which Phase 3 structurally *cannot* test — VAPID is deliberately unset on
+Netlify until Phase 5, so a reminder set on Netlify is serviced by Vercel's cron. That is an **accepted
+carve-out, not an open bug**, and it does not gate Phase 4; push gets its first real exercise at cutover
+(§7 step 4), which is why that step includes an explicit end-to-end reminder test.
+
+Ten Netlify-runtime bugs were found and fixed across bring-up and soak (#1–#6 in Phase 2 RESULTS, #7–#11
+above). At least two — the Outlook `User-Agent` bot-filter (#8) and the attachment/service-worker pair
+(#10, #11) — would have been **real outages after cutover** rather than shadow ones. The soak paid for itself.
+
+**→ Phase 4 is clear to run.** It is the point of no return, and its own prerequisites are already
+retired: both scripts are written, the URL rewrite has been rehearsed against a scratch DB, and a full
+offline restore drill recovered 238/238 binaries. The only thing missing is the four credentials in §6.0.
+
+#### Keep-warm ping — DEFERRED to Phase 5 by the owner (2026-07-26)
+
+Cold `/api/health` measured **3.37 s on Netlify vs 0.38 s on Vercel** (2026-07-26), so the cold-start tax
+behind bug #9 is real even after the self-heal. **The owner declined to wire a temporary keep-warm during
+the soak**, on the correct reasoning that Phase 5 solves it anyway: repointing the every-minute reminders
+cron to Netlify pings `/api/cron/reminders`, which warms the same function and the same libSQL connection.
+So **no separate keep-warm job is needed at all** unless the free compute quota (R10) forces reminders down
+to every 2–3 min — in which case add the job below at 5 min. Until Phase 5, expect the first hit after an
+idle period to take ~3–13 s on Netlify; the bug #9 self-heal makes it slow rather than broken.
+
+Config if it is ever wanted: **mechanism = cron-job.org** (already the project's cron,
+already proven against Netlify per R11, observable execution history, and **1 invocation per tick** — a
+Netlify Scheduled Function would cost 2, since the scheduler runs in a *separate* function that must then
+HTTP-ping the `/api` one to warm it, and Netlify's docs emphasise `@hourly` as the shortest *named*
+interval, which would be useless here).
+**GET `https://ari-search-book.netlify.app/api/health` every 5 minutes**, no auth header —
+`/api/health` is deliberately exempt from both the password gate (`app.ts:183`) and the rate limiter
+(`app.ts:151`), and it runs `SELECT 1`, so it warms the Lambda **and** the libSQL connection (the thing
+that actually caused #9). ~8,640 invocations/month.
 
 ---
 
@@ -560,7 +673,38 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 ⚠ After the URL rewrite, photos render on Netlify but appear **broken on Vercel**. Do this only after
 Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
 
+**STATUS (2026-07-26): NOT STARTED — cleared to run; Phase 3's gate is green. This is the next session's
+work.** Both scripts exist and are syntax-checked, the rewrite has been rehearsed on a scratch DB, and the
+offline restore drill passed. Blocked only on §6.0.
+
+### 6.0 Prerequisites the owner must supply (the agent cannot obtain these)
+
+Set them as env vars in the shell that will run the scripts — **do not paste them into chat or commit them.**
+
+| Var | Where to get it | Used by |
+|---|---|---|
+| `BLOB_READ_WRITE_TOKEN` | Vercel dashboard → Storage → Blob | §6.2 (read the source objects) |
+| `NETLIFY_SITE_ID` | Netlify → Site settings → General → Site ID | §6.2 (write target) |
+| `NETLIFY_AUTH_TOKEN` | Netlify → User settings → Applications → new personal access token | §6.2 (write target) |
+| `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` | Turso dashboard — **must be a FRESH token** | §6.3 (the URL rewrite) |
+
+⚠ The Turso rw token committed (commented) in `server/.env` is **stale and returns a hard 401** — see
+`CLAUDE.md`. Assume it will not work and get a new one.
+
+Also decide the **timing**: nothing should be uploaded between §6.2 and §6.3, so pick a quiet window.
+
+**Scale check (as of the 2026-07-26 audit): 235 of 238 binaries are still absolute
+`…vercel-storage.com` URLs**, so the live Netlify app currently depends on Vercel Blob for its images.
+That dependency is exactly what this phase removes. **Do not let the Vercel Blob store be deleted before
+§6.2 has copied the bytes** — deletion is sequenced into Phase 6 (§8 step 2) for that reason.
+
 1. **Safety net:** Settings → **Back up now** + download the full manual ZIP (includes binaries). Keep both.
+   The ZIP is now a *usable* safety net, not just a copy: **`server/scripts/restore-binaries-from-zip.mjs`**
+   replays its `manifest.json` back into the served `/photos/` · `/files/` paths. (Until 2026-07-26 nothing
+   mapped ZIP entries — named after the source record, "Contact 42.png" — to the URLs the DB references, so
+   a restore could rebuild every row and still show every image broken.) **Drill executed 2026-07-26 against
+   a real Netlify backup: 238/238 binaries recovered and served with the cloud unreachable** — see
+   `RESTORE-TEST-RUNBOOK.md` Option C.
 2. **Copy every Vercel Blob object → Netlify Blobs** — script `server/scripts/migrate-blobs-to-netlify.mjs`
    **(written, Phase 3)** — uses `@vercel/blob` `list()` to read + `@netlify/blobs`
    `getStore({ name: 'media', siteID, token })` to write; copies `photos/`, `files/`, **and** `backups/`,
@@ -573,6 +717,9 @@ Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
    (covers `Contact.photoUrl/photoFile`, `Company.photoFile`, `ConversationAttachment.url`, and
    markdown-embedded images in any notes column). Same script/approach as the Cloud Run plan §4.2,
    including the `--undo` emergency path and the "no ⚠ REMAINING" verification.
+  **Rehearse it first:** the script now takes `--db file:/abs/path/to/scratch.db`, so the identical rewrite
+  can be dry-run against a restored scratch SQLite DB before it touches Turso. Done 2026-07-26 (218 rows
+  rewritten, "no ⚠ REMAINING") — worth repeating on the day, since this step is the point of no return.
 
 **Gate:** no `⚠ REMAINING`; on Netlify a contact photo, a meeting attachment, and a pasted-image note
 all render.

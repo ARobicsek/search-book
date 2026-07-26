@@ -107,6 +107,26 @@ api/index.ts      # Vercel serverless entry point
 - **Action reminders**: optional `Action.dueTime` ("HH:MM" local; `dueDate` stays date-only), opt-in `Action.notify` (independent of time; default time 08:00 weekdays / 10:00 weekends `REMINDER_TZ`=America/New_York; Time field is a forgiving free-text input `client/src/components/time-input.tsx` — "9a"→9:00 AM, bare hour assumes :00), `Action.lastNotifiedAt` (cron fires once; editing date/time/notify re-arms it). `PushSubscription` table = one Web Push subscription per device (excluded from backup). Free VAPID Web Push fanned out by `/api/cron/reminders` (gated by `REMINDERS_CRON_SECRET`, falls back to `CRON_SECRET`), poked every minute by a **free external cron** (cron-job.org) — no paid Vercel Cron. SW push handlers in `client/public/push-sw.js` (imported into the Workbox SW via `importScripts`). Full runbook: `.planning/ACTION-REMINDERS.md`
 - **Recurring actions**: `Action.recurring` + `recurringIntervalDays` (every N days) + optional `recurringEndDate`, OR `recurringWeekdaysOnly` (bool) = **every weekday Mon–Fri, skipping Sat/Sun** (interval is ignored in that mode — Fri→Mon isn't a fixed day count). Next occurrence is auto-created on **completion** (`PATCH /actions/:id/complete`), carrying the schedule **and** the reminder (`dueTime`/`notify`) forward; `lastNotifiedAt` is left null so the cron arms a fresh reminder for the new occurrence. UI: the action form's "Recurring action" block has a **Repeat** selector (Every N days / Every weekday); interval input hides in weekday mode.
 
+## ⚠ Migration in flight: Vercel → Netlify
+
+**NCQA IT is revoking Vercel access**, so the app is being migrated to Netlify. The plan of record is
+**`.planning/NETLIFY-MIGRATION-PLAN.md`** (it supersedes `VERCEL-EXIT-PLAN.md`, whose Cloud Run target is
+dead — `*.run.app` is blocked at NCQA while `*.netlify.app` is not).
+
+- **Vercel (`searchbook-three.vercel.app`) is still the daily driver.** A parallel Netlify deploy
+  (**`ari-search-book.netlify.app`**) has been live since 2026-07-22, sharing the same Turso DB.
+- **All migration code lives on `netlify-migration-phase-3`, NOT `main`** — deployed by fast-forwarding the
+  Netlify build branch `claude/netlify-migration-plan-8lim9k`. Unrelated owner work still goes to `main`.
+  Every change is env-gated on `netlifyBlobsEnabled()` (`STORAGE=netlify` or the runtime `NETLIFY` signal),
+  so the same commits are dormant on Vercel/local anyway. **Do not merge to `main` before Phase 5.**
+- **Phases 0–3 are complete (soak gate green, 2026-07-26). Phase 4 is next** — copy Vercel Blob bytes into
+  Netlify Blobs, then rewrite the DB's absolute URLs to relative `/photos/`·`/files/` paths. That rewrite is
+  the **point of no return**: afterwards images render on Netlify and break on Vercel.
+- **Never let the Vercel Blob store be deleted before Phase 4 has copied the bytes** — 235 of 238 binaries
+  are still absolute `vercel-storage.com` URLs, so the live Netlify app currently depends on it.
+- Netlify's function timeout is a hard **10 s** (vs Vercel's 30 s), which is why `app.ts` fires its own 504 at
+  9 s under `NETLIFY` and the client auto-retries transient 5xx. Design endpoints accordingly.
+
 ## Current Status
 
 **The app is being adapted for the owner's new role as Chief Medical Officer of NCQA** — from job-search CRM to executive stakeholder-management system. The active **plan of record is `.planning/NCQA-ADAPTATION-PLAN.md`** (taxonomy retheme, multi-person/multi-subject meetings via autocompleted title "series" — **no Groups**, per D4 — stakeholder stance/leverage tracking, AI ingest of MS Copilot meeting recaps, Outlook-calendar daily briefing). **Phases 1 & 2 are complete and deployed (2026-06-12); Phase 3+ is next**, gated on decisions D5–D9 (don't push on those until the owner raises them).

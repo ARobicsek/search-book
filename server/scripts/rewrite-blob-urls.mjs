@@ -16,23 +16,34 @@
 //
 // --undo naively re-prefixes every relative /photos/ · /files/ path back to https://<HOST>/… .
 // It is the emergency rollback and is valid ONLY before the Vercel Blob store is deleted (Phase 6).
+//
+// REHEARSAL: pass `--db file:/abs/path/to/scratch.db` to run the identical rewrite against a
+// local SQLite copy instead of Turso. Cutover step §6.3 is a point of no return, so being able
+// to dry-run it on a restored scratch DB first — and see the same "no ⚠ REMAINING" verification
+// — is worth the one extra flag. Without --db the Turso env vars are required, as before.
 
 import { createClient } from '@libsql/client';
 
-const host = process.argv[2];
-const undo = process.argv.includes('--undo');
-if (!host || host.startsWith('--')) {
-  console.error('Pass the Vercel Blob host, e.g. abc123.public.blob.vercel-storage.com [--undo]');
+const argv = process.argv.slice(2);
+const host = argv.find((a) => !a.startsWith('--'));
+const undo = argv.includes('--undo');
+const dbFlagIdx = argv.indexOf('--db');
+const dbOverride = dbFlagIdx >= 0 ? argv[dbFlagIdx + 1] : null;
+if (!host) {
+  console.error('Pass the Vercel Blob host, e.g. abc123.public.blob.vercel-storage.com [--undo] [--db file:…]');
   process.exit(1);
 }
-if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
-  console.error('Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (a FRESH token) first.');
+if (!dbOverride && (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN)) {
+  console.error('Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (a FRESH token) first, or pass --db file:…');
   process.exit(1);
 }
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
+const db = dbOverride
+  ? createClient({ url: dbOverride })
+  : createClient({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+console.log(`target: ${dbOverride ?? process.env.TURSO_DATABASE_URL}${dbOverride ? '  [local rehearsal]' : ''}`);
 
 const tables = (
   await db.execute(

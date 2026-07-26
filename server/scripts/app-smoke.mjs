@@ -16,15 +16,19 @@ const line = (mark, label, detail) => console.log(`  ${mark} ${label.padEnd(34)}
 
 console.log('\n═══ app smoke against restored dev.db ═══');
 
-// list endpoints (the heaviest Prisma reads)
+// list endpoints (the heaviest Prisma reads).
+// NOTE on totals that look "short" against the backup's row counts — both are correct:
+//   • /ideas defaults to active only (archived excluded) — use ?archived=all to see every row
+//   • /tags hides the reserved `Favorite` tag, so it returns one fewer than the Tag table
 for (const [label, path] of [
   ['Contacts list', '/contacts?limit=3'],
   ['Companies list', '/companies?limit=3'],
   ['Conversations list', '/conversations?limit=3'],
   ['Actions list', '/actions?limit=3'],
-  ['Ideas list', '/ideas?limit=3'],
+  ['Ideas list (all)', '/ideas?archived=all&limit=3'],
   ['Tags', '/tags'],
-  ['Analytics', '/analytics'],
+  // /api/analytics has no root handler — the dashboard reads /overview.
+  ['Analytics', '/analytics/overview'],
 ]) {
   const { status, body } = await hit(path);
   const ok = status === 200;
@@ -41,8 +45,23 @@ if (cid) {
 const conv = await hit('/conversations/100');
 line(conv.status === 200 ? '✓' : '✖', 'Conversation detail #100', conv.status === 200 ? `200  title="${conv.body.title ?? conv.body.date ?? ''}" participants=${(conv.body.participants||[]).length}` : conv.status);
 
-// search (its own code path)
-const search = await hit('/search?q=a&limit=3');
-line(search.status === 200 ? '✓' : '✖', 'Search q="a"', search.status === 200 ? `200  results present` : search.status);
+// search (its own code path). The query must be ≥2 chars — a 1-char q is a
+// deliberate 400, so a single letter here would report a phantom failure.
+const search = await hit('/search?q=ari&limit=3');
+line(search.status === 200 ? '✓' : '✖', 'Search q="ari"', search.status === 200 ? `200  results present` : search.status);
+
+// binaries: photos are referenced by the DB but served off disk / Blob, so a
+// restore can look perfect in SQL and still show broken images everywhere.
+const exported = (await hit('/backup/export')).body;
+const photo = (exported?.Contact ?? []).map((c) => c.photoUrl || c.photoFile).find(Boolean);
+if (!photo) line('·', 'Contact photo', 'no photo references in this dataset (skipped)');
+else {
+  const url = /^https?:\/\//.test(photo) ? photo : `http://localhost:3001${photo}`;
+  try {
+    const r = await fetch(url);
+    const bytes = (await r.arrayBuffer()).byteLength;
+    line(r.ok && bytes > 0 ? '✓' : '✖', 'Contact photo fetch', `${r.status}  ${bytes} bytes  ${photo.slice(0, 48)}`);
+  } catch (e) { line('✖', 'Contact photo fetch', e.message); }
+}
 
 console.log('');

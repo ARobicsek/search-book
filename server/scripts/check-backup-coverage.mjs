@@ -4,11 +4,16 @@
  * content is missing from the backup/restore code. Wired into `npm run prepush`
  * and `build:vercel`, so a schema addition can't ship without the backup keeping up.
  *
- * It cross-checks FOUR independent enumerations and asserts they all agree:
+ * It cross-checks FIVE independent enumerations and asserts they all agree:
  *   1. Every `model X` in server/prisma/schema.prisma            (the source of truth)
  *   2. `prisma.X.findMany()` calls in server backup `buildExport` (server export → Blob/file)
  *   3. `tx.X.createMany()` calls in server backup `/import`       (server restore inserts)
  *   4. `TABLES_PARENT_FIRST` in client/src/lib/backup.ts          (browser-direct export AND restore)
+ *   5. `TABLES_PARENT_FIRST` in server/scripts/restore-test.mjs   (the restore-VERIFICATION harness)
+ *
+ * (5) matters as much as the rest: a stale list there makes the restore test report
+ * a false PASS. It really did drift to 27 tables while the format was at 32, so the
+ * harness silently skipped 5 tables (364 rows) and still printed "27/27 match".
  *
  * EXEMPT (below) lists the models intentionally left OUT of backups because they
  * are ephemeral, not user content. Adding a new ephemeral model? Add it here — that
@@ -33,6 +38,7 @@ const EXEMPT = new Set(['PushSubscription', 'DeletedSnapshot']);
 const SCHEMA = path.join(repoRoot, 'server', 'prisma', 'schema.prisma');
 const SERVER_BACKUP = path.join(repoRoot, 'server', 'src', 'routes', 'backup.ts');
 const CLIENT_BACKUP = path.join(repoRoot, 'client', 'src', 'lib', 'backup.ts');
+const RESTORE_TEST = path.join(repoRoot, 'server', 'scripts', 'restore-test.mjs');
 
 function read(file) {
   if (!fs.existsSync(file)) {
@@ -58,18 +64,25 @@ const serverSrc = read(SERVER_BACKUP);
 const serverExport = new Set(matchAll(serverSrc, /prisma\.(\w+)\.findMany\(\)/g).map(toModel));
 const serverImport = new Set(matchAll(serverSrc, /tx\.(\w+)\.createMany/g).map(toModel));
 
-// 4. Client browser-direct list (used for BOTH export and restore in production).
-const clientSrc = read(CLIENT_BACKUP);
-const arrayBlock = clientSrc.match(/const TABLES_PARENT_FIRST = \[([\s\S]*?)\]/);
-if (!arrayBlock) {
-  console.error('✗ backup-coverage: could not find TABLES_PARENT_FIRST in client/src/lib/backup.ts');
-  process.exit(1);
+// Pull a `const TABLES_PARENT_FIRST = [ ... ]` array out of a file.
+function readTablesArray(file, label) {
+  const block = read(file).match(/const TABLES_PARENT_FIRST = \[([\s\S]*?)\]/);
+  if (!block) {
+    console.error(`✗ backup-coverage: could not find TABLES_PARENT_FIRST in ${label}`);
+    process.exit(1);
+  }
+  return new Set(matchAll(block[1], /'(\w+)'/g));
 }
-const clientTables = new Set(matchAll(arrayBlock[1], /'(\w+)'/g));
+
+// 4. Client browser-direct list (used for BOTH export and restore in production).
+const clientTables = readTablesArray(CLIENT_BACKUP, 'client/src/lib/backup.ts');
+
+// 5. Restore-test harness list — a stale copy here yields a false PASS.
+const restoreTestTables = readTablesArray(RESTORE_TEST, 'server/scripts/restore-test.mjs');
 
 // Sanity: the regexes must actually have matched something, or a refactor renamed
 // the patterns out from under this guard (which would otherwise pass vacuously).
-for (const [label, set] of [['schema models', schemaModels], ['server export findMany', serverExport], ['server import createMany', serverImport], ['client TABLES_PARENT_FIRST', clientTables]]) {
+for (const [label, set] of [['schema models', schemaModels], ['server export findMany', serverExport], ['server import createMany', serverImport], ['client TABLES_PARENT_FIRST', clientTables], ['restore-test TABLES_PARENT_FIRST', restoreTestTables]]) {
   if (set.size === 0) {
     console.error(`✗ backup-coverage: parsed 0 ${label} — the file shape changed; update this guard.`);
     process.exit(1);
@@ -92,6 +105,7 @@ const diff = (label, set) => {
 diff('server export (buildExport findMany)', serverExport);
 diff('server restore (/import createMany)', serverImport);
 diff('client TABLES_PARENT_FIRST', clientTables);
+diff('restore-test TABLES_PARENT_FIRST', restoreTestTables);
 
 // Also flag any exempt model that no longer exists (stale EXEMPT entry).
 const staleExempt = [...EXEMPT].filter((m) => !schemaModels.has(m));
@@ -104,6 +118,7 @@ if (problems.length) {
   console.error('  • server/src/routes/backup.ts  buildExport (findMany + the returned object)');
   console.error('  • server/src/routes/backup.ts  /import     (deleteMany + createMany, parent-before-child)');
   console.error('  • client/src/lib/backup.ts     TABLES_PARENT_FIRST (parent before child)');
+  console.error('  • server/scripts/restore-test.mjs  TABLES_PARENT_FIRST (same order as the client)');
   console.error('— OR, if it is ephemeral and must NOT be backed up, add it to EXEMPT in this script.\n');
   process.exit(1);
 }

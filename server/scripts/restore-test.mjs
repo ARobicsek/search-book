@@ -67,15 +67,22 @@ const isRemote = !String(args.target).startsWith('file:');
 const token = args.token || process.env.TURSO_AUTH_TOKEN;
 if (isRemote && !token) die('remote --target needs --token (or TURSO_AUTH_TOKEN)');
 
-// FK-safe table order (parents first); reverse for deletes. Mirrors
-// client/src/lib/backup.ts TABLES_PARENT_FIRST.
+// FK-safe table order (parents first); reverse for deletes. MUST mirror
+// client/src/lib/backup.ts TABLES_PARENT_FIRST exactly — enforced by
+// server/scripts/check-backup-coverage.mjs (prepush + the Netlify/Vercel build).
+//
+// It drifted once already: this list sat at the 27 tables of the Vercel era while
+// the backup format moved to v7/32, so the harness reported "27/27 match" while
+// silently skipping Series, IdeaTag, ConversationMention, DismissedDuplicate and
+// DuplicateMergeRule — and left them un-wiped and un-restored. The guard now
+// cross-checks this array so that can't recur.
 const TABLES_PARENT_FIRST = [
-  'Company', 'Contact', 'Tag', 'Idea',
+  'Company', 'Contact', 'Tag', 'Idea', 'Series',
   'EmploymentHistory', 'Conversation', 'Action',
   'ContactTag', 'CompanyTag',
   'ConversationContact', 'ConversationCompany',
   'ActionContact', 'ActionCompany',
-  'IdeaContact', 'IdeaCompany',
+  'IdeaContact', 'IdeaCompany', 'IdeaTag',
   'Link', 'PrepNote', 'Relationship',
   'CompanyActivity', 'CompanyPrepNote',
   'ContactStatusHistory', 'CompanyStatusHistory',
@@ -83,6 +90,8 @@ const TABLES_PARENT_FIRST = [
   'ConversationTag',
   'ConversationPrepNote', 'ConversationAttachment',
   'ConversationOrg',
+  'ConversationMention',
+  'DismissedDuplicate', 'DuplicateMergeRule',
 ];
 const TABLES_CHILD_FIRST = [...TABLES_PARENT_FIRST].reverse();
 

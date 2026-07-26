@@ -3,8 +3,12 @@
 **STATUS: Phase 0 (spike) ✅ · Phase 1 (env-gated code) ✅ · Phase 2 (first parallel deploy) ✅ — the
 app is LIVE on `ari-search-book.netlify.app` alongside Vercel, sharing the Turso DB, all on branch
 `claude/netlify-migration-plan-8lim9k` (NOT `main` — Vercel stays the daily driver until Phase 5).
-Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS). Next up: Phase 3
-(parallel soak). Do NOT merge to `main` before cutover.** Written
+Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS), plus four more during the
+soak (#7–#10, §5). **Phase 3's gate is GREEN as of 2026-07-26** — the whole §5 checklist is owner-verified
+except (a) the bug #10 attachment-open re-check on the updated service worker and (b) push reminders,
+which Phase 3 structurally *cannot* test (VAPID unset on Netlify by design → Phase 5). **Next up: Phase 4**
+(migrate binaries + rewrite DB URLs — point of no return; scripts written & rehearsed, restore drill
+passed). Do NOT merge to `main` before cutover.** Written
 2026-07-21 after live network testing proved that NCQA's web proxy **blocks `*.run.app` (Google
 Cloud Run) but allows `*.netlify.app`**, while Vercel access is granted only by exception and is
 being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud Run) as the migration target of
@@ -552,6 +556,63 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
      cron-job.org ping to `/api/health` every few min to keep the Lambda + Turso connection warm),
      deferred to Phase 5 cron; offered to owner, not yet wired. Owner has **not** yet confirmed the live
      self-heal (idle the app ~2 min, then search "karen" fresh → should render on its own, no manual retry).
+     **→ CONFIRMED RESOLVED by the owner 2026-07-26.**
+  5. **Clicking a meeting attachment opened the DASHBOARD instead of the file (Netlify runtime bug #10).**
+     Uploading worked; the chip's link didn't. **Root cause: the PWA service worker's SPA
+     navigate-fallback.** `vite-plugin-pwa` generates
+     `new NavigationRoute(createHandlerBoundToURL("index.html"))` with **no denylist**, so *every*
+     top-level navigation is answered with the precached app shell. An attachment link is a relative
+     `/files/<name>` **navigation**, so the SW served `index.html`, React Router matched nothing, and
+     `App.tsx`'s `<Route path="*" element={<Navigate to="/" replace />} />` redirected to the dashboard —
+     the file was never requested. `<img src="/photos/…">` was unaffected (image requests aren't
+     `mode: 'navigate'`), which is exactly why photos looked fine and only *attachments* broke.
+     Fixed with `navigateFallbackDenylist: [/^\/api\//, /^\/photos\//, /^\/files\//]` in
+     `client/vite.config.ts`; verified compiled into `dist/sw.js`. Pending attachment chips (uploaded but
+     the DB row not yet created) were a plain `<span>` — now the same link. ⚠ **Needs the SW update to
+     activate** (`registerType: 'prompt'` → accept the refresh prompt; on iOS fully close the PWA first).
+     **Netlify-only in practice** — Vercel stores absolute cross-origin Blob URLs, which the SW never
+     intercepts, and the dev-mode PWA uses `navigateFallbackAllowlist: [/^\/$/]` so only `/` falls back.
+     Not a routing problem: `curl /files/x.jpeg` on Netlify correctly returns the media proxy's 404.
+
+#### Phase 3 gate scorecard (owner-verified from the work network unless noted)
+
+| §5 checklist item | Status |
+|---|---|
+| Login / 401 → re-prompt | ✅ |
+| Contacts list (filters, search, sort), contact detail | ✅ |
+| Photo upload on a contact; company logo | ✅ |
+| Meetings: create/edit, participants, orgs, prep notes, attachment **upload** | ✅ |
+| Meetings: attachment **download/open** | ⏳ fixed (bug #10) — re-verify after the SW updates |
+| Actions: create, recurring → next occurrence, ownership switch | ✅ |
+| Reminder push arrives | ⛔ **cannot be tested in Phase 3** — VAPID unset on Netlify by design; first exercised at Phase 5. Structurally deferred; does **not** gate Phase 4 |
+| LinkedIn import (decision B, server-side) | ✅ |
+| Calendar / ICS fetch | ✅ (bug #8 fix confirmed live) |
+| Undo delete | ✅ |
+| Settings backups: manual backup **and restore** | ✅ (+ the full offline restore drill, 2026-07-26) |
+| PWA install, mobile layout | ✅ iPhone |
+| Global search timings normal / self-heal | ✅ (bug #9 confirmed resolved) |
+
+**Verdict: the Phase 3 gate is GREEN except the bug #10 re-check.** Push is a known, accepted carve-out
+to Phase 5. **Phase 4 is clear to run once the owner confirms an attachment opens on the updated SW.**
+
+#### Keep-warm ping — owner approved 2026-07-26
+
+Cold `/api/health` measured **3.37 s on Netlify vs 0.38 s on Vercel** (2026-07-26), so the cold-start tax
+behind bug #9 is real even after the self-heal. **Mechanism = cron-job.org** (already the project's cron,
+already proven against Netlify per R11, observable execution history, and **1 invocation per tick** — a
+Netlify Scheduled Function would cost 2, since the scheduler runs in a *separate* function that must then
+HTTP-ping the `/api` one to warm it, and Netlify's docs emphasise `@hourly` as the shortest *named*
+interval, which would be useless here).
+
+Config: **GET `https://ari-search-book.netlify.app/api/health` every 5 minutes**, no auth header —
+`/api/health` is deliberately exempt from both the password gate (`app.ts:183`) and the rate limiter
+(`app.ts:151`), and it runs `SELECT 1`, so it warms the Lambda **and** the libSQL connection (the thing
+that actually caused #9). ~8,640 invocations/month.
+
+⚠ **At Phase 5 this becomes redundant**: the reminders cron pings `/api/cron/reminders` every minute and
+warms the same function + connection. So at cutover either delete the keep-warm job, **or** — if the free
+compute quota (R10) turns out tight — keep it at 5 min and drop reminders to every 2–3 min (Appendix A)
+rather than running both.
 
 ---
 

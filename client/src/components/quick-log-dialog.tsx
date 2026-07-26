@@ -2026,7 +2026,17 @@ function QuickLogDialog({
               ))}
               {pendingAttachments.map((att, i) => (
                 <span key={`p-${i}`} className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs">
-                  <span className="max-w-40 truncate" title={att.name}>{att.name}</span>
+                  {/* Already uploaded (only the DB row is pending), so it opens
+                      like a saved attachment. */}
+                  <a
+                    href={att.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="max-w-40 truncate text-primary hover:underline"
+                    title={att.name}
+                  >
+                    {att.name}
+                  </a>
                   <button
                     type="button"
                     onClick={() => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))}

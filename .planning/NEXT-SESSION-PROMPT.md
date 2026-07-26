@@ -5,6 +5,43 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+### What Was Just Completed — Phase 3 gate closed out + attachment-open bug #10 fixed (2026-07-26 s2)
+
+Owner asked how we decide we're ready for the next migration step, then worked the §5 soak checklist and
+reported results. **Phase 3's gate is now GREEN**; one bug found and fixed. Branch `netlify-migration-phase-3`.
+
+**Owner-confirmed on Netlify from work:** bug #9 (global-search timeout) **resolved**; meetings, actions,
+undo delete, LinkedIn import, manual backup **and restore**, PWA on iPhone + mobile layout — all working.
+**Reminders untestable by design** (VAPID unset on Netlify until Phase 5) — an accepted carve-out that does
+**not** gate Phase 4. Full scorecard table in `NETLIFY-MIGRATION-PLAN.md` §5.
+
+**Netlify runtime bug #10 — clicking a meeting attachment opened the DASHBOARD, not the file.** Root cause
+was **not** routing (`curl /files/x.jpeg` correctly returns the media proxy's 404) but the **PWA service
+worker's SPA navigate-fallback**: `vite-plugin-pwa` emits `new NavigationRoute(createHandlerBoundToURL(
+"index.html"))` with **no denylist**, so every top-level navigation gets the precached shell. An attachment
+link is a relative `/files/<name>` *navigation* → shell → React Router matches nothing → `App.tsx`'s
+`<Route path="*" element={<Navigate to="/" replace />} />` → dashboard. Photos were fine because `<img src>`
+isn't `mode: 'navigate'` — **that asymmetry is the whole tell**. Fixed with
+`navigateFallbackDenylist: [/^\/api\//, /^\/photos\//, /^\/files\//]` in `client/vite.config.ts` (verified
+compiled into `dist/sw.js`); pending attachment chips also became real links. ⚠ **Needs the SW update to
+activate** — accept the refresh prompt (`registerType: 'prompt'`); on iOS fully close the PWA. Owner's hunch
+that Vercel had it too was reasonable but it's **Netlify-only in practice** (Vercel's absolute cross-origin
+Blob URLs are never SW-intercepted; dev PWA allowlists only `/`).
+
+**Keep-warm ping approved** → **cron-job.org, GET `/api/health` every 5 min**, no auth header (that route is
+exempt from both the password gate and the rate limiter, and runs `SELECT 1`, so it warms the Lambda *and*
+the libSQL connection). Measured cold: **Netlify 3.37 s vs Vercel 0.38 s**. Chose cron-job.org over a Netlify
+Scheduled Function (1 invocation/tick vs 2; already proven per R11). ⚠ **Redundant at Phase 5** — the
+every-minute reminders cron warms the same function; delete it then, or keep it and drop reminders to 2–3 min
+if quota (R10) is tight. **Owner action: create the job.**
+
+`prepush` + full `npm run build` green.
+
+**What's next:** owner confirms an attachment opens after the SW updates → **Phase 4** (migrate Vercel-Blob
+binaries → Netlify Blobs, rewrite DB URLs to relative — point of no return; both scripts written, the
+rewrite rehearsed on a scratch DB, offline restore drill passed) → Phase 5 (cutover: crons, VAPID push,
+per-device PWA reinstall) → Phase 6 (decommission Vercel).
+
 ### What Was Just Completed — Pre-cutover restore drill vs a NETLIFY backup: PASSED, incl. binaries (2026-07-26)
 
 Owner ask, before cutover: prove the app can be **fully** restored in a dev environment from the three

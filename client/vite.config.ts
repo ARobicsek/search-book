@@ -44,6 +44,17 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // The SPA navigate-fallback serves the precached index.html for EVERY
+        // top-level navigation. That silently broke opening an attachment: a
+        // click on a relative `/files/<name>` link is a navigation request, so
+        // the SW answered it with the app shell, React Router matched nothing,
+        // and `path="*"` redirected to the dashboard — the file never loaded.
+        // `<img src="/photos/…">` was unaffected (image requests aren't
+        // mode: 'navigate'), which is why photos looked fine.
+        // These three prefixes are always real server responses (the Netlify
+        // Blobs media proxy / the API), never app routes — so they must reach
+        // the network instead of the shell.
+        navigateFallbackDenylist: [/^\/api\//, /^\/photos\//, /^\/files\//],
         // Web Push + notificationclick handlers live in public/push-sw.js and are
         // imported into the generated SW. Kept separate so the heavy Workbox caching
         // config below stays untouched (lower risk than switching to injectManifest).

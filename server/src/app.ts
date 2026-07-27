@@ -3,7 +3,7 @@ import 'dotenv/config';
 // Task 17: must load before express/http so Sentry can instrument them (no-op
 // unless SENTRY_DSN is set).
 import { Sentry, sentryEnabled } from './sentry';
-import express from 'express';
+import express, { type Request } from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
@@ -36,6 +36,7 @@ import calendarRouter from './routes/calendar';
 import undoRouter from './routes/undo';
 import pushRouter from './routes/push';
 import remindersRouter from './routes/reminders';
+import mediaRouter from './routes/media';
 
 const app = express();
 
@@ -96,17 +97,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// Request-level timeout — 12s so client gets two attempts within Vercel's 30s limit
-// LinkedIn parse is exempt: AI model calls can take 15-25s
+// Request-level timeout. On Vercel (30s cap) 12s gives the client two attempts.
+// On Netlify the function is HARD-killed at ~10s (free plan) and returned as a 502 —
+// which is NOT the app's own retryable 504, so a cold/idle request (whose Turso
+// connection-rebuild+retry wave can push global search past 10s) failed without
+// self-healing. Fire our own 504 at 9s on Netlify so it wins that race, leaving ~1s
+// to actually emit the response before Netlify's cap; warm requests (~1-3s) are
+// unaffected. LinkedIn parse is exempt: AI model calls can take 15-25s.
+const API_TIMEOUT_MS = process.env.NETLIFY ? 9000 : 12000;
 app.use('/api', (req, res, next) => {
   // LinkedIn (AI parse) and calendar (Outlook ICS fetch) can legitimately run long.
   if (req.path.startsWith('/linkedin') || req.path.startsWith('/calendar')) return next();
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
-      console.error(`[TIMEOUT] ${req.method} ${req.path} exceeded 12s`);
+      console.error(`[TIMEOUT] ${req.method} ${req.path} exceeded ${API_TIMEOUT_MS}ms`);
       res.status(504).json({ error: 'Request timed out. Please try again.' });
     }
-  }, 12000);
+  }, API_TIMEOUT_MS);
   res.on('finish', () => clearTimeout(timeout));
   res.on('close', () => clearTimeout(timeout));
   next();
@@ -116,6 +123,23 @@ app.use('/api', (req, res, next) => {
 // Sits before the auth gate so it also throttles password brute-forcing. The
 // in-memory store is per-serverless-instance (resets on cold start) — imperfect
 // on Vercel, but ample friction against abuse for a single-user app.
+// Client-IP resolution for the limiters. `req.ip` is derived from the socket's
+// remoteAddress (+ `trust proxy`), but under serverless-http on Netlify the Lambda
+// event carries NO socket address, so req.ip is `undefined` — express-rate-limit's
+// default keyGenerator then logs ERR_ERL_UNDEFINED_IP_ADDRESS once and keys EVERY
+// request to the same `undefined` bucket. That silently removes the per-IP throttle
+// in front of the password gate, so we resolve the IP from headers instead:
+//   x-nf-client-connection-ip  Netlify's real client IP
+//   x-forwarded-for            Vercel / any standard proxy (first hop = client)
+//   req.ip                     local dev / anything with a real socket
+function clientIp(req: Request): string {
+  const netlifyIp = req.header('x-nf-client-connection-ip');
+  if (netlifyIp) return netlifyIp.trim();
+  const forwarded = req.header('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.ip ?? 'unknown';
+}
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   limit: 1000,              // per IP — high enough that heavy real browsing (each
@@ -123,6 +147,7 @@ const generalLimiter = rateLimit({
                             // to throttle scraping / password brute-forcing.
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientIp,
   skip: (req) => req.path === '/health', // never throttle the uptime monitor
 });
 app.use('/api', generalLimiter);
@@ -134,6 +159,7 @@ const linkedinLimiter = rateLimit({
   limit: 40,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientIp,
 });
 app.use('/api/linkedin', linkedinLimiter);
 
@@ -169,6 +195,12 @@ if (process.env.NODE_ENV !== 'production') {
   app.use('/photos', express.static(path.join(process.cwd(), 'data', 'photos')));
   app.use('/files', express.static(path.join(process.cwd(), 'data', 'files')));
 }
+
+// Netlify Blobs media proxy (NETLIFY-MIGRATION-PLAN.md §3.3). Mounted at the root,
+// OUTSIDE the /api password gate, so <img>/<a> tags can load /photos/* and /files/*
+// (Blobs have no public URL). Dormant unless the Netlify gate is on — in local dev
+// the static handlers above serve these paths first, and on Vercel it 404s.
+app.use('/', mediaRouter);
 
 // Health check — verifies DB connectivity so the uptime monitor catches
 // Turso outages, not just whether the web server is up. Returns no secrets.

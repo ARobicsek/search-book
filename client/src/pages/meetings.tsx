@@ -42,8 +42,9 @@ import { useQuickLog } from '@/components/quick-log-dialog'
 import { toast } from 'sonner'
 import {
   Building2, CalendarClock, CalendarDays, ChevronDown, ChevronUp, FileText, Layers, Link2, List, Loader2,
-  MessageSquarePlus, Paperclip, Pencil, Tag as TagIcon, Trash2, X,
+  MessageSquarePlus, Pencil, Tag as TagIcon, Trash2, X,
 } from 'lucide-react'
+import { AttachmentChips } from '@/components/attachment-chips'
 import { formatStartTime } from '@/lib/utils'
 import { ImportOutlookDialog } from '@/components/import-outlook-dialog'
 
@@ -547,33 +548,7 @@ function MeetingCard({
                 <MentionableMarkdown>{conv.notes}</MentionableMarkdown>
               </div>
             )}
-            {conv.attachments && conv.attachments.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {conv.attachments.map((att) =>
-                  (att.mimeType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(att.url) ? (
-                    <a key={att.id} href={att.url} target="_blank" rel="noreferrer" title={att.name}>
-                      <img
-                        src={att.url}
-                        alt={att.name}
-                        className="h-16 w-16 rounded-md border object-cover hover:opacity-80"
-                      />
-                    </a>
-                  ) : (
-                    <a
-                      key={att.id}
-                      href={att.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs text-primary hover:underline"
-                      title={att.name}
-                    >
-                      <Paperclip className="h-3 w-3" />
-                      <span className="max-w-40 truncate">{att.name}</span>
-                    </a>
-                  )
-                )}
-              </div>
-            )}
+            {conv.attachments && <AttachmentChips attachments={conv.attachments} />}
             {conv.links && conv.links.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 {conv.links.map((l) => (

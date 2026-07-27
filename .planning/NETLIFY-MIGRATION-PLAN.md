@@ -7,9 +7,10 @@ Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS), pl
 soak (#7–#11, §5). **Phase 3 is COMPLETE — gate GREEN as of 2026-07-26**: the whole §5 checklist is
 owner-verified on desktop and iPhone, the one exception being push reminders, which Phase 3 structurally
 *cannot* test (VAPID unset on Netlify by design → Phase 5) and which is an accepted carve-out rather than
-an open bug. **NEXT UP: Phase 4** (§6 — migrate binaries + rewrite DB URLs; the point of no return).
-Scripts are written, the rewrite is rehearsed, the offline restore drill passed; it is blocked only on the
-four credentials in **§6.0**. Do NOT merge to `main` before cutover.** Written
+an open bug. **Phase 4 is COMPLETE (2026-07-26)** — 307/307 blobs copied to Netlify Blobs and all 218
+DB rows rewritten to relative paths; the point of no return is behind us, so **images are now broken on
+Vercel and Vercel must no longer be used as the daily driver**. **NEXT UP: Phase 5** (§7 — cutover:
+merge to `main`, repoint crons/monitor, per-device PWA reinstall + push).** Written
 2026-07-21 after live network testing proved that NCQA's web proxy **blocks `*.run.app` (Google
 Cloud Run) but allows `*.netlify.app`**, while Vercel access is granted only by exception and is
 being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud Run) as the migration target of
@@ -673,9 +674,26 @@ that actually caused #9). ~8,640 invocations/month.
 ⚠ After the URL rewrite, photos render on Netlify but appear **broken on Vercel**. Do this only after
 Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
 
-**STATUS (2026-07-26): NOT STARTED — cleared to run; Phase 3's gate is green. This is the next session's
-work.** Both scripts exist and are syntax-checked, the rewrite has been rehearsed on a scratch DB, and the
-offline restore drill passed. Blocked only on §6.0.
+**STATUS (2026-07-26): ✅ COMPLETE — executed end to end. Point of no return crossed.**
+
+| Step | Result |
+|---|---|
+| Preflight (all 3 credentials proven) | Vercel Blob 307 objects, single host `sv1nlcmvomldhzg3.public.blob.vercel-storage.com`; Netlify Blobs `media` write+delete OK; Turso reachable |
+| Pre-rewrite survey (all 106 text columns) | 218 rows across `Contact.photoUrl` (198), `Conversation.notes` (18), `Action.description` (1), `ConversationAttachment.url` (1) — **matches the earlier rehearsal exactly** |
+| §6.2 copy | **307/307 copied, 0 fetch errors** (photos + files + full `backups/` history) |
+| Pre-rewrite gate | 235 distinct blob paths referenced by the DB, **all 235 confirmed present** in Netlify Blobs before rewriting |
+| §6.3 rewrite | **218 rows rewritten**, `Verified: no rows still reference the Vercel Blob host ✅` |
+| Gate (live fetch from `ari-search-book.netlify.app`) | contact photo 200 image/png · attachment 200 · note-embedded image 200 · action-embedded image 200 · missing object 404 |
+
+Two notes for the record:
+- `Action.description` also held an embedded image — the all-text-columns sweep was load-bearing, not
+  belt-and-braces. The "four known URL columns" framing below (and in `CLAUDE.md`) was never accurate:
+  the third one is **`Conversation.photoFile`**, not `Company.photoFile`, which has no such column.
+- A `.msg` attachment serves as `application/octet-stream` (no entry in the script's `CT_BY_EXT` map).
+  That is correct behaviour — it downloads rather than renders — so it was left alone.
+
+Rollback is still available until the Vercel Blob store is deleted in Phase 6:
+`node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
 
 ### 6.0 Prerequisites the owner must supply (the agent cannot obtain these)
 
@@ -714,7 +732,7 @@ That dependency is exactly what this phase removes. **Do not let the Vercel Blob
 3. **Rewrite URLs in Turso** — script `server/scripts/rewrite-blob-urls.mjs <BLOB_HOST>` **(written,
    Phase 3)** rewrites
    `https://<host>/photos/x` → `/photos/x` (and `/files/`) across **every text column of every table**
-   (covers `Contact.photoUrl/photoFile`, `Company.photoFile`, `ConversationAttachment.url`, and
+   (covers `Contact.photoUrl/photoFile`, `Conversation.photoFile`, `ConversationAttachment.url`, and
    markdown-embedded images in any notes column). Same script/approach as the Cloud Run plan §4.2,
    including the `--undo` emergency path and the "no ⚠ REMAINING" verification.
   **Rehearse it first:** the script now takes `--db file:/abs/path/to/scratch.db`, so the identical rewrite
@@ -729,6 +747,117 @@ all render.
 ---
 
 ## 7. Phase 5 — Cutover: crons, monitors, devices
+
+**STATUS: next up.** Phase 4's gate is owner-verified (2026-07-26): contact photo, meeting attachment
+and pasted-image note all render on Netlify, plus deduplicate and global search.
+
+### 7.0 Netlify env vars that are MISSING and must be added first
+
+Audited against the live Netlify env list on 2026-07-26. Present: `APP_PASSWORD`, `OPENAI_API_KEY`,
+`OUTLOOK_CALENDAR_ICS_URL`, `REMINDER_TZ`, `REMINDERS_CRON_SECRET`, `STORAGE`, `TURSO_AUTH_TOKEN`,
+`TURSO_DATABASE_URL`. Missing:
+
+| Var | Why it matters | Consequence if skipped |
+|---|---|---|
+| `CRON_SECRET` | `/api/backup/cron` checks **only** `CRON_SECRET` for the `Bearer` path (`routes/backup.ts:166`) — it does *not* fall back to `REMINDERS_CRON_SECRET` the way `routes/reminders.ts:28` does | ⚠ **The daily automatic backup 401s and silently stops.** The safety net goes quiet with no error surfaced anywhere |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | `lib/push.ts:14` — without them `/api/push/public-key` returns null | Push toggle hides itself ("Push isn't configured on the server yet"); step 4 below cannot be tested |
+
+**Generate fresh values — do NOT try to copy them from Vercel.** On Vercel all three are classed
+**Sensitive**, which is write-only: unreadable in the dashboard *and* not returned by `vercel env pull`
+(so `vercel link` is pointless here). Nothing is lost by regenerating:
+
+- **VAPID** — push subscriptions are scoped to an **origin**. Every existing subscription belongs to
+  `searchbook-three.vercel.app` and can never serve `ari-search-book.netlify.app` whatever keys are used;
+  step 4 below re-subscribes from scratch regardless. Generate with
+  `node -e "console.log(require('web-push').generateVAPIDKeys())"` (web-push is already a server dep).
+  Vercel keeps its own old keys, so its push keeps working untouched during the transition.
+- **CRON_SECRET** — just a shared secret between cron-job.org and the app, and step 2 below re-enters the
+  cron config anyway. Generate 32 random bytes; use the same value in the backup job's `Bearer` header.
+
+**Netlify functions read env at deploy time, so trigger a redeploy after adding them** — then verify
+`/api/push/public-key` returns non-null and `/api/backup/cron` accepts the Bearer token.
+
+`SENTRY_DSN` / `VITE_SENTRY_DSN` remain unset on both platforms — a pre-existing standing follow-up, not
+a cutover regression.
+
+### 7.0b ⚠ Do the phone BEFORE the reminders cron — the step order below is wrong
+
+`routes/reminders.ts:85-87` stamps `lastNotifiedAt` **even when delivery fails** (deliberate — it
+prevents a permanent retry storm). Push subscriptions are **per-origin**, so a subscription made on
+`searchbook-three.vercel.app` can never receive a push from the Netlify origin. Therefore:
+
+> Repointing the reminders cron to Netlify while no Netlify-origin subscription exists causes every
+> reminder that comes due in that window to be **silently consumed and never delivered** — no error
+> anywhere, the reminder simply never arrives.
+
+So run **step 4 (device re-subscribe) before step 2 (crons)**. Done in that order on 2026-07-26 and the
+hazard never materialised. The two crons also must not both run: they share one Turso DB, so whichever
+fires first stamps `lastNotifiedAt` and the other finds nothing — disable the Vercel jobs, don't just
+add Netlify ones.
+
+**Verified 2026-07-26 (post-redeploy):**
+
+| Check | Result |
+|---|---|
+| Env vars live | All three present, `context=all`, `functions` scope, values match byte-for-byte (read back via the Netlify API) |
+| `/api/backup/cron` + Bearer | **200** `{ok:true, tables:32, pruned:1}` — a real backup written to Netlify Blobs. **5.1 s of the hard 10 s function timeout** ⚠ watch as the DB grows |
+| `/api/cron/reminders?key=` | **200** `{ok:true, due:0, sent:0}` — consumed nothing |
+| Both, wrong secret | **401** ✓ |
+| VAPID | Owner enabled notifications on desktop + iPhone from the Netlify origin; new `PushSubscription` rows #6 (fcm) and #7 (apple) created. Rows #1–#5 are stale vercel.app subs, to be deleted in step 5 |
+| **Push end-to-end** | ✅ **Reminders cron → Netlify → APNs → iPhone buzzed** (test action #444, `{"ok":true,"due":1,"sent":1}`), confirmed twice — once via the cron, once via a direct per-device send |
+
+**Per-subscription push probe (2026-07-26)** — sending to each row individually separates server-side from
+device-side failure:
+
+| Rows | Result |
+|---|---|
+| #6 fcm (desktop), #7 apple (iPhone) — Netlify-era | **201 accepted** |
+| #1 #4 #5 apple — vercel-era | 400 `VapidPkHashMismatch` |
+| #2 fcm — vercel-era | 403 credentials do not correspond |
+| #3 wns — vercel-era | 401 |
+
+Two findings worth keeping:
+
+- **The desktop never showed its notification even though FCM returned 201.** The push left SearchBook
+  correctly, so any remaining fault is Windows/Chrome-side (browser not running, Focus Assist, OS
+  notification settings). The iPhone — the device that matters for reminders — works.
+- ⚠ **The five dead subscriptions will never be auto-pruned.** `reminders.ts:80` prunes only on `'gone'`
+  (404/410), but these fail 400/401/403, so they persist forever and cost five failing HTTP calls on every
+  single reminder inside a 10 s function budget. Manual deletion (step 5) is not optional housekeeping.
+
+### 7.0c Final cron-job.org configuration (as built, 2026-07-26)
+
+cron-job.org holds **both** SearchBook jobs. Note the backup job was **not** previously here — it was a
+Vercel-native cron in `vercel.json` (`{"path":"/api/backup/cron","schedule":"0 8 * * *"}`), so there was
+nothing to "repoint" and it had to be created from scratch. That Vercel cron keeps writing daily backups
+to Vercel Blob until the project is deleted in Phase 6; harmless, and a useful extra net during the soak.
+
+| | `searchbook-alert` | `searchbook-backup` |
+|---|---|---|
+| URL | `https://ari-search-book.netlify.app/api/cron/reminders?key=<REMINDERS_CRON_SECRET>` | `https://ari-search-book.netlify.app/api/backup/cron` |
+| Auth | key in query string | header `Authorization: Bearer <CRON_SECRET>` — **not** "Requires HTTP authentication" (that's Basic auth) |
+| Schedule | **every 5 minutes (`*/5 * * * *`)** — see Appendix A R10 | `0 4 * * *` in America/New_York = 08:00 UTC |
+| Save responses in history | on | on |
+| Notify on failure | on, after **5** | on, after **1** |
+| Notify on recovery | on | on |
+| Notify on auto-disable | **on** | **on** |
+| Notify on TLS expiry | off (Netlify auto-renews) | off |
+
+**Why the failure thresholds differ, and why auto-disable is the important one:** cron-job.org disables a
+job after **25 consecutive failures**. For the minutely reminders job that is 25 minutes — but for the
+daily backup it is **25 days**, so a threshold of 1 there is what stops a month of silent backup failure.
+Conversely a threshold of 1 on the minutely job would email on every transient blip: Netlify cold starts
+measured 3.4 s and the first hit after idle reaches 10–13 s, against `app.ts`'s own 9 s self-504.
+
+⚠ **Gotcha that actually bit (2026-07-26):** repointing `searchbook-alert` by editing only the *hostname*
+and keeping the old `?key=` left it 401ing every minute — Vercel's and Netlify's `REMINDERS_CRON_SECRET`
+are different values (41 vs 40 chars). It fails **silently**: cron-job.org logs a failure, the app logs a
+401, and no reminder is delivered. Replace the **entire URL**, then verify with a live request. The
+`onDisable` notification is the backstop that would eventually have surfaced it.
+
+**No keep-warm job is needed** — see §5's keep-warm note; the every-minute reminders cron warms the same
+function and libSQL connection. No separate uptime monitor was found to repoint; the minutely job plus its
+failure notifications serves that role.
 
 1. **Point `main` at Netlify.** Merge the migration branch to `main` (or repoint the Netlify site's
    production branch to `main`). Decide whether Vercel should keep building from `main` during the
@@ -763,6 +892,59 @@ all render.
 ---
 
 ## Appendix A — free-tier math & the cron/quota watch-item
+
+### R10 ANSWERED (2026-07-26) — and it is tight
+
+Netlify's 2026 model is **credit-based**, not invocation-based:
+
+- **Free plan = 300 credits/month**, a *hard* limit — no overage billing
+- **Compute = 10 credits per GB-hour** (memory allocated × execution time)
+- At 100%: **every project in the team is PAUSED** and visitors get "Site not available" — not just the
+  cron, the whole app
+- Netlify emails + in-app notifies at **50% / 75% / 100%**
+- Usage UI: **Team dashboard → Usage & billing → Account usage insights** (daily chart, per-meter)
+
+**The measured arithmetic**, from `searchbook-alert`'s real execution history (2.3–3.4 s per call,
+2026-07-26): 43,200 invocations × ~2.5 s ≈ **30 hours** of execution per month.
+
+| Function memory | GB-hours | Credits | Share of the 300 free |
+|---|---|---|---|
+| 1 GB | 30 | 300 | **100%** |
+| 512 MB | 15 | 150 | 50% |
+
+Netlify's docs don't state the default function memory, so this is a range — but even the optimistic end
+spends **half the monthly budget on the reminders cron alone**, before bandwidth, web requests, deploys,
+or actually using the app. This was flagged as "may be a large slice of the free budget"; it is.
+
+**Action:** check Usage & billing ~4 days after cutover. Budget is ~10 credits/day; if the Compute meter
+trends above that, pull a lever before the 50% email.
+
+### DECIDED (owner, 2026-07-26): reminders run **every 5 minutes** — `*/5 * * * *`
+
+Applied to `searchbook-alert` the same evening. This resolves R10 rather than merely watching it:
+
+| Cadence | Invocations/mo | ~Execution | Credits @1 GB | Share of 300 |
+|---|---|---|---|---|
+| every 1 min (as built) | 43,200 | 30 h | ~300 | 100% |
+| **every 5 min (chosen)** | **8,640** | **6 h** | **~60** | **20%** |
+
+Why 5 minutes rather than the waking-hours trick (`*/2 6-23 * * *`, ~62% cut) that was drafted first:
+
+- **Deeper cut** (80% vs 62%) and it leaves real headroom for bandwidth, deploys and normal app use.
+- **Still a keep-warm.** §5's keep-warm design specified exactly a 5-minute `/api/health` ping as
+  sufficient to hold the Lambda + libSQL connection open, so the cold-start fix survives the change.
+- **Simpler.** No hour-range or timezone edge cases around midnight, and the connection stays warm
+  overnight rather than going cold every night and paying a 3–13 s cold start each morning.
+
+Cost: a reminder due at 08:00 now arrives in 08:00–08:05. These are day-planning nudges, not alarms, so
+the owner accepted that trade.
+
+⚠ **Knock-on effect:** cron-job.org auto-disables after 25 *consecutive* failures. At 1-minute cadence
+that backstop fired in ~25 min; at 5-minute cadence it takes **~2 hours**. That makes the explicit
+"execution fails" notification more important than before, not less — set it to notify after **2**
+failures (~10 min) rather than the 5 that suited the minutely job.
+
+### Original Phase 0.5 note (superseded by the above)
 
 The one number to verify (Phase 0.5): Netlify's **free compute quota** under its current (2026) model.
 The every-minute reminders cron alone is **~43,200 invocations/month** (60×24×30) — historically a

@@ -3,6 +3,14 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import prisma from '../db';
+import {
+  netlifyBlobsEnabled,
+  putObject,
+  getObject,
+  listObjects,
+  listObjectsWithMeta,
+  deleteObjects,
+} from '../lib/storage';
 
 const router = Router();
 
@@ -165,6 +173,34 @@ router.get('/cron', async (req: Request, res: Response) => {
     return;
   }
 
+  // Netlify: write the full export to Netlify Blobs under backups/ and prune to the
+  // newest BACKUP_RETENTION. Keys embed an ISO-ish stamp, so sorting keys descending
+  // is chronological (Netlify's list() carries no upload time).
+  if (netlifyBlobsEnabled()) {
+    try {
+      const data = await buildExport();
+      const json = JSON.stringify(data, bigintReplacer);
+      const tableCount = Object.keys(data).filter((k) => k !== '_meta').length;
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const name = `backups/searchbook-backup-${stamp}.json`;
+      await putObject(name, Buffer.from(json, 'utf-8'), 'application/json', {
+        size: Buffer.byteLength(json),
+        uploadedAt: new Date().toISOString(),
+      });
+
+      const keys = (await listObjects('backups/')).sort().reverse();
+      const toDelete = keys.slice(BACKUP_RETENTION);
+      await deleteObjects(toDelete);
+
+      res.json({ ok: true, name, tables: tableCount, pruned: toDelete.length });
+    } catch (error: any) {
+      console.error('Netlify cron backup error:', error?.message || error);
+      res.status(500).json({ error: 'Failed to write backup to Netlify Blobs' });
+    }
+    return;
+  }
+
   // Blob is only available where BLOB_READ_WRITE_TOKEN is set (production).
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     res.json({ ok: false, skipped: true, reason: 'Blob storage not configured (local dev)' });
@@ -200,6 +236,34 @@ router.get('/cron', async (req: Request, res: Response) => {
 // GET /api/backup/list — list automatic backups in Blob (newest first), for Settings UI.
 // Behind the global password gate. Returns [] in local dev (no Blob).
 router.get('/list', async (_req: Request, res: Response) => {
+  // Netlify: list backups/ from Blobs. url is a RELATIVE, password-gated download
+  // proxy (Blobs are private); size comes from stored metadata; uploadedAt is
+  // derived from the filename stamp (…-YYYY-MM-DDTHH-MM-SS.json).
+  if (netlifyBlobsEnabled()) {
+    try {
+      const objs = await listObjectsWithMeta('backups/');
+      const result = objs
+        .map((o) => {
+          const name = o.key.replace(/^backups\//, '');
+          const stamp = name.replace(/^searchbook-backup-/, '').replace(/\.json$/, '');
+          // "2026-07-22T14-30-05" → "2026-07-22T14:30:05" (parseable)
+          const iso = stamp.replace(/T(\d{2})-(\d{2})-(\d{2})$/, 'T$1:$2:$3');
+          return {
+            name,
+            url: `/api/backup/download/${name}`,
+            size: Number(o.metadata?.size) || 0,
+            uploadedAt: (o.metadata?.uploadedAt as string) || iso,
+          };
+        })
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      res.json(result);
+    } catch (error: any) {
+      console.error('Netlify backup list error:', error?.message || error);
+      res.status(500).json({ error: 'Failed to list backups' });
+    }
+    return;
+  }
+
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     res.json([]);
     return;
@@ -219,6 +283,35 @@ router.get('/list', async (_req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Backup list error:', error?.message || error);
     res.status(500).json({ error: 'Failed to list backups' });
+  }
+});
+
+// GET /api/backup/download/:name — stream an automatic backup JSON from Netlify Blobs.
+// Behind the global /api password gate (Blobs are private, and a plain <a download>
+// can't send x-app-password, so the client fetches this with the auth header — see
+// api.downloadBlob + settings.tsx). Netlify-only; 404 elsewhere.
+router.get('/download/:name', async (req: Request, res: Response) => {
+  if (!netlifyBlobsEnabled()) {
+    res.status(404).json({ error: 'Not available' });
+    return;
+  }
+  const name = String(req.params.name);
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+    res.status(400).json({ error: 'bad name' });
+    return;
+  }
+  try {
+    const obj = await getObject(`backups/${name}`);
+    if (!obj) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.send(obj.data);
+  } catch (error: any) {
+    console.error('Netlify backup download error:', error?.message || error);
+    res.status(500).json({ error: 'Failed to download backup' });
   }
 });
 

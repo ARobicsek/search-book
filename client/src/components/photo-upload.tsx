@@ -111,12 +111,10 @@ export function PhotoUpload({
     setUrlMode(false)
   }
 
-  // In production, only http URLs work. Local /photos/ paths only work in dev.
-  const photoSrc = value
-    ? value.startsWith('http')
-      ? value
-      : import.meta.env.DEV ? value : null
-    : null
+  // Render both absolute (http) URLs and relative /photos paths. Relative paths are
+  // served by the media proxy on Netlify and by express-static in dev; on Vercel new
+  // uploads are absolute Blob URLs, so a relative value only arises from legacy data.
+  const photoSrc = value || null
 
   return (
     <div className="space-y-2">

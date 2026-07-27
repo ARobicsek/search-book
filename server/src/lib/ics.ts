@@ -106,15 +106,50 @@ function toCalendarEvent(
 const FEED_TTL_MS = 15 * 60 * 1000;
 let feedCache: { url: string; text: string; at: number } | null = null;
 
+// A full, real browser UA. The old `'Mozilla/5.0 SearchBook'` is a malformed UA
+// that Microsoft's edge accepts from Vercel's egress but appears to reject (HTTP
+// 500) from Netlify's — datacenter-IP + odd-UA is a classic bot-filter trip. This
+// works on Vercel/local too (Microsoft happily serves browser UAs).
+const FEED_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
+function fetchIcsOnce(url: string): Promise<Response> {
+  return fetch(url, {
+    headers: { 'User-Agent': FEED_UA, Accept: 'text/calendar,text/plain,*/*' },
+    redirect: 'follow',
+  });
+}
+
 async function fetchIcs(url: string): Promise<string> {
   if (feedCache && feedCache.url === url && Date.now() - feedCache.at < FEED_TTL_MS) {
     return feedCache.text;
   }
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 SearchBook', Accept: 'text/calendar,*/*' },
-    redirect: 'follow',
-  });
-  if (!res.ok) throw new Error(`Calendar feed fetch failed: HTTP ${res.status}`);
+  let res = await fetchIcsOnce(url);
+  // Microsoft's published-calendar endpoint intermittently 5xxs (notably from
+  // datacenter egress). One quick retry clears most transient failures without
+  // getting anywhere near the function timeout.
+  if (!res.ok && res.status >= 500) {
+    await new Promise((r) => setTimeout(r, 600));
+    res = await fetchIcsOnce(url);
+  }
+  if (!res.ok) {
+    // Surface Microsoft's OWN error so we can tell a throttle/deny/outage apart.
+    // Bounded read; the body is usually XML/HTML naming a specific reason, and
+    // x-ms-diagnostics carries Microsoft's error code when present.
+    let body = '';
+    try {
+      body = (await res.text()).slice(0, 500);
+    } catch {
+      /* body unreadable — status alone still logged */
+    }
+    console.error(
+      `[calendar] feed fetch failed: HTTP ${res.status} ${res.statusText}; ` +
+        `server=${res.headers.get('server') || '?'}; ` +
+        `x-ms-diagnostics=${res.headers.get('x-ms-diagnostics') || 'none'}; ` +
+        `body[0:500]=${JSON.stringify(body)}`,
+    );
+    throw new Error(`Calendar feed fetch failed: HTTP ${res.status}`);
+  }
   const text = await res.text();
   if (!/BEGIN:VCALENDAR/.test(text)) {
     throw new Error('Calendar feed did not return ICS data (got HTML/login?)');

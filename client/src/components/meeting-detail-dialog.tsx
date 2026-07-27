@@ -18,11 +18,11 @@ import {
   Loader2,
   FileText,
   Building2,
-  Paperclip,
   Link2,
   Tag as TagIcon,
   Pencil,
 } from 'lucide-react'
+import { AttachmentChips } from '@/components/attachment-chips'
 
 const conversationTypeColors: Record<string, string> = {
   CALL: 'bg-green-100 text-green-800',
@@ -199,33 +199,7 @@ export function MeetingDetailDialog({
               </div>
             )}
 
-            {conv.attachments && conv.attachments.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {conv.attachments.map((att) =>
-                  (att.mimeType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(att.url) ? (
-                    <a key={att.id} href={att.url} target="_blank" rel="noreferrer" title={att.name}>
-                      <img
-                        src={att.url}
-                        alt={att.name}
-                        className="h-16 w-16 rounded-md border object-cover hover:opacity-80"
-                      />
-                    </a>
-                  ) : (
-                    <a
-                      key={att.id}
-                      href={att.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs text-primary hover:underline"
-                      title={att.name}
-                    >
-                      <Paperclip className="h-3 w-3" />
-                      <span className="max-w-40 truncate">{att.name}</span>
-                    </a>
-                  )
-                )}
-              </div>
-            )}
+            {conv.attachments && <AttachmentChips attachments={conv.attachments} />}
 
             {conv.links && conv.links.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 pt-1">

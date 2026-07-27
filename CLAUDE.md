@@ -113,17 +113,22 @@ api/index.ts      # Vercel serverless entry point
 **`.planning/NETLIFY-MIGRATION-PLAN.md`** (it supersedes `VERCEL-EXIT-PLAN.md`, whose Cloud Run target is
 dead — `*.run.app` is blocked at NCQA while `*.netlify.app` is not).
 
-- **Vercel (`searchbook-three.vercel.app`) is still the daily driver.** A parallel Netlify deploy
-  (**`ari-search-book.netlify.app`**) has been live since 2026-07-22, sharing the same Turso DB.
+- ⚠ **`ari-search-book.netlify.app` is now the app to use — Vercel's images are BROKEN.** Phase 4 ran
+  on 2026-07-26: all 307 blobs were copied into Netlify Blobs and the DB's 218 absolute URLs were
+  rewritten to relative `/photos/`·`/files/` paths, which only Netlify serves. Vercel still runs and its
+  text data is live and shared (same Turso DB), but do not treat it as the daily driver any more.
 - **All migration code lives on `netlify-migration-phase-3`, NOT `main`** — deployed by fast-forwarding the
   Netlify build branch `claude/netlify-migration-plan-8lim9k`. Unrelated owner work still goes to `main`.
   Every change is env-gated on `netlifyBlobsEnabled()` (`STORAGE=netlify` or the runtime `NETLIFY` signal),
   so the same commits are dormant on Vercel/local anyway. **Do not merge to `main` before Phase 5.**
-- **Phases 0–3 are complete (soak gate green, 2026-07-26). Phase 4 is next** — copy Vercel Blob bytes into
-  Netlify Blobs, then rewrite the DB's absolute URLs to relative `/photos/`·`/files/` paths. That rewrite is
-  the **point of no return**: afterwards images render on Netlify and break on Vercel.
-- **Never let the Vercel Blob store be deleted before Phase 4 has copied the bytes** — 235 of 238 binaries
-  are still absolute `vercel-storage.com` URLs, so the live Netlify app currently depends on it.
+- **Phases 0–4 are complete (2026-07-26). Phase 5 (cutover) is next** — merge to `main`, repoint the
+  cron-job.org reminders + backup jobs and the uptime monitor at the Netlify origin, then the per-device
+  PWA reinstall (finish in-progress drafts on the OLD origin first — drafts are per-origin `localStorage`)
+  and re-enable push. Push notifications get their first real exercise here; VAPID was unset on Netlify
+  by design during the soak.
+- **Rollback window is still open until Phase 6 deletes the Vercel Blob store**:
+  `node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
+  puts the absolute URLs back. Do not delete that store until you are sure.
 - Netlify's function timeout is a hard **10 s** (vs Vercel's 30 s), which is why `app.ts` fires its own 504 at
   9 s under `NETLIFY` and the client auto-retries transient 5xx. Design endpoints accordingly.
 

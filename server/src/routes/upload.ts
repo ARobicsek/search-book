@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { netlifyBlobsEnabled, putObject } from '../lib/storage';
 
 const router = Router();
 
@@ -12,8 +13,10 @@ const isProduction = !!process.env.BLOB_READ_WRITE_TOKEN;
 const UPLOAD_DIR = path.join(process.cwd(), 'data', 'photos');
 const FILES_DIR = path.join(process.cwd(), 'data', 'files');
 
-// Ensure upload directories exist (local only)
-if (!isProduction) {
+// Ensure upload directories exist (true local-disk mode only). Skip when a cloud
+// store is active — Vercel Blob (isProduction) OR Netlify Blobs — since Netlify's
+// filesystem is read-only and mkdir would crash the function at module load.
+if (!isProduction && !netlifyBlobsEnabled()) {
   for (const dir of [UPLOAD_DIR, FILES_DIR]) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   }
@@ -63,7 +66,30 @@ const memoryUpload = multer({
 
 // POST /api/upload - single file upload
 router.post('/', async (req: Request, res: Response) => {
-  if (isProduction) {
+  if (netlifyBlobsEnabled()) {
+    // Netlify: store the buffer in Netlify Blobs, return a RELATIVE /photos path
+    // (matches local-dev format + the SW photos-cache rule; served via routes/media.ts).
+    memoryUpload.single('photo')(req, res, async (err) => {
+      if (err) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ error: 'No file uploaded or invalid file type' });
+        return;
+      }
+      try {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        const filename = `${uniqueSuffix}${ext}`;
+        await putObject(`photos/${filename}`, req.file.buffer, req.file.mimetype);
+        res.json({ path: `/photos/${filename}` });
+      } catch (error) {
+        console.error('Netlify Blobs upload error:', error);
+        res.status(500).json({ error: 'Failed to upload file' });
+      }
+    });
+  } else if (isProduction) {
     // Production: use Vercel Blob
     memoryUpload.single('photo')(req, res, async (err) => {
       if (err) {
@@ -154,7 +180,35 @@ const memoryFileUpload = multer({
 // POST /api/upload/file - single generic file upload
 // Returns { path, name, mimeType, size } for the attachment row.
 router.post('/file', async (req: Request, res: Response) => {
-  if (isProduction) {
+  if (netlifyBlobsEnabled()) {
+    // Netlify: store the buffer in Netlify Blobs, return a RELATIVE /files path
+    // (served via routes/media.ts).
+    memoryFileUpload.single('file')(req, res, async (err) => {
+      if (err) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ error: 'No file uploaded or invalid file type' });
+        return;
+      }
+      try {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        const filename = `${uniqueSuffix}${ext}`;
+        await putObject(`files/${filename}`, req.file.buffer, req.file.mimetype);
+        res.json({
+          path: `/files/${filename}`,
+          name: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+        });
+      } catch (error) {
+        console.error('Netlify Blobs upload error:', error);
+        res.status(500).json({ error: 'Failed to upload file' });
+      }
+    });
+  } else if (isProduction) {
     memoryFileUpload.single('file')(req, res, async (err) => {
       if (err) {
         res.status(400).json({ error: err.message });

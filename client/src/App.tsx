@@ -23,7 +23,7 @@ import { SettingsPage } from '@/pages/settings'
 import { DuplicatesPage } from '@/pages/duplicates'
 import { SearchPage } from '@/pages/search'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
-import { NoteImageLightbox } from '@/components/note-image-lightbox'
+import { MediaLightbox } from '@/components/media-lightbox'
 
 function App() {
   const [authed, setAuthed] = useState<boolean>(
@@ -72,7 +72,7 @@ function App() {
         </Route>
       </Routes>
       <KeyboardShortcutsDialog />
-      <NoteImageLightbox />
+      <MediaLightbox />
       <Toaster />
       <PWAUpdatePrompt />
     </BrowserRouter>

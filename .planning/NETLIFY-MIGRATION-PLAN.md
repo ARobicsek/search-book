@@ -804,6 +804,60 @@ add Netlify ones.
 | `/api/cron/reminders?key=` | **200** `{ok:true, due:0, sent:0}` — consumed nothing |
 | Both, wrong secret | **401** ✓ |
 | VAPID | Owner enabled notifications on desktop + iPhone from the Netlify origin; new `PushSubscription` rows #6 (fcm) and #7 (apple) created. Rows #1–#5 are stale vercel.app subs, to be deleted in step 5 |
+| **Push end-to-end** | ✅ **Reminders cron → Netlify → APNs → iPhone buzzed** (test action #444, `{"ok":true,"due":1,"sent":1}`), confirmed twice — once via the cron, once via a direct per-device send |
+
+**Per-subscription push probe (2026-07-26)** — sending to each row individually separates server-side from
+device-side failure:
+
+| Rows | Result |
+|---|---|
+| #6 fcm (desktop), #7 apple (iPhone) — Netlify-era | **201 accepted** |
+| #1 #4 #5 apple — vercel-era | 400 `VapidPkHashMismatch` |
+| #2 fcm — vercel-era | 403 credentials do not correspond |
+| #3 wns — vercel-era | 401 |
+
+Two findings worth keeping:
+
+- **The desktop never showed its notification even though FCM returned 201.** The push left SearchBook
+  correctly, so any remaining fault is Windows/Chrome-side (browser not running, Focus Assist, OS
+  notification settings). The iPhone — the device that matters for reminders — works.
+- ⚠ **The five dead subscriptions will never be auto-pruned.** `reminders.ts:80` prunes only on `'gone'`
+  (404/410), but these fail 400/401/403, so they persist forever and cost five failing HTTP calls on every
+  single reminder inside a 10 s function budget. Manual deletion (step 5) is not optional housekeeping.
+
+### 7.0c Final cron-job.org configuration (as built, 2026-07-26)
+
+cron-job.org holds **both** SearchBook jobs. Note the backup job was **not** previously here — it was a
+Vercel-native cron in `vercel.json` (`{"path":"/api/backup/cron","schedule":"0 8 * * *"}`), so there was
+nothing to "repoint" and it had to be created from scratch. That Vercel cron keeps writing daily backups
+to Vercel Blob until the project is deleted in Phase 6; harmless, and a useful extra net during the soak.
+
+| | `searchbook-alert` | `searchbook-backup` |
+|---|---|---|
+| URL | `https://ari-search-book.netlify.app/api/cron/reminders?key=<REMINDERS_CRON_SECRET>` | `https://ari-search-book.netlify.app/api/backup/cron` |
+| Auth | key in query string | header `Authorization: Bearer <CRON_SECRET>` — **not** "Requires HTTP authentication" (that's Basic auth) |
+| Schedule | every 1 minute (`* * * * *`) | `0 4 * * *` in America/New_York = 08:00 UTC |
+| Save responses in history | on | on |
+| Notify on failure | on, after **5** | on, after **1** |
+| Notify on recovery | on | on |
+| Notify on auto-disable | **on** | **on** |
+| Notify on TLS expiry | off (Netlify auto-renews) | off |
+
+**Why the failure thresholds differ, and why auto-disable is the important one:** cron-job.org disables a
+job after **25 consecutive failures**. For the minutely reminders job that is 25 minutes — but for the
+daily backup it is **25 days**, so a threshold of 1 there is what stops a month of silent backup failure.
+Conversely a threshold of 1 on the minutely job would email on every transient blip: Netlify cold starts
+measured 3.4 s and the first hit after idle reaches 10–13 s, against `app.ts`'s own 9 s self-504.
+
+⚠ **Gotcha that actually bit (2026-07-26):** repointing `searchbook-alert` by editing only the *hostname*
+and keeping the old `?key=` left it 401ing every minute — Vercel's and Netlify's `REMINDERS_CRON_SECRET`
+are different values (41 vs 40 chars). It fails **silently**: cron-job.org logs a failure, the app logs a
+401, and no reminder is delivered. Replace the **entire URL**, then verify with a live request. The
+`onDisable` notification is the backstop that would eventually have surfaced it.
+
+**No keep-warm job is needed** — see §5's keep-warm note; the every-minute reminders cron warms the same
+function and libSQL connection. No separate uptime monitor was found to repoint; the minutely job plus its
+failure notifications serves that role.
 
 1. **Point `main` at Netlify.** Merge the migration branch to `main` (or repoint the Netlify site's
    production branch to `main`). Decide whether Vercel should keep building from `main` during the

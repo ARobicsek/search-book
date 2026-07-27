@@ -15,7 +15,7 @@ This document is the **plan of record**. Any AI agent (Claude Code or Gemini/Ant
 - After each task: `npm run prepush` (typecheck), and test locally with `npm start` where noted. Re-test mobile (390px iPhone PWA) for any UI change.
 - Update the task's **STATUS** line when done (date + commit hash + any deviations). Update `.planning/NEXT-SESSION-PROMPT.md` at session end.
 - Tasks flagged **[USER ACTION]** need the owner to do something (sign off on a list, set an env var, check NCQA IT policy). Pause and ask.
-- **The user has granted standing permission to commit and push to `main`** so changes auto-deploy to Vercel for testing. Still: typecheck + local smoke test before pushing, and never push a schema change to `main` before the corresponding Turso DDL has been applied (see migration procedure below).
+- **The user has granted standing permission to commit and push to `main`** so changes auto-deploy to **Netlify** for testing (`ari-search-book.netlify.app` — the Vercel deploy was cut over 2026-07-26 and its images are broken). Still: typecheck + local smoke test before pushing, and never push a schema change to `main` before the corresponding Turso DDL has been applied (see migration procedure below).
 
 ### Schema-migration procedure (applies to every task that touches `schema.prisma`)
 
@@ -38,7 +38,7 @@ can't proceed without them. Raise them at session start; don't push on this work
 | # | Waiting on | Proposal on the table | Needed for |
 |---|------------|----------------------|------------|
 | D5 | One real (sanitized) **MS Copilot meeting recap** pasted in, to tune the extraction prompt | — | Task 4.2 |
-| D6 | `ANTHROPIC_API_KEY` set in Vercel + `server/.env` **[USER ACTION]** | — | Task 4.1 |
+| D6 | `ANTHROPIC_API_KEY` set in **Netlify** (Configuration → Environment variables; a redeploy is required — functions read env at deploy time) + `server/.env` **[USER ACTION]** | — | Task 4.1 |
 | D8 | Auth upgrade choice: Cloudflare Access in front of the domain vs. high-entropy rotating token | Recommend Cloudflare Access (free tier) | Task 3.1 |
 | D9 | Comfort/policy check: candid stance notes about named industry figures will live in this personal app — confirm that's acceptable under NCQA policy **[USER ACTION]** | — | Phase 3 |
 
@@ -281,7 +281,7 @@ Per D8/D9. Recommended: **Cloudflare Access** (free ≤50 users) in front of the
 - **Pipeline:** `POST /api/ai/ingest-meeting { rawText }` → server assembles matching context (contact names+ids+org, **known meeting titles** for series matching, initiative names — reuse the lightweight names/titles endpoints) → one Claude API call with a JSON-schema'd tool → returns draft:
   `{ title (matched to an existing series title when close), date, type, summary, notesMarkdown (### topic headings), attendees: [{ name, matchedContactId | null, note? }], companyGuess?, attendeesDescription?, actions: [{ title, direction, dueDate?, ownerContactId? }], peopleDiscussed, companiesDiscussed, stanceSignals: [{ contactId, initiative, signal, quote }] }`
 - **Copilot specifics:** Teams recaps have stable sections (meeting title/date/attendees, AI-notes bullets grouped by topic, "Follow-up tasks" with named owners). Prompt maps *task owner = me* → `OWED_BY_ME`, *owner = someone else* → `WAITING_ON_THEM`. Tune against a real sample (D5). Must degrade gracefully on arbitrary raw notes.
-- **Constraints:** Vercel 30s / client 28s timeout → default to a fast model (`claude-haiku-4-5-20251001`; model id in an env var `AI_INGEST_MODEL` so it can be upgraded without a deploy), cap input ~20k chars with a clear truncation warning, cap output tokens. Rate-limit the route (e.g., 60/hr, same `express-rate-limit` pattern). **[USER ACTION]** D6: `ANTHROPIC_API_KEY`.
+- **Constraints:** ⚠ **Netlify's function timeout is a hard 10 s** (not Vercel's old 30 s — `app.ts` fires its own 504 at 9 s under `NETLIFY`), and the client waits 28 s. That is a *much* tighter budget than this task was originally scoped against, so an LLM round trip has to finish inside ~9 s or the route needs to become async (enqueue + poll) rather than request/response. Default to a fast model (`claude-haiku-4-5-20251001`; model id in an env var `AI_INGEST_MODEL` so it can be upgraded without a deploy), cap input ~20k chars with a clear truncation warning, cap output tokens. Rate-limit the route (e.g., 60/hr, same `express-rate-limit` pattern). **[USER ACTION]** D6: `ANTHROPIC_API_KEY`.
 
 ## Task 4.1 — Server: `/api/ai/ingest-meeting`
 New `server/src/routes/ai.ts` per the design (Anthropic SDK, tool-forced JSON output, name-matching context, rate limit, env-gated — clean 503 with a helpful message if the key is unset).

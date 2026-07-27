@@ -5,31 +5,84 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-## ▶ START HERE NEXT SESSION — Netlify migration **Phase 4** (point of no return)
+## ▶ START HERE NEXT SESSION — the migration is DONE; **Phase 6 (decommission Vercel) after a few normal days**
 
-**Kickoff prompt:** *"Run Netlify migration Phase 4"* — follow `NETLIFY-MIGRATION-PLAN.md` **§6**, working on
-branch **`netlify-migration-phase-3`** (deploy by fast-forwarding the Netlify build branch
-`claude/netlify-migration-plan-8lim9k`; **`main`/Vercel stays the daily driver until Phase 5**).
+**🎉 SearchBook now runs on Netlify.** `main` is the source of truth, Netlify deploys from `main`, and
+Phases 0–5 are all complete (2026-07-26). **`searchbook-three.vercel.app` must not be used — its images
+are broken** (the DB now stores relative `/photos/`·`/files/` paths, which only Netlify serves).
 
-**Phase 3 is COMPLETE — its gate is green (2026-07-26).** Phase 4 needs no further testing to start; it is
-blocked **only** on four credentials the owner must put in the shell's env (**§6.0** — never in chat, never
-committed):
+**Kickoff prompt:** *"Run Netlify migration Phase 6"* — `NETLIFY-MIGRATION-PLAN.md` **§8**. It is
+deliberately **not urgent**: let the app run normally for a few days first.
 
-| Var | Source |
+**Do NOT start Phase 6 until the owner is sure they will never want the rollback**, because step 2 deletes
+the Vercel Blob store, and that is what makes this reversible:
+`node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
+
+### Carry-overs to check first
+
+| Item | Why |
 |---|---|
-| `BLOB_READ_WRITE_TOKEN` | Vercel → Storage → Blob |
-| `NETLIFY_SITE_ID` | Netlify → Site settings → General |
-| `NETLIFY_AUTH_TOKEN` | Netlify → User settings → Applications → new token |
-| `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` | Turso dashboard — **must be FRESH**; the one in `server/.env` returns a hard 401 |
+| ⚠ **Netlify credit usage** | Check **Team dashboard → Usage & billing → Account usage insights** (~4 days in). Free plan = **300 credits/mo, hard limit — at 100% every project is PAUSED**, not throttled. The reminders cron was cut from every-1-min to **every-5-min** for exactly this; est. ~20% of budget, but that is an estimate, not a measurement. Netlify emails at 50/75/100%. |
+| Backup job alert threshold | `searchbook-backup` notifies after **3** failures = 3 days of silent backup failure. Owner may want 1. |
+| Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |
+| Vercel-native backup cron | Still in `vercel.json`, still writing to Vercel Blob daily until the project is deleted. Harmless extra net. |
 
-Phase 4 = (1) safety backup + ZIP, (2) `migrate-blobs-to-netlify.mjs` copies `photos/`·`files/`·`backups/`
-into Netlify Blobs (idempotent; prints the Blob host), (3) `rewrite-blob-urls.mjs <HOST>` rewrites every text
-column in Turso to relative paths. **Rehearse step 3 on a scratch DB first (`--db file:…`)** — it is the point
-of no return. Gate: no `⚠ REMAINING`, and on Netlify a contact photo, a meeting attachment and a pasted-image
-note all render. Rollback: `--undo`, valid only until Vercel Blob is deleted in Phase 6.
-⚠ **235 of 238 binaries are still absolute `vercel-storage.com` URLs** — the live Netlify app depends on
-Vercel Blob until this runs. **Do not let that store be deleted before step 2.**
-Ask the owner to pick a quiet window: nothing should be uploaded between steps 2 and 3.
+### Phase 6 = (§8)
+
+1. Confirm `backups/` history is in Netlify Blobs (it is — 307 objects copied incl. all backups).
+2. **Owner:** delete the Vercel Blob store + the Vercel project.
+3. **Repo cleanup (one commit):** delete `api/index.ts`, `vercel.json`; drop `@vercel/node` (root) and
+   `@vercel/blob` (server); remove `build:vercel`; strip the Vercel-Blob branches from
+   `upload.ts`/`backup.ts` and the absolute-URL anchor in `settings.tsx`; update `server/.env.example`.
+   Keep `check:backup` in the build.
+4. **Docs:** update `CLAUDE.md` (storage = Netlify Blobs via proxy) and move `VERCEL-EXIT-PLAN.md` +
+   `NETLIFY-MIGRATION-PLAN.md` to `.planning/archive/`.
+5. **Delete the scratchpad** — it still holds the VAPID private key, `CRON_SECRET`, and the Turso and
+   Netlify tokens.
+
+After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated on decisions D5–D9
+(don't push on those until the owner raises them).
+
+---
+
+### What Was Just Completed — **CUTOVER: Netlify migration Phases 4 + 5, done in one session** (2026-07-26 s3)
+
+The whole cutover, end to end. `main` now carries the migration and Netlify deploys from it.
+
+**Phase 4 (point of no return):** 307/307 Vercel Blob objects copied into Netlify Blobs (photos, files
+*and* the full `backups/` history), zero fetch errors; then 218 DB rows rewritten to relative paths —
+`Contact.photoUrl` (198), `Conversation.notes` (18), `Action.description` (1),
+`ConversationAttachment.url` (1). Gated **before** the rewrite by confirming all **235** blob paths the DB
+actually references were already in Netlify Blobs, and after by fetching one of each kind from the live
+origin. Owner verified photos, attachments, pasted-image notes, deduplicate and global search.
+
+**Phase 5:** both crons moved to Netlify on cron-job.org, push verified end-to-end to the iPhone, 5 stale
+push subscriptions deleted, branch merged to `main`, Netlify's production branch repointed to `main`.
+
+**Six findings worth remembering** (all recorded in the plan):
+
+1. **Netlify's free tier is credit-based and the every-minute cron would have eaten all of it** — 300
+   credits/mo hard limit, and at 100% *every project is paused*. Cut to `*/5 * * * *`. This is the single
+   most consequential discovery of the session and it was invisible until the arithmetic was done.
+2. **`CRON_SECRET` was missing from Netlify** and `backup.ts` has no fallback to `REMINDERS_CRON_SECRET`
+   (unlike `reminders.ts`) — the daily backup would have 401'd silently forever.
+3. **Repointing the reminders cron by editing only the hostname left it 401ing every minute.** Vercel's
+   and Netlify's `REMINDERS_CRON_SECRET` differ **by one character** (41 vs 40 chars).
+4. **Ordering hazard:** `reminders.ts` stamps `lastNotifiedAt` even when delivery fails, and push subs are
+   per-origin — so repointing the cron before re-subscribing a device silently eats reminders. Device
+   first, then cron. The plan's own step order had it backwards.
+5. **The 5 stale push subs would never have been auto-pruned** — they fail 400/401/403, but the code only
+   prunes on `'gone'` (404/410).
+6. **`Company.photoFile` does not exist** — it is `Conversation.photoFile`. The phantom had propagated
+   through several docs and into `photo-backup.ts` as a no-op read.
+
+Also two owner-requested UI fixes, verified live at 390px: the Outlook-import range presets now show their
+selected state (`secondary` was `oklch(0.97)` on `oklch(1)` — a 3% difference some displays lose), and
+**"This week" no longer reaches into the past** — on a Sunday it returned the previous Monday through
+today, a range entirely behind you.
+
+Commits: `15cb0ae` `0fcd9be` `c5b64d7` `fe6e4ea` `260cb8b` `c6b811a` `331f200` → merged `dca756c`,
+then `70c6f9e` `27e2d17` `90fda43` on `main`.
 
 ---
 

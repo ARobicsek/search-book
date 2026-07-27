@@ -25,7 +25,8 @@ of every doc.
    decisions table in **`.planning/STATE.md`**, and add a one-line entry to the session log in
    **`.planning/SESSION-HISTORY.md`**.
 4. `npm run prepush`, then **commit and push to `main`** (pushing is authorized by the owner;
-   auto-deploys to Vercel).
+   **auto-deploys to Netlify — `ari-search-book.netlify.app`** since the 2026-07-26 cutover. Vercel is
+   decommissioned in Phase 6 and its images are already broken; do not treat it as live).
 
 ## Non-negotiables (details in `CLAUDE.md`)
 

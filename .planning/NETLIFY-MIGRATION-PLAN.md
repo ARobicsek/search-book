@@ -893,6 +893,39 @@ failure notifications serves that role.
 
 ## Appendix A — free-tier math & the cron/quota watch-item
 
+### R10 ANSWERED (2026-07-26) — and it is tight
+
+Netlify's 2026 model is **credit-based**, not invocation-based:
+
+- **Free plan = 300 credits/month**, a *hard* limit — no overage billing
+- **Compute = 10 credits per GB-hour** (memory allocated × execution time)
+- At 100%: **every project in the team is PAUSED** and visitors get "Site not available" — not just the
+  cron, the whole app
+- Netlify emails + in-app notifies at **50% / 75% / 100%**
+- Usage UI: **Team dashboard → Usage & billing → Account usage insights** (daily chart, per-meter)
+
+**The measured arithmetic**, from `searchbook-alert`'s real execution history (2.3–3.4 s per call,
+2026-07-26): 43,200 invocations × ~2.5 s ≈ **30 hours** of execution per month.
+
+| Function memory | GB-hours | Credits | Share of the 300 free |
+|---|---|---|---|
+| 1 GB | 30 | 300 | **100%** |
+| 512 MB | 15 | 150 | 50% |
+
+Netlify's docs don't state the default function memory, so this is a range — but even the optimistic end
+spends **half the monthly budget on the reminders cron alone**, before bandwidth, web requests, deploys,
+or actually using the app. This was flagged as "may be a large slice of the free budget"; it is.
+
+**Action:** check Usage & billing ~4 days after cutover. Budget is ~10 credits/day; if the Compute meter
+trends above that, pull a lever before the 50% email.
+
+**Best lever — restrict the cron to waking hours, not just a longer interval.** Reminders at 3 AM are
+useless. `*/2 6-23 * * *` (every 2 min, 06:00–24:00) cuts invocations **~62%** at no practical cost: a
+reminder inside 2 minutes is indistinguishable from inside 1. That beats a flat every-2-min (50%) and a
+flat every-3-min (66% but coarser during the day).
+
+### Original Phase 0.5 note (superseded by the above)
+
 The one number to verify (Phase 0.5): Netlify's **free compute quota** under its current (2026) model.
 The every-minute reminders cron alone is **~43,200 invocations/month** (60×24×30) — historically a
 large slice of Netlify free's function budget, and larger than on Vercel. Levers if it's tight:

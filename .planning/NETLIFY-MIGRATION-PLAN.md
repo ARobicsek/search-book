@@ -762,10 +762,20 @@ Audited against the live Netlify env list on 2026-07-26. Present: `APP_PASSWORD`
 | `CRON_SECRET` | `/api/backup/cron` checks **only** `CRON_SECRET` for the `Bearer` path (`routes/backup.ts:166`) — it does *not* fall back to `REMINDERS_CRON_SECRET` the way `routes/reminders.ts:28` does | ⚠ **The daily automatic backup 401s and silently stops.** The safety net goes quiet with no error surfaced anywhere |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | `lib/push.ts:14` — without them `/api/push/public-key` returns null | Push toggle hides itself ("Push isn't configured on the server yet"); step 4 below cannot be tested |
 
-Copy the existing values from Vercel rather than generating new ones (new VAPID keys would invalidate
-every existing subscription). Fastest route: `npx vercel env pull <scratchpad>/vercel.env --environment=production`,
-then paste into Netlify → Configuration → Environment variables. **Netlify functions read env at deploy
-time, so trigger a redeploy after adding them** — and re-check `/api/push/public-key` returns non-null.
+**Generate fresh values — do NOT try to copy them from Vercel.** On Vercel all three are classed
+**Sensitive**, which is write-only: unreadable in the dashboard *and* not returned by `vercel env pull`
+(so `vercel link` is pointless here). Nothing is lost by regenerating:
+
+- **VAPID** — push subscriptions are scoped to an **origin**. Every existing subscription belongs to
+  `searchbook-three.vercel.app` and can never serve `ari-search-book.netlify.app` whatever keys are used;
+  step 4 below re-subscribes from scratch regardless. Generate with
+  `node -e "console.log(require('web-push').generateVAPIDKeys())"` (web-push is already a server dep).
+  Vercel keeps its own old keys, so its push keeps working untouched during the transition.
+- **CRON_SECRET** — just a shared secret between cron-job.org and the app, and step 2 below re-enters the
+  cron config anyway. Generate 32 random bytes; use the same value in the backup job's `Bearer` header.
+
+**Netlify functions read env at deploy time, so trigger a redeploy after adding them** — then verify
+`/api/push/public-key` returns non-null and `/api/backup/cron` accepts the Bearer token.
 
 `SENTRY_DSN` / `VITE_SENTRY_DSN` remain unset on both platforms — a pre-existing standing follow-up, not
 a cutover regression.

@@ -780,6 +780,31 @@ Audited against the live Netlify env list on 2026-07-26. Present: `APP_PASSWORD`
 `SENTRY_DSN` / `VITE_SENTRY_DSN` remain unset on both platforms — a pre-existing standing follow-up, not
 a cutover regression.
 
+### 7.0b ⚠ Do the phone BEFORE the reminders cron — the step order below is wrong
+
+`routes/reminders.ts:85-87` stamps `lastNotifiedAt` **even when delivery fails** (deliberate — it
+prevents a permanent retry storm). Push subscriptions are **per-origin**, so a subscription made on
+`searchbook-three.vercel.app` can never receive a push from the Netlify origin. Therefore:
+
+> Repointing the reminders cron to Netlify while no Netlify-origin subscription exists causes every
+> reminder that comes due in that window to be **silently consumed and never delivered** — no error
+> anywhere, the reminder simply never arrives.
+
+So run **step 4 (device re-subscribe) before step 2 (crons)**. Done in that order on 2026-07-26 and the
+hazard never materialised. The two crons also must not both run: they share one Turso DB, so whichever
+fires first stamps `lastNotifiedAt` and the other finds nothing — disable the Vercel jobs, don't just
+add Netlify ones.
+
+**Verified 2026-07-26 (post-redeploy):**
+
+| Check | Result |
+|---|---|
+| Env vars live | All three present, `context=all`, `functions` scope, values match byte-for-byte (read back via the Netlify API) |
+| `/api/backup/cron` + Bearer | **200** `{ok:true, tables:32, pruned:1}` — a real backup written to Netlify Blobs. **5.1 s of the hard 10 s function timeout** ⚠ watch as the DB grows |
+| `/api/cron/reminders?key=` | **200** `{ok:true, due:0, sent:0}` — consumed nothing |
+| Both, wrong secret | **401** ✓ |
+| VAPID | Owner enabled notifications on desktop + iPhone from the Netlify origin; new `PushSubscription` rows #6 (fcm) and #7 (apple) created. Rows #1–#5 are stale vercel.app subs, to be deleted in step 5 |
+
 1. **Point `main` at Netlify.** Merge the migration branch to `main` (or repoint the Netlify site's
    production branch to `main`). Decide whether Vercel should keep building from `main` during the
    final soak or be paused — safest is to leave Vercel building but **stop using it**.

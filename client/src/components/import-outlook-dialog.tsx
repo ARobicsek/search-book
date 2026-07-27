@@ -61,12 +61,18 @@ function presetRange(preset: Exclude<Preset, 'custom'>): { from: string; to: str
     return { from: ymd(t), to: ymd(t) }
   }
   if (preset === 'week') {
-    const dow = (today.getDay() + 6) % 7 // 0 = Monday
-    const mon = new Date(today)
-    mon.setDate(today.getDate() - dow)
-    const sun = new Date(mon)
-    sun.setDate(mon.getDate() + 6)
-    return { from: ymd(mon), to: ymd(sun) }
+    /* "The rest of this week": today through the coming Saturday (weeks run
+     * Sunday–Saturday, US convention). It deliberately never reaches into the
+     * past — every preset here is forward-looking, and the custom date inputs
+     * are how you'd reach backwards.
+     *
+     * The previous version anchored to Monday, so on a SUNDAY it returned the
+     * Monday six days ago through today — a range entirely in the past, which
+     * imported nothing. Sunday is the case to check when changing this:
+     *   Sun (getDay 0) -> today..+6   Wed (3) -> today..+3   Sat (6) -> today only */
+    const sat = new Date(today)
+    sat.setDate(today.getDate() + (6 - today.getDay()))
+    return { from: ymd(today), to: ymd(sat) }
   }
   const end = new Date(today) // next7
   end.setDate(today.getDate() + 6)

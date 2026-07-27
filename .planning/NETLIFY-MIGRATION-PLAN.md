@@ -748,6 +748,28 @@ all render.
 
 ## 7. Phase 5 — Cutover: crons, monitors, devices
 
+**STATUS: next up.** Phase 4's gate is owner-verified (2026-07-26): contact photo, meeting attachment
+and pasted-image note all render on Netlify, plus deduplicate and global search.
+
+### 7.0 Netlify env vars that are MISSING and must be added first
+
+Audited against the live Netlify env list on 2026-07-26. Present: `APP_PASSWORD`, `OPENAI_API_KEY`,
+`OUTLOOK_CALENDAR_ICS_URL`, `REMINDER_TZ`, `REMINDERS_CRON_SECRET`, `STORAGE`, `TURSO_AUTH_TOKEN`,
+`TURSO_DATABASE_URL`. Missing:
+
+| Var | Why it matters | Consequence if skipped |
+|---|---|---|
+| `CRON_SECRET` | `/api/backup/cron` checks **only** `CRON_SECRET` for the `Bearer` path (`routes/backup.ts:166`) — it does *not* fall back to `REMINDERS_CRON_SECRET` the way `routes/reminders.ts:28` does | ⚠ **The daily automatic backup 401s and silently stops.** The safety net goes quiet with no error surfaced anywhere |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | `lib/push.ts:14` — without them `/api/push/public-key` returns null | Push toggle hides itself ("Push isn't configured on the server yet"); step 4 below cannot be tested |
+
+Copy the existing values from Vercel rather than generating new ones (new VAPID keys would invalidate
+every existing subscription). Fastest route: `npx vercel env pull <scratchpad>/vercel.env --environment=production`,
+then paste into Netlify → Configuration → Environment variables. **Netlify functions read env at deploy
+time, so trigger a redeploy after adding them** — and re-check `/api/push/public-key` returns non-null.
+
+`SENTRY_DSN` / `VITE_SENTRY_DSN` remain unset on both platforms — a pre-existing standing follow-up, not
+a cutover regression.
+
 1. **Point `main` at Netlify.** Merge the migration branch to `main` (or repoint the Netlify site's
    production branch to `main`). Decide whether Vercel should keep building from `main` during the
    final soak or be paused — safest is to leave Vercel building but **stop using it**.

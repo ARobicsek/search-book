@@ -941,6 +941,38 @@ async function runCompanyMerge(
     await tx.companyStatusHistory.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
     await tx.link.updateMany({ where: { companyId: removeId }, data: { companyId: keepId } });
 
+    // Re-point @-mention tokens in note text at the surviving org — the same rewrite
+    // runContactMerge does for `(/contacts/N)`. Without it the merge is silently
+    // lossy: ConversationMention.companyId is `onDelete: SetNull`, so deleting the
+    // removed org would null the row while `[@Name](/companies/<removeId>)` stayed in
+    // the prose. The chip becomes a dead link, the next save of that meeting re-derives
+    // it as a *loose* mention (syncConversationMentions degrades unknown ids), and the
+    // Mentions page offers "Create" again — re-minting the duplicate just merged away.
+    const oldOrgToken = `(/companies/${removeId})`;
+    const newOrgToken = `(/companies/${keepId})`;
+    const [orgNoteConvs, orgPrepConvs, orgMentionConvs] = await Promise.all([
+      tx.conversation.findMany({
+        where: { OR: [{ notes: { contains: oldOrgToken } }, { nextSteps: { contains: oldOrgToken } }] },
+        select: { id: true },
+      }),
+      tx.conversationPrepNote.findMany({ where: { content: { contains: oldOrgToken } }, select: { conversationId: true } }),
+      tx.conversationMention.findMany({ where: { companyId: removeId }, select: { conversationId: true } }),
+    ]);
+    const affectedOrgConvIds = new Set<number>([
+      ...orgNoteConvs.map((c) => c.id),
+      ...orgPrepConvs.map((p) => p.conversationId),
+      ...orgMentionConvs.map((m) => m.conversationId),
+    ]);
+    if (affectedOrgConvIds.size > 0) {
+      const like = `%${oldOrgToken}%`;
+      await tx.$executeRaw`UPDATE "Conversation" SET "notes" = REPLACE("notes", ${oldOrgToken}, ${newOrgToken}) WHERE "notes" LIKE ${like}`;
+      await tx.$executeRaw`UPDATE "Conversation" SET "nextSteps" = REPLACE("nextSteps", ${oldOrgToken}, ${newOrgToken}) WHERE "nextSteps" LIKE ${like}`;
+      await tx.$executeRaw`UPDATE "ConversationPrepNote" SET "content" = REPLACE("content", ${oldOrgToken}, ${newOrgToken}) WHERE "content" LIKE ${like}`;
+      for (const convId of affectedOrgConvIds) {
+        await resyncConversationMentions(tx, convId);
+      }
+    }
+
     await tx.company.delete({ where: { id: removeId } });
   });
 }

@@ -7,9 +7,10 @@ Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS), pl
 soak (#7–#11, §5). **Phase 3 is COMPLETE — gate GREEN as of 2026-07-26**: the whole §5 checklist is
 owner-verified on desktop and iPhone, the one exception being push reminders, which Phase 3 structurally
 *cannot* test (VAPID unset on Netlify by design → Phase 5) and which is an accepted carve-out rather than
-an open bug. **NEXT UP: Phase 4** (§6 — migrate binaries + rewrite DB URLs; the point of no return).
-Scripts are written, the rewrite is rehearsed, the offline restore drill passed; it is blocked only on the
-four credentials in **§6.0**. Do NOT merge to `main` before cutover.** Written
+an open bug. **Phase 4 is COMPLETE (2026-07-26)** — 307/307 blobs copied to Netlify Blobs and all 218
+DB rows rewritten to relative paths; the point of no return is behind us, so **images are now broken on
+Vercel and Vercel must no longer be used as the daily driver**. **NEXT UP: Phase 5** (§7 — cutover:
+merge to `main`, repoint crons/monitor, per-device PWA reinstall + push).** Written
 2026-07-21 after live network testing proved that NCQA's web proxy **blocks `*.run.app` (Google
 Cloud Run) but allows `*.netlify.app`**, while Vercel access is granted only by exception and is
 being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud Run) as the migration target of
@@ -673,9 +674,26 @@ that actually caused #9). ~8,640 invocations/month.
 ⚠ After the URL rewrite, photos render on Netlify but appear **broken on Vercel**. Do this only after
 Phase 3 is green, then proceed straight to cutover. Run at a quiet time.
 
-**STATUS (2026-07-26): NOT STARTED — cleared to run; Phase 3's gate is green. This is the next session's
-work.** Both scripts exist and are syntax-checked, the rewrite has been rehearsed on a scratch DB, and the
-offline restore drill passed. Blocked only on §6.0.
+**STATUS (2026-07-26): ✅ COMPLETE — executed end to end. Point of no return crossed.**
+
+| Step | Result |
+|---|---|
+| Preflight (all 3 credentials proven) | Vercel Blob 307 objects, single host `sv1nlcmvomldhzg3.public.blob.vercel-storage.com`; Netlify Blobs `media` write+delete OK; Turso reachable |
+| Pre-rewrite survey (all 106 text columns) | 218 rows across `Contact.photoUrl` (198), `Conversation.notes` (18), `Action.description` (1), `ConversationAttachment.url` (1) — **matches the earlier rehearsal exactly** |
+| §6.2 copy | **307/307 copied, 0 fetch errors** (photos + files + full `backups/` history) |
+| Pre-rewrite gate | 235 distinct blob paths referenced by the DB, **all 235 confirmed present** in Netlify Blobs before rewriting |
+| §6.3 rewrite | **218 rows rewritten**, `Verified: no rows still reference the Vercel Blob host ✅` |
+| Gate (live fetch from `ari-search-book.netlify.app`) | contact photo 200 image/png · attachment 200 · note-embedded image 200 · action-embedded image 200 · missing object 404 |
+
+Two notes for the record:
+- `Action.description` also held an embedded image — the all-text-columns sweep was load-bearing, not
+  belt-and-braces. The "four known URL columns" framing below (and in `CLAUDE.md`) was never accurate:
+  the third one is **`Conversation.photoFile`**, not `Company.photoFile`, which has no such column.
+- A `.msg` attachment serves as `application/octet-stream` (no entry in the script's `CT_BY_EXT` map).
+  That is correct behaviour — it downloads rather than renders — so it was left alone.
+
+Rollback is still available until the Vercel Blob store is deleted in Phase 6:
+`node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
 
 ### 6.0 Prerequisites the owner must supply (the agent cannot obtain these)
 
@@ -714,7 +732,7 @@ That dependency is exactly what this phase removes. **Do not let the Vercel Blob
 3. **Rewrite URLs in Turso** — script `server/scripts/rewrite-blob-urls.mjs <BLOB_HOST>` **(written,
    Phase 3)** rewrites
    `https://<host>/photos/x` → `/photos/x` (and `/files/`) across **every text column of every table**
-   (covers `Contact.photoUrl/photoFile`, `Company.photoFile`, `ConversationAttachment.url`, and
+   (covers `Contact.photoUrl/photoFile`, `Conversation.photoFile`, `ConversationAttachment.url`, and
    markdown-embedded images in any notes column). Same script/approach as the Cloud Run plan §4.2,
    including the `--undo` emergency path and the "no ⚠ REMAINING" verification.
   **Rehearse it first:** the script now takes `--db file:/abs/path/to/scratch.db`, so the identical rewrite

@@ -4,7 +4,9 @@
 // has copied the bytes into Netlify Blobs. Rewrites `https://<HOST>/photos/x.jpg` → `/photos/x.jpg`
 // (and `/files/`) across EVERY text column of EVERY table — so it also catches markdown-embedded
 // images inside any notes column, not just the four known URL columns (Contact.photoUrl/photoFile,
-// Company.photoFile, ConversationAttachment.url).
+// Conversation.photoFile, ConversationAttachment.url). That breadth was load-bearing at cutover:
+// the real run also found an embedded image in Action.description. (`Company.photoFile` does not
+// exist — the Company model has no photo column; the old docs were wrong.)
 //
 // ⚠ POINT OF NO RETURN: after this runs, photos render on Netlify (relative → served by
 // routes/media.ts) and appear BROKEN on the Vercel deploy (Vercel prod doesn't serve /photos).

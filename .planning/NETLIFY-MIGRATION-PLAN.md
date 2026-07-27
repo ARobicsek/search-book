@@ -836,7 +836,7 @@ to Vercel Blob until the project is deleted in Phase 6; harmless, and a useful e
 |---|---|---|
 | URL | `https://ari-search-book.netlify.app/api/cron/reminders?key=<REMINDERS_CRON_SECRET>` | `https://ari-search-book.netlify.app/api/backup/cron` |
 | Auth | key in query string | header `Authorization: Bearer <CRON_SECRET>` — **not** "Requires HTTP authentication" (that's Basic auth) |
-| Schedule | every 1 minute (`* * * * *`) | `0 4 * * *` in America/New_York = 08:00 UTC |
+| Schedule | **every 5 minutes (`*/5 * * * *`)** — see Appendix A R10 | `0 4 * * *` in America/New_York = 08:00 UTC |
 | Save responses in history | on | on |
 | Notify on failure | on, after **5** | on, after **1** |
 | Notify on recovery | on | on |
@@ -919,10 +919,30 @@ or actually using the app. This was flagged as "may be a large slice of the free
 **Action:** check Usage & billing ~4 days after cutover. Budget is ~10 credits/day; if the Compute meter
 trends above that, pull a lever before the 50% email.
 
-**Best lever — restrict the cron to waking hours, not just a longer interval.** Reminders at 3 AM are
-useless. `*/2 6-23 * * *` (every 2 min, 06:00–24:00) cuts invocations **~62%** at no practical cost: a
-reminder inside 2 minutes is indistinguishable from inside 1. That beats a flat every-2-min (50%) and a
-flat every-3-min (66% but coarser during the day).
+### DECIDED (owner, 2026-07-26): reminders run **every 5 minutes** — `*/5 * * * *`
+
+Applied to `searchbook-alert` the same evening. This resolves R10 rather than merely watching it:
+
+| Cadence | Invocations/mo | ~Execution | Credits @1 GB | Share of 300 |
+|---|---|---|---|---|
+| every 1 min (as built) | 43,200 | 30 h | ~300 | 100% |
+| **every 5 min (chosen)** | **8,640** | **6 h** | **~60** | **20%** |
+
+Why 5 minutes rather than the waking-hours trick (`*/2 6-23 * * *`, ~62% cut) that was drafted first:
+
+- **Deeper cut** (80% vs 62%) and it leaves real headroom for bandwidth, deploys and normal app use.
+- **Still a keep-warm.** §5's keep-warm design specified exactly a 5-minute `/api/health` ping as
+  sufficient to hold the Lambda + libSQL connection open, so the cold-start fix survives the change.
+- **Simpler.** No hour-range or timezone edge cases around midnight, and the connection stays warm
+  overnight rather than going cold every night and paying a 3–13 s cold start each morning.
+
+Cost: a reminder due at 08:00 now arrives in 08:00–08:05. These are day-planning nudges, not alarms, so
+the owner accepted that trade.
+
+⚠ **Knock-on effect:** cron-job.org auto-disables after 25 *consecutive* failures. At 1-minute cadence
+that backstop fired in ~25 min; at 5-minute cadence it takes **~2 hours**. That makes the explicit
+"execution fails" notification more important than before, not less — set it to notify after **2**
+failures (~10 min) rather than the 5 that suited the minutely job.
 
 ### Original Phase 0.5 note (superseded by the above)
 

@@ -7,10 +7,13 @@ Six Netlify-runtime bugs found & fixed during bring-up (see Phase 2 RESULTS), pl
 soak (#7–#11, §5). **Phase 3 is COMPLETE — gate GREEN as of 2026-07-26**: the whole §5 checklist is
 owner-verified on desktop and iPhone, the one exception being push reminders, which Phase 3 structurally
 *cannot* test (VAPID unset on Netlify by design → Phase 5) and which is an accepted carve-out rather than
-an open bug. **Phase 4 is COMPLETE (2026-07-26)** — 307/307 blobs copied to Netlify Blobs and all 218
-DB rows rewritten to relative paths; the point of no return is behind us, so **images are now broken on
-Vercel and Vercel must no longer be used as the daily driver**. **NEXT UP: Phase 5** (§7 — cutover:
-merge to `main`, repoint crons/monitor, per-device PWA reinstall + push).** Written
+an open bug. **Phases 4 AND 5 are COMPLETE (2026-07-26).** Phase 4: 307/307 blobs copied to Netlify Blobs,
+all 218 DB rows rewritten to relative paths — so **images are broken on Vercel and it must not be used**.
+Phase 5: both crons repointed to Netlify on cron-job.org (reminders cut to **every 5 minutes** — see
+Appendix A R10), push verified end-to-end to the iPhone, 5 stale subscriptions deleted, and the branch
+merged to `main`. **NEXT UP: Phase 6** (§8 — decommission Vercel, after a few normal days). ⚠ Two carry-overs:
+**repoint Netlify's production branch to `main`**, and **do not delete the Vercel Blob store** while the
+`--undo` rollback is still wanted.** Written
 2026-07-21 after live network testing proved that NCQA's web proxy **blocks `*.run.app` (Google
 Cloud Run) but allows `*.netlify.app`**, while Vercel access is granted only by exception and is
 being revoked. This **supersedes `VERCEL-EXIT-PLAN.md`** (Cloud Run) as the migration target of
@@ -748,8 +751,21 @@ all render.
 
 ## 7. Phase 5 — Cutover: crons, monitors, devices
 
-**STATUS: next up.** Phase 4's gate is owner-verified (2026-07-26): contact photo, meeting attachment
+**STATUS: ✅ COMPLETE (2026-07-26).** Phase 4's gate is owner-verified: contact photo, meeting attachment
 and pasted-image note all render on Netlify, plus deduplicate and global search.
+
+Phase 5 close-out:
+
+| Step | Result |
+|---|---|
+| 1. `main` points at Netlify | ✅ branch merged to `main`. ⚠ **Netlify's production branch still needs repointing** from `claude/netlify-migration-plan-8lim9k` to `main` in the UI |
+| 2. Crons | ✅ `searchbook-alert` (reminders, `*/5 * * * *`) + `searchbook-backup` (daily 04:00 ET, Bearer header) both live and returning 200. Vercel's cron-job.org reminders job disabled; the Vercel-native backup cron in `vercel.json` still runs until Phase 6 |
+| 3. Uptime monitor | ✅ no separate monitor existed; the 5-min reminders job with failure/auto-disable notifications serves the role, and doubles as the keep-warm |
+| 4. Push | ✅ verified end-to-end to the iPhone (cron → Netlify → APNs). Desktop accepted by FCM (201) but not displayed — Windows-side |
+| 5. Stale subscriptions | ✅ #1–#5 deleted after re-probing each one live; #6/#7 confirmed alive and kept |
+
+**Carry-overs into Phase 6:** repoint the Netlify production branch; keep the Vercel Blob store until the
+`--undo` rollback is definitively not wanted; watch the credit meter (Appendix A R10).
 
 ### 7.0 Netlify env vars that are MISSING and must be added first
 

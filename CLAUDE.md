@@ -117,15 +117,23 @@ dead — `*.run.app` is blocked at NCQA while `*.netlify.app` is not).
   on 2026-07-26: all 307 blobs were copied into Netlify Blobs and the DB's 218 absolute URLs were
   rewritten to relative `/photos/`·`/files/` paths, which only Netlify serves. Vercel still runs and its
   text data is live and shared (same Turso DB), but do not treat it as the daily driver any more.
-- **All migration code lives on `netlify-migration-phase-3`, NOT `main`** — deployed by fast-forwarding the
-  Netlify build branch `claude/netlify-migration-plan-8lim9k`. Unrelated owner work still goes to `main`.
-  Every change is env-gated on `netlifyBlobsEnabled()` (`STORAGE=netlify` or the runtime `NETLIFY` signal),
-  so the same commits are dormant on Vercel/local anyway. **Do not merge to `main` before Phase 5.**
-- **Phases 0–4 are complete (2026-07-26). Phase 5 (cutover) is next** — merge to `main`, repoint the
-  cron-job.org reminders + backup jobs and the uptime monitor at the Netlify origin, then the per-device
-  PWA reinstall (finish in-progress drafts on the OLD origin first — drafts are per-origin `localStorage`)
-  and re-enable push. Push notifications get their first real exercise here; VAPID was unset on Netlify
-  by design during the soak.
+- **`main` is the source of truth again** — the migration branch was merged in on 2026-07-26. Everything
+  stays env-gated on `netlifyBlobsEnabled()` (`STORAGE=netlify` or the runtime `NETLIFY` signal), so the
+  same commits remain dormant on Vercel/local. ⚠ **Netlify's production branch may still be
+  `claude/netlify-migration-plan-8lim9k`** — repoint it to `main` in the Netlify UI, or `main` is the
+  source of truth but not what deploys.
+- **Phases 0–5 are complete (2026-07-26). Phase 6 (decommission Vercel) is next**, after a few normal days.
+- **Crons now run on cron-job.org against Netlify**: `searchbook-alert` = reminders, **every 5 minutes**
+  (`*/5 * * * *` — not every minute; see the plan's Appendix A: Netlify's free tier is 300 credits/month
+  and the minutely cadence would have consumed roughly all of it, which **pauses every project** rather
+  than throttling). `searchbook-backup` = daily 04:00 ET, and it authenticates with an
+  `Authorization: Bearer $CRON_SECRET` **header**, so it cannot be tested from a browser address bar.
+  The daily backup also still runs as a Vercel-native cron in `vercel.json` until that project is deleted.
+- **Push works on the phone; the Windows desktop silently doesn't.** FCM returns 201 for the desktop
+  subscription, so the fault is Windows/Chrome-side, not SearchBook's. Push subscriptions are **per-origin**
+  — a subscription made on the Vercel origin can never receive from Netlify, and `reminders.ts` stamps
+  `lastNotifiedAt` **even when delivery fails**, so re-subscribe a device *before* pointing any cron at a
+  new origin or the reminders in that window are silently eaten.
 - **Rollback window is still open until Phase 6 deletes the Vercel Blob store**:
   `node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
   puts the absolute URLs back. Do not delete that store until you are sure.

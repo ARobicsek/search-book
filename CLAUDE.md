@@ -118,11 +118,11 @@ dead — `*.run.app` is blocked at NCQA while `*.netlify.app` is not).
   on 2026-07-26: all 307 blobs were copied into Netlify Blobs and the DB's 218 absolute URLs were
   rewritten to relative `/photos/`·`/files/` paths, which only Netlify serves. Vercel still runs and its
   text data is live and shared (same Turso DB), but do not treat it as the daily driver any more.
-- **`main` is the source of truth again** — the migration branch was merged in on 2026-07-26. Everything
-  stays env-gated on `netlifyBlobsEnabled()` (`STORAGE=netlify` or the runtime `NETLIFY` signal), so the
-  same commits remain dormant on Vercel/local. ⚠ **Netlify's production branch may still be
-  `claude/netlify-migration-plan-8lim9k`** — repoint it to `main` in the Netlify UI, or `main` is the
-  source of truth but not what deploys.
+- **`main` is the source of truth AND what deploys** — the migration branch was merged in on 2026-07-26,
+  and **Netlify's production branch is confirmed pointed at `main`** (verified 2026-07-27 by a push to
+  `main` reaching the live site). A plain `git push origin main` is the deploy. Everything stays env-gated
+  on `netlifyBlobsEnabled()` (`STORAGE=netlify` or the runtime `NETLIFY` signal), so the same commits
+  remain dormant on Vercel/local.
 - **Phases 0–5 are complete (2026-07-26). Phase 6 (decommission Vercel) is next**, after a few normal days.
 - **Crons now run on cron-job.org against Netlify**: `searchbook-alert` = reminders, **every 5 minutes**
   (`*/5 * * * *` — not every minute; see the plan's Appendix A: Netlify's free tier is 300 credits/month

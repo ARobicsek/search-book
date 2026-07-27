@@ -7,7 +7,8 @@ here.
 
 ## ▶ START HERE NEXT SESSION — the migration is DONE; **Phase 6 (decommission Vercel) after a few normal days**
 
-**🎉 SearchBook now runs on Netlify.** `main` is the source of truth, Netlify deploys from `main`, and
+**🎉 SearchBook now runs on Netlify.** `main` is the source of truth, Netlify deploys from `main` (**confirmed
+2026-07-27** — a push to `main` reached the live site, so `git push origin main` *is* the deploy), and
 Phases 0–5 are all complete (2026-07-26). **`searchbook-three.vercel.app` must not be used — its images
 are broken** (the DB now stores relative `/photos/`·`/files/` paths, which only Netlify serves).
 
@@ -42,6 +43,49 @@ the Vercel Blob store, and that is what makes this reversible:
 
 After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated on decisions D5–D9
 (don't push on those until the owner raises them).
+
+---
+
+### What Was Just Completed — Duplicate org "created with an at-mention": root-caused + 3 fixes; both dupes merged (2026-07-27)
+
+Owner posted two screenshots of **Peterson Center on Healthcare** — one with a "Mentioned in Meetings" card,
+one orphaned — and asked why the at-mention had made a duplicate. **One commit to `main`, `58373e1`,
+schema-free.** Owner merged both duplicate pairs afterwards and confirmed the result.
+
+**The fingerprint that cracked it: `CompanyStatusHistory`.** `POST /companies` and `/companies/resolve` write a
+history row; `POST /mentions/:id/create-company` doesn't. So id **902** (`hist=1 men=0`, Jul 21 19:41:37) was
+created normally and id **911** (`hist=0 men=1`, 19:52:21) came from the Mentions page 11 minutes later. Keep
+this trick — it identifies a mention-created org instantly.
+
+**Why it happened:** the notes were written **Jul 17**, when the org didn't exist, so the `@` picker inserted a
+loose `[@Peterson Center on Healthcare](#org-mention)`. The owner created the org normally on Jul 21. **Nothing
+retro-binds a loose token** — it's inert text — so the Mentions page still offered "Create", and that route
+called `tx.company.create` **blind**. A sweep found the same signature on **Battelle** (655 + 917), and a third
+latent one (`@Yale CORE` loose while company 855 existed) that would have duplicated on the next click. No
+duplicate contacts.
+
+**Three fixes:**
+1. **create-company / create-contact are find-or-create** — `resolveExistingCompanyByName` (the helper behind
+   `POST /companies/resolve`, so it also honors prior merge decisions) plus a new contact counterpart. They
+   return `linked: true` when they bind, and the toast says "Linked to existing …".
+2. ⚠ **`runCompanyMerge` now rewrites `(/companies/N)` tokens + re-syncs**, mirroring `runContactMerge`. This
+   had to ship **before** the owner merged anything: `ConversationMention.companyId` is `onDelete: SetNull`, so
+   without it the merge was **silently lossy** — the prose kept a dead link, the next save degraded it to a
+   *loose* mention, and "Create" reappeared to re-mint the duplicate just merged away.
+3. **New `POST /mentions/:id/link`** + "Link to existing…" inline picker on the Mentions page, for near-misses
+   an exact match can't reach (note reads "Peterson Health", org filed as "Peterson Center on Healthcare").
+   Candidates match by **AND-of-tokens**; the token's display text is left alone so the prose keeps the owner's
+   wording while the chip shows the canonical name.
+
+**Verified against a copy of the real data, then restored** — `dev.db` was byte-restored from a scratchpad
+backup and left exactly as found. Binding `@Yale CORE` returned `linked: true` with the company count unchanged
+at 877; merging 911 into 902 rewrote the note, rebound the mention and left **zero** dangling
+`/companies/911` refs; all four `/link` guards return the right 400/404. `prepush` + **full `npm run build`**
+green.
+
+**Could not do the production cleanup directly** — the committed Turso token is stale (401) and the prod API
+needs `APP_PASSWORD` — so it was handed to the owner via the Duplicates page (both pairs confirmed detected
+there). Owner ran the merges. Not an NCQA-adaptation-plan task, so no task STATUS line changed.
 
 ---
 

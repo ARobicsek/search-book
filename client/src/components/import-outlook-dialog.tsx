@@ -237,7 +237,13 @@ export function ImportOutlookDialog({
             <Button
               key={p}
               size="sm"
-              variant={preset === p ? 'secondary' : 'ghost'}
+              // `secondary` here was near-invisible: it is oklch(0.97) against an
+              // oklch(1) dialog, a 3% lightness difference that some displays lose
+              // entirely. The view-switchers that use secondary/ghost sit inside a
+              // bordered container which carries the grouping; these don't, so the
+              // selected state has to carry it alone. `default`/`outline` matches
+              // how contact-list marks an active filter, which is what these are.
+              variant={preset === p ? 'default' : 'outline'}
               className="h-7"
               onClick={() => choosePreset(p)}
             >

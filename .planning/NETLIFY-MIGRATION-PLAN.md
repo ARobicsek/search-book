@@ -561,7 +561,11 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
      cron-job.org ping to `/api/health` every few min to keep the Lambda + Turso connection warm),
      deferred to Phase 5 cron; offered to owner, not yet wired. Owner has **not** yet confirmed the live
      self-heal (idle the app ~2 min, then search "karen" fresh → should render on its own, no manual retry).
-     **→ CONFIRMED RESOLVED by the owner 2026-07-26.**
+     **→ CONFIRMED RESOLVED by the owner 2026-07-26.** ⚠ **RECURRED 2026-07-28 — see bug #12 (§8.5).**
+     The self-heal above treated the symptom: it retried a request that was structurally too big for a
+     10 s runtime. Two days of real use on the phone (where the retry also ran out of budget) brought it
+     straight back. #12 splits the fan-out so each entity group is its own request; *that* is the fix, and
+     this entry is only the mitigation that preceded it.
   5. **Clicking a meeting attachment opened the DASHBOARD instead of the file (Netlify runtime bug #10).**
      Uploading worked; the chip's link didn't. **Root cause: the PWA service worker's SPA
      navigate-fallback.** `vite-plugin-pwa` generates
@@ -632,7 +636,7 @@ Settings backups (server + browser-direct), PWA install/offline/update. Watch `[
 | Undo delete | ✅ |
 | Settings backups: manual backup **and restore** | ✅ (+ the full offline restore drill, 2026-07-26) |
 | PWA install, mobile layout | ✅ iPhone |
-| Global search timings normal / self-heal | ✅ (bug #9 confirmed resolved) |
+| Global search timings normal / self-heal | ✅ (bug #9 confirmed resolved) — ⚠ but it **recurred on the phone 2026-07-28**; structurally fixed as bug #12 (§8.5). A green tick here meant "self-heals", not "fits the budget" |
 
 ### ✅ Phase 3 COMPLETE — gate GREEN (2026-07-26)
 
@@ -904,6 +908,51 @@ failure notifications serves that role.
    proxy, function timeout note + LinkedIn decision), `AGENTS.md` (session-end deploy step), and move
    `VERCEL-EXIT-PLAN.md` + this plan to `.planning/archive/`.
 5. Delete the temp env-values file.
+
+---
+
+## 8.5 Post-cutover runtime bugs (found while living on Netlify)
+
+7. **Global search hung on the phone and then silently blanked (Netlify runtime bug #12) — FIXED &
+   OWNER-CONFIRMED 2026-07-28, `1c6d7c1` on `main`.** This is **bug #9 again, at its root.** The
+   2026-07-23 fix (client auto-retry on 502/503, app-level 504 at 9 s) made a cold search *self-heal*;
+   it did not make the request fit. Two days into normal use the owner reported from an iPhone that
+   global search spun for several seconds and then just stopped, while the **contacts and meetings page
+   searches kept working**. Nothing in the search code had changed since 2026-07-21 (`c7df6f3`) — the
+   move to a 10 s runtime is what pushed it over.
+   **Root cause: `/api/search` was the one endpoint that answered a query by fanning out across all
+   eight scopes in a SINGLE function invocation** — six multi-table queries, each with nested relation
+   loads plus a COUNT. That fit Vercel's 30 s and not Netlify's hard 10 s. The page searches survived
+   because each is one narrow query. It compounded with a **silent failure**: `search.tsx`'s
+   `catch {}` turned every error into `results = null`, so there was no message and no retry — exactly
+   the "spinner that stops" the owner saw.
+   **Fix (client-only; the server already accepted `scopes`, so matching/ranking/totals are unchanged —
+   verified that the union of the six responses equals what the combined request returned):**
+   - The search page issues **one request per entity group** (`SEARCH_GROUPS` in `pages/search.tsx`):
+     people / orgs / meetings / @-mentions / actions / ideas. Every group gets the full 9 s budget, they
+     run in parallel across invocations instead of sharing one, and results **paint as they land**.
+   - A group that fails is **named on screen with its reason and a Retry** that re-runs only that group.
+     "No results found" is withheld while anything is in flight or has failed.
+   - A superseded search **aborts** its in-flight requests (`api.get(path, { signal })` →
+     `AbortedError`, never retried). Without it every debounced keystroke left six requests running.
+   - The **URL-sync effect and the search effect were split**: `setSearchParams` is re-memoized on every
+     URL change, so with both in one effect each search ran **twice** — harmless at one request, not at six.
+   - The **command palette** now requests only the four groups it lists; it was pulling `meetings` and
+     `mentions` — the two heaviest scopes — and discarding them.
+   **Diagnosis aid this leaves behind:** each request now logs its own
+   `[TIMING] search … scopes=meetings → Nms`, so the function logs say **which group** is slow instead of
+   only reporting a total.
+   **Verified** locally against a seeded DB at **390 px** in Chromium: all six groups render with correct
+   per-tab totals; a forced 502 on one group shows the banner and Retry recovers it; forced 504s on all
+   six report all six instead of blanking; a superseded search cancels its six requests; the @-mention
+   pin still asks only the mentions group and resolves its chip; tag-only search and the empty-result
+   copy still work. `prepush` + full `npm run build` green. ⚠ Could **not** measure production — this
+   container's network policy blocks `ari-search-book.netlify.app` — so the root cause is read from the
+   code, not from prod timings.
+   **Residual:** if one group *alone* still exceeds 9 s on the real data (224+ meetings with long Copilot
+   recaps make `meetings`/`mentions` the candidates), that group now fails **visibly with its name** rather
+   than taking the search down. The keep-warm ping offered under bug #9 and declined is still the durable
+   cure for cold-start slowness.
 
 ---
 

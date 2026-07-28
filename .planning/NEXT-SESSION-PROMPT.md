@@ -27,6 +27,7 @@ the Vercel Blob store, and that is what makes this reversible:
 | Backup job alert threshold | `searchbook-backup` notifies after **3** failures = 3 days of silent backup failure. Owner may want 1. |
 | Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |
 | Vercel-native backup cron | Still in `vercel.json`, still writing to Vercel Blob daily until the project is deleted. Harmless extra net. |
+| Global search: does any **single** group still time out? | Global search now runs one request per entity group (bug #12, `1c6d7c1`). If one group *alone* still exceeds Netlify's 9 s app-504 on the real data, the page names it in an amber banner with a Retry — ask the owner whether they've seen one, and check the per-group `[TIMING] search … scopes=<group> → Nms` lines in the function logs. `meetings`/`mentions` are the likely candidates (224+ meetings, long Copilot recaps). The declined **keep-warm ping** (bug #9) is still the cure for cold-start slowness. |
 
 ### Phase 6 = (§8)
 
@@ -43,6 +44,54 @@ the Vercel Blob store, and that is what makes this reversible:
 
 After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated on decisions D5–D9
 (don't push on those until the owner raises them).
+
+---
+
+### What Was Just Completed — Global search timed out on the phone: fanned the request out per entity group (Netlify bug #12) (2026-07-28)
+
+Owner reported from an iPhone, out of the office: global search spins for a few seconds and then **just
+stops** — while **contacts and meetings page search kept working**. **One commit to `main`, `1c6d7c1`,
+schema-free, client-only. Owner confirmed live: "It works great!"**
+
+**This is bug #9 again, at its root** (`NETLIFY-MIGRATION-PLAN.md` §8.5 for the full record). The
+2026-07-23 fix made a cold search *self-heal*; it never made the request **fit** a 10 s runtime. Nothing
+in the search code had changed since 2026-07-21 — the cutover to Netlify is what moved it over the line,
+and it probably tested fine on 07-26 because the function was warm from active use.
+
+**Root cause:** `/api/search` was the one endpoint that answered a query by fanning out across **all
+eight scopes inside a single function invocation** — six multi-table queries, each with nested relation
+loads plus a COUNT. Vercel's 30 s hid it; Netlify's hard 10 s (app.ts fires its own 504 at 9 s) did not.
+The *page* searches survived because each is one narrow query — which is exactly the split the owner
+observed. It compounded with a **silent failure**: `search.tsx`'s `catch {}` turned every error into
+`results = null`, so there was no message and no retry. That is the spinner that stops.
+
+**The fix (server untouched — it already accepted `scopes`):**
+1. **One request per entity group** — people / orgs / meetings / @-mentions / actions / ideas
+   (`SEARCH_GROUPS` in `pages/search.tsx`). Each gets the full 9 s, they run in parallel across
+   invocations, and results **paint as they land**. Matching/ranking/totals are identical: verified that
+   the union of the six responses equals what the combined request returned.
+2. **Failures are visible** — a failed group is named with its reason and a **Retry** that re-runs only
+   that group. "No results found" is withheld while anything is in flight or has failed (otherwise it is
+   a claim the search can't back up).
+3. **Superseded searches abort** their in-flight requests — `api.get(path, { signal })` rejects with
+   `AbortedError` and is never retried. Without it, each debounced keystroke left six requests running.
+4. ⚠ **Split the URL-sync effect from the search effect.** `setSearchParams` is re-memoized on every URL
+   change, so with both jobs in one effect **every search ran twice** — a pre-existing waste that was
+   harmless at 1 request/search and is not at 6.
+5. The **command palette** asks only for the four groups it lists; it was pulling `meetings` and
+   `mentions` — the two heaviest scopes — and throwing them away.
+
+**Verified** locally (seeded `dev.db`, Chromium at **390 px**): six groups render with correct per-tab
+totals; a forced 502 on one group shows the banner and Retry recovers it; forced 504s on all six report
+all six instead of blanking; a superseded search cancels its six requests; the @-mention pin still asks
+only the mentions group and resolves its chip; tag-only search and empty-result copy still work.
+`prepush` + full `npm run build` green. ⚠ **Production could not be measured** — this container's network
+policy blocks `ari-search-book.netlify.app` (403 on CONNECT) — so the diagnosis is from the code.
+
+**What this leaves for next time:** each request now logs `[TIMING] search … scopes=<group> → Nms`, so
+the function logs name **which group** is slow. If one group alone still blows the 9 s budget it fails
+visibly instead of taking the search down — see the carry-over table above. Not an NCQA-adaptation-plan
+task, so no task STATUS line changed.
 
 ---
 

@@ -140,7 +140,11 @@ dead — `*.run.app` is blocked at NCQA while `*.netlify.app` is not).
   `node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
   puts the absolute URLs back. Do not delete that store until you are sure.
 - Netlify's function timeout is a hard **10 s** (vs Vercel's 30 s), which is why `app.ts` fires its own 504 at
-  9 s under `NETLIFY` and the client auto-retries transient 5xx. Design endpoints accordingly.
+  9 s under `NETLIFY` and the client auto-retries transient 5xx. Design endpoints accordingly — and note that
+  auto-retry only helps a request that *fits* the budget: global search didn't, and had to be **split into one
+  request per entity group** (see "Global search fans out ONE REQUEST PER ENTITY GROUP" under UI Patterns; the
+  full record is bug #12 in `NETLIFY-MIGRATION-PLAN.md` §8.5). **A request that needs more than ~9 s of work
+  must be decomposed, not retried.**
 
 ## Current Status
 

@@ -100,6 +100,83 @@ const SCOPE_OPTIONS: { value: SearchScope; label: string }[] = [
 ]
 const ALL_SCOPES = SCOPE_OPTIONS.map((s) => s.value)
 
+// ─── Fan-out groups ─────────────────────────────────────────
+// One request carrying all eight scopes made the server run six multi-table query
+// waves (each with its own nested relation loads and COUNT) inside a SINGLE function
+// invocation. Netlify's cap is a hard 10s — app.ts fires its own 504 at 9s — so on a
+// cold/slow connection the whole search died and the page silently blanked. Vercel's
+// 30s ceiling had hidden that.
+//
+// Each entity type is now its own request: every group gets the full 9s budget, they
+// run in parallel across invocations instead of sharing one, results paint as they
+// land, and one slow group can no longer take the rest of the search down with it.
+// The server already accepts `scopes`, so nothing about matching or ranking changes.
+type GroupKey = 'people' | 'orgs' | 'meetings' | 'mentions' | 'actions' | 'ideas'
+
+const SEARCH_GROUPS: { key: GroupKey; label: string; scopes: SearchScope[] }[] = [
+  { key: 'people', label: 'People', scopes: ['people-profile', 'people-notes', 'useful'] },
+  { key: 'orgs', label: 'Organizations', scopes: ['orgs'] },
+  { key: 'meetings', label: 'Meetings', scopes: ['meetings'] },
+  { key: 'mentions', label: '@-Mentions', scopes: ['mentions'] },
+  { key: 'actions', label: 'Actions', scopes: ['actions'] },
+  { key: 'ideas', label: 'Ideas', scopes: ['ideas'] },
+]
+
+const emptyResult = (query: string): SearchResult => ({
+  query,
+  terms: [],
+  totals: { contacts: 0, companies: 0, actions: 0, ideas: 0, conversations: 0, mentions: 0 },
+  contacts: [],
+  companies: [],
+  actions: [],
+  ideas: [],
+  conversations: [],
+  mentions: [],
+  mention: null,
+})
+
+// Fold one group's response into the accumulated result. Every response echoes the
+// same query/terms (the server parses them per request), so those are just carried
+// over; only the group's own rows and total are taken from it.
+function mergeGroup(base: SearchResult, key: GroupKey, res: SearchResult): SearchResult {
+  const next: SearchResult = {
+    ...base,
+    query: res.query || base.query,
+    terms: res.terms?.length ? res.terms : base.terms,
+  }
+  const totals = { ...(next.totals ?? emptyResult('').totals!) }
+  switch (key) {
+    case 'people':
+      next.contacts = res.contacts ?? []
+      totals.contacts = res.totals?.contacts ?? next.contacts.length
+      break
+    case 'orgs':
+      next.companies = res.companies ?? []
+      totals.companies = res.totals?.companies ?? next.companies.length
+      break
+    case 'meetings':
+      next.conversations = res.conversations ?? []
+      totals.conversations = res.totals?.conversations ?? next.conversations.length
+      break
+    case 'mentions':
+      next.mentions = res.mentions ?? []
+      totals.mentions = res.totals?.mentions ?? next.mentions.length
+      // The picked @-mention's resolved display name only comes back on this request.
+      next.mention = res.mention ?? null
+      break
+    case 'actions':
+      next.actions = res.actions ?? []
+      totals.actions = res.totals?.actions ?? next.actions.length
+      break
+    case 'ideas':
+      next.ideas = res.ideas ?? []
+      totals.ideas = res.totals?.ideas ?? next.ideas.length
+      break
+  }
+  next.totals = totals
+  return next
+}
+
 const SORT_OPTIONS: { value: SearchSort; label: string }[] = [
   { value: 'relevance', label: 'Relevance' },
   { value: 'newest', label: 'Newest first' },
@@ -801,7 +878,11 @@ export function SearchPage() {
   const [mentionIndex, setMentionIndex] = useState(0)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [results, setResults] = useState<SearchResult | null>(null)
-  const [loading, setLoading] = useState(false)
+  // Which per-group requests are still in flight, and which ones failed (with why).
+  // A group that fails is REPORTED now — the old single request swallowed every error
+  // into `results = null`, which on the phone looked like a spinner that just stopped.
+  const [pendingGroups, setPendingGroups] = useState<GroupKey[]>([])
+  const [groupErrors, setGroupErrors] = useState<Partial<Record<GroupKey, string>>>({})
   const [expandedEntity, setExpandedEntity] = useState<string | null>(null)
   const [tab, setTab] = useState('all')
   // Meeting whose full contents are shown in the expanded detail dialog (null = closed).
@@ -918,47 +999,99 @@ export function SearchPage() {
 
   // Track the latest search request to discard stale responses
   const currentSearchRef = React.useRef('')
+  // Every in-flight group request for the current search, so a superseded search can
+  // cancel them. Without this, each debounced keystroke left its six requests running
+  // to completion — six abandoned function invocations per keystroke.
+  const inFlightRef = React.useRef<AbortController[]>([])
 
-  const doSearch = useCallback(async (searchTerm: string, scopeList: SearchScope[], sortMode: SearchSort, cs: boolean, tagList: number[], mentionKey: string | null) => {
+  /**
+   * Run a search as one request per entity group (see SEARCH_GROUPS). Pass
+   * `onlyGroups` to re-run just the groups that failed, leaving the rest in place.
+   */
+  const doSearch = useCallback(async (
+    searchTerm: string,
+    scopeList: SearchScope[],
+    sortMode: SearchSort,
+    cs: boolean,
+    tagList: number[],
+    mentionKey: string | null,
+    onlyGroups?: GroupKey[]
+  ) => {
+    const isRetry = !!onlyGroups
+    if (!isRetry) {
+      for (const c of inFlightRef.current) c.abort()
+      inFlightRef.current = []
+    }
+
     // A tag filter or a picked @-mention is enough to search on its own — no text required.
     if (searchTerm.length < 2 && tagList.length === 0 && !mentionKey) {
       currentSearchRef.current = ''
       setResults(null)
-      setLoading(false)
+      setPendingGroups([])
+      setGroupErrors({})
       return
     }
-    const params = new URLSearchParams({
-      limit: '20',
-      sort: sortMode,
-    })
-    if (searchTerm.length >= 2) params.set('q', searchTerm)
-    if (tagList.length) params.set('tagIds', tagList.join(','))
-    if (mentionKey) params.set('mention', mentionKey)
-    // Related entities are now lazy-loaded per card via /search/related/:type/:id
-    // (see loadRelated) — keeping them off the hot path is the ~20s search fix.
-    if (scopeList.length < ALL_SCOPES.length) params.set('scopes', scopeList.join(','))
-    if (cs) params.set('caseSensitive', 'true')
-    const requestKey = params.toString()
+
+    const base = new URLSearchParams({ limit: '20', sort: sortMode })
+    if (searchTerm.length >= 2) base.set('q', searchTerm)
+    if (tagList.length) base.set('tagIds', tagList.join(','))
+    if (mentionKey) base.set('mention', mentionKey)
+    if (cs) base.set('caseSensitive', 'true')
+
+    // A picked @-mention pins the search to the mentions index — the server forces that
+    // scope too, so the other groups have nothing to contribute and aren't requested.
+    const effective: SearchScope[] = mentionKey ? ['mentions'] : scopeList
+    let groups = SEARCH_GROUPS
+      .map((g) => ({ ...g, scopes: g.scopes.filter((s) => effective.includes(s)) }))
+      .filter((g) => g.scopes.length > 0)
+    if (onlyGroups) groups = groups.filter((g) => onlyGroups.includes(g.key))
+    if (groups.length === 0) return
+
+    // Identifies the search (not the individual request) so a group response can tell
+    // whether it still belongs to what the user is looking at.
+    const requestKey = `${base.toString()}|${effective.join(',')}`
+    const controller = new AbortController()
+    inFlightRef.current = isRetry ? [...inFlightRef.current, controller] : [controller]
     currentSearchRef.current = requestKey
-    setLoading(true)
-    try {
-      const data = await api.get<SearchResult>(`/search?${requestKey}`)
-      // Discard response if a newer search has since been started
-      if (currentSearchRef.current === requestKey) {
-        setResults(data)
+
+    const keys = groups.map((g) => g.key)
+    if (!isRetry) setResults(null)
+    setGroupErrors((prev) =>
+      isRetry
+        ? Object.fromEntries(Object.entries(prev).filter(([k]) => !keys.includes(k as GroupKey)))
+        : {}
+    )
+    setPendingGroups((prev) => (isRetry ? Array.from(new Set([...prev, ...keys])) : keys))
+
+    await Promise.all(groups.map(async (g) => {
+      const params = new URLSearchParams(base)
+      params.set('scopes', g.scopes.join(','))
+      try {
+        // Related entities stay lazy-loaded per card via /search/related/:type/:id
+        // (see loadRelated) — keeping them off the hot path is the ~20s search fix.
+        const data = await api.get<SearchResult>(`/search?${params}`, { signal: controller.signal })
+        if (currentSearchRef.current !== requestKey) return
+        setResults((prev) => mergeGroup(prev ?? emptyResult(searchTerm), g.key, data))
+      } catch (error) {
+        // An abort means the user moved on, not a failure worth reporting.
+        if (controller.signal.aborted || currentSearchRef.current !== requestKey) return
+        const message = error instanceof Error ? error.message : 'Request failed'
+        setGroupErrors((prev) => ({ ...prev, [g.key]: message }))
+      } finally {
+        if (currentSearchRef.current === requestKey) {
+          setPendingGroups((prev) => prev.filter((k) => k !== g.key))
+        }
       }
-    } catch {
-      if (currentSearchRef.current === requestKey) {
-        setResults(null)
-      }
-    } finally {
-      if (currentSearchRef.current === requestKey) {
-        setLoading(false)
-      }
-    }
+    }))
   }, [])
 
-  // URL is shareable state; localStorage carries the defaults forward
+  // Cancel anything still running when the page unmounts.
+  useEffect(() => () => {
+    for (const c of inFlightRef.current) c.abort()
+    inFlightRef.current = []
+  }, [])
+
+  // URL is shareable state; localStorage carries the defaults forward.
   useEffect(() => {
     const next = new URLSearchParams()
     if (debouncedQuery) next.set('q', debouncedQuery)
@@ -971,8 +1104,15 @@ export function SearchPage() {
     if (caseSensitive) next.set('cs', '1')
     setSearchParams(next, { replace: true })
     localStorage.setItem(PREFS_KEY, JSON.stringify({ sort, caseSensitive }))
+  }, [debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter, allScopesOn, setSearchParams])
+
+  // Searching is a SEPARATE effect from the URL sync above, which is what keeps it to
+  // one wave per change: `setSearchParams` is re-memoized on every URL change, so with
+  // both jobs in one effect the URL write above re-triggered the effect and every
+  // search ran twice. Harmless at one request per search; not at six.
+  useEffect(() => {
     doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter?.key ?? null)
-  }, [debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter, allScopesOn, setSearchParams, doSearch])
+  }, [debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter, doSearch])
 
   // Load query from URL on mount
   useEffect(() => {
@@ -1002,6 +1142,21 @@ export function SearchPage() {
   const refresh = useCallback(() => {
     doSearch(debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter?.key ?? null)
   }, [doSearch, debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter])
+
+  const searching = pendingGroups.length > 0
+  const failedGroups = React.useMemo(
+    () => SEARCH_GROUPS.filter((g) => groupErrors[g.key]),
+    [groupErrors]
+  )
+
+  // Re-run only the groups that failed, so the results already on screen stay put.
+  const retryFailed = useCallback(() => {
+    if (failedGroups.length === 0) return
+    doSearch(
+      debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter?.key ?? null,
+      failedGroups.map((g) => g.key)
+    )
+  }, [doSearch, debouncedQuery, scopes, sort, caseSensitive, tagFilter, mentionFilter, failedGroups])
 
   const ev: EvidenceProps = {
     terms: results?.terms || (debouncedQuery ? [debouncedQuery] : []),
@@ -1171,22 +1326,56 @@ export function SearchPage() {
         </div>
       </div>
 
-      {/* Loading state */}
-      {loading && (
+      {/* Loading. Groups arrive independently, so the full-page spinner only holds the
+          screen until the FIRST one lands; after that results render and a slim line
+          says the rest are still coming. */}
+      {searching && (!results || totalResults(results) === 0) && (
         <div className="flex justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       )}
+      {searching && results && totalResults(results) > 0 && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Still searching {pendingGroups.length === 1 ? '1 more area' : `${pendingGroups.length} more areas`}…
+        </p>
+      )}
+
+      {/* A group that failed says so — and can be retried on its own. Previously any
+          failure (typically the Netlify 10s function cap) blanked the page with no
+          message: the spinner just stopped. */}
+      {failedGroups.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="font-medium">
+            {failedGroups.length === 1 ? 'One area of the search didn’t load' : `${failedGroups.length} areas of the search didn’t load`}
+          </p>
+          <ul className="mt-1 space-y-0.5 text-xs">
+            {failedGroups.map((g) => (
+              <li key={g.key}>{g.label}: {groupErrors[g.key]}</li>
+            ))}
+          </ul>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2 h-7 border-amber-400 bg-white text-xs"
+            onClick={retryFailed}
+            disabled={searching}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* No query */}
-      {!loading && !results && !hasCriteria && (
+      {!searching && !results && !hasCriteria && failedGroups.length === 0 && (
         <p className="text-center text-muted-foreground py-8">
           Enter at least 2 characters, pick a tag, or type <span className="font-mono">@</span> to find an @-mention
         </p>
       )}
 
-      {/* No results */}
-      {!loading && results && totalResults(results) === 0 && (
+      {/* No results. Withheld while anything is still in flight or a group failed —
+          "nothing found" would otherwise be a claim the search can't back up. */}
+      {!searching && results && totalResults(results) === 0 && failedGroups.length === 0 && (
         <p className="text-center text-muted-foreground py-8">
           No {mentionFilter ? 'meetings' : 'results'} found
           {mentionFilter ? ` that @-mention ${mentionLabel}` : ''}
@@ -1196,8 +1385,8 @@ export function SearchPage() {
         </p>
       )}
 
-      {/* Results */}
-      {!loading && results && totalResults(results) > 0 && (
+      {/* Results — rendered as soon as any group has landed, not only when all have. */}
+      {results && totalResults(results) > 0 && (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="all">

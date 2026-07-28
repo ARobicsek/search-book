@@ -125,7 +125,14 @@ function CommandPaletteInner({ open, setOpen }: { open: boolean; setOpen: (open:
   useEffect(() => {
     if (debouncedQuery.length >= 2) {
       setIsSearching(true)
-      api.get<SearchResult>(`/search?q=${encodeURIComponent(debouncedQuery)}&limit=5&includeRelated=false`)
+      // Only the four groups this palette actually lists. Leaving `scopes` off asked the
+      // server for meetings + @-mentions too — the two heaviest scopes — whose results
+      // were then thrown away, and on Netlify's 10s function cap that dead weight is
+      // what pushes the request over.
+      api.get<SearchResult>(
+        `/search?q=${encodeURIComponent(debouncedQuery)}&limit=5&includeRelated=false` +
+        `&scopes=people-profile,people-notes,useful,orgs,actions,ideas`
+      )
         .then(setSearchResults)
         .catch(() => setSearchResults(null))
         .finally(() => setIsSearching(false))

@@ -15,9 +15,27 @@ export class ApiError extends Error {
   }
 }
 
+/** Thrown when the CALLER aborted (superseded search, unmounted view) — not a failure. */
+export class AbortedError extends Error {
+  constructor() {
+    super('Request aborted');
+    this.name = 'AbortedError';
+  }
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  // A caller-supplied signal (options.signal) cancels the request too, but has to be
+  // told apart from our own timeout below — one is "the user moved on", the other is
+  // a real failure worth retrying/reporting. AbortSignal.any() would do this in one
+  // line but isn't in older mobile Safari, so chain it by hand.
+  const external = options.signal ?? undefined;
+  const onExternalAbort = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener('abort', onExternalAbort, { once: true });
+  }
   // Attach the shared password header to every request (all verbs + uploadFile).
   const headers: Record<string, string> = { ...(options.headers as Record<string, string> | undefined) };
   const pw = localStorage.getItem(PASSWORD_STORAGE_KEY);
@@ -28,14 +46,16 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}) {
       headers,
       signal: controller.signal,
     });
-    clearTimeout(id);
     return response;
   } catch (error) {
-    clearTimeout(id);
     if (error instanceof Error && error.name === 'AbortError') {
+      if (external?.aborted) throw new AbortedError();
       throw new Error('Request timed out. Is the server running?');
     }
     throw error;
+  } finally {
+    clearTimeout(id);
+    external?.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -54,10 +74,16 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export const api = {
-  get<T>(path: string): Promise<T> {
-    return fetchWithTimeout(`${API_BASE}${path}`)
+  /**
+   * `opts.signal` lets a caller cancel a request it no longer wants (a superseded
+   * search). An aborted GET rejects with AbortedError and is NEVER retried — it
+   * didn't fail, it was withdrawn.
+   */
+  get<T>(path: string, opts?: { signal?: AbortSignal }): Promise<T> {
+    return fetchWithTimeout(`${API_BASE}${path}`, { signal: opts?.signal })
       .then(handleResponse<T>)
       .catch((error) => {
+        if (error instanceof AbortedError) throw error;
         // Auto-retry GET requests once on a timeout or a transient upstream 5xx.
         // GETs are idempotent, so a second attempt is safe. The retry usually lands
         // on a now-warm serverless instance and succeeds.
@@ -70,7 +96,7 @@ export const api = {
         const isRetryable = error.message.includes('timed out') || [500, 502, 503, 504].includes(status);
         if (isRetryable) {
           console.log(`[api] Retrying GET ${path} after error: ${error.message}`);
-          return fetchWithTimeout(`${API_BASE}${path}`).then(handleResponse<T>);
+          return fetchWithTimeout(`${API_BASE}${path}`, { signal: opts?.signal }).then(handleResponse<T>);
         }
         throw error;
       });

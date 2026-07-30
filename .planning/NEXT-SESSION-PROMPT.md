@@ -27,6 +27,7 @@ the Vercel Blob store, and that is what makes this reversible:
 | Backup job alert threshold | `searchbook-backup` notifies after **3** failures = 3 days of silent backup failure. Owner may want 1. |
 | Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |
 | Vercel-native backup cron | Still in `vercel.json`, still writing to Vercel Blob daily until the project is deleted. Harmless extra net. |
+| Contact edit form overflows at 390 px | Noticed 2026-07-30 while re-testing mobile: `/contacts/:id/edit` has 78 elements reaching `right=451` in a 390 px viewport (the `sm:col-span-2` fields in the Basic Info card). Pre-existing — confirmed by stash-and-remeasure. Not reported by the owner; ask before spending time on it. |
 | Global search: does any **single** group still time out? | Global search now runs one request per entity group (bug #12, `1c6d7c1`). If one group *alone* still exceeds Netlify's 9 s app-504 on the real data, the page names it in an amber banner with a Retry — ask the owner whether they've seen one, and check the per-group `[TIMING] search … scopes=<group> → Nms` lines in the function logs. `meetings`/`mentions` are the likely candidates (224+ meetings, long Copilot recaps). The declined **keep-warm ping** (bug #9) is still the cure for cold-start slowness. |
 
 ### Phase 6 = (§8)
@@ -44,6 +45,37 @@ the Vercel Blob store, and that is what makes this reversible:
 
 After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated on decisions D5–D9
 (don't push on those until the owner raises them).
+
+---
+
+### What Was Just Completed — The autosave "Saved" flash jittered the Quick Log dialog (2026-07-30)
+
+Owner: typing in the meeting Notes box, every autosave made the dialog shift a little — distracting, but
+they **want to keep the indicator**. **One commit to `main`, `4ea2ca9`, schema-free, client-only**
+(`client/src/components/save-status.tsx` — the shared indicator, so all 10 call sites get the fix).
+
+**Cause, measured in Chromium rather than guessed:** `SaveStatusIndicator` returned `null` when idle, so
+each autosave cycle *mounted and unmounted* it. Its 20 px line box (a 16 px icon in a `text-sm` row) next
+to the dialog title's `leading-none` **18 px** grew the header row to 20 px for the ~2.5 s flash. Sampling
+the geometry through a real save cycle: the Notes field's viewport top went **660.27 → 662.27 → back**,
+every ~1.5 s while typing. Small, and that is exactly why it reads as jitter rather than as movement.
+
+**Fix:** stack all three states (`saving`/`saved`/`error`) in **one grid cell** (`col-start-1 row-start-1`)
+and cross-fade with opacity. The box is then the size of the longest label in every state including idle,
+so nothing moves — and the `transition-opacity duration-300` that was already in the class list finally
+does something, since the element no longer unmounts. Inactive layers get `aria-hidden`; the spinner only
+animates when it is the active one.
+
+**Verified:** same sampler over a full idle → saving → saved → idle cycle now shows dialog top, dialog
+height, header-row height and Notes top **all constant**. Checked at 390 px (no overflow; the header row
+is 308.7 px holding a 155.3 px title + 88.3 px indicator) and desktop; the reserved width is harmless
+because every call site puts the indicator in a right-aligned or `justify-between` group. `prepush` +
+full `npm run build` green. Test meeting created during the check was deleted from `dev.db`.
+
+⚠ **Noticed, not fixed (pre-existing, unrelated):** the **contact edit form overflows horizontally at
+390 px** — 78 elements reach `right=451` inside a 390 px viewport (the `sm:col-span-2` fields in the
+Basic Info card). Confirmed pre-existing by stashing this change and re-measuring: identical. Worth a
+look next time.
 
 ---
 

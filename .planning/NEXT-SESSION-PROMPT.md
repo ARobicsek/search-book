@@ -53,6 +53,7 @@ After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated 
 Owner: typing in the meeting Notes box, every autosave made the dialog shift a little — distracting, but
 they **want to keep the indicator**. **One commit to `main`, `4ea2ca9`, schema-free, client-only**
 (`client/src/components/save-status.tsx` — the shared indicator, so all 10 call sites get the fix).
+**Owner confirmed live on Netlify: "fixed".**
 
 **Cause, measured in Chromium rather than guessed:** `SaveStatusIndicator` returned `null` when idle, so
 each autosave cycle *mounted and unmounted* it. Its 20 px line box (a 16 px icon in a `text-sm` row) next

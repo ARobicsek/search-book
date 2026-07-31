@@ -51,8 +51,8 @@ After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated 
 
 ### What Was Just Completed — Participant picker wiped attendees on Enter; contact photos now editable in place (2026-07-31, s2)
 
-Two owner asks. **Two commits to `main`, both schema-free** (one new route, no new columns). Owner had not yet
-confirmed either on the live site at session end.
+Two owner asks. **Two commits to `main`, `7e60dd6` + `616047f`, both schema-free** (one new route, no new
+columns). **Owner confirmed live on Netlify: "looking great!!"**
 
 **(1) "It's REALLY easy to clear all the participants in a meeting when I try to add a new one."**
 The owner's screenshot *was* the diagnosis: with `Michael Avotins` typed — a name not yet in the CRM — the
@@ -87,7 +87,15 @@ picks); confirm cancels non-destructively; photo paste from a participant row, p
 a second paste **refused** over an existing photo, drag-drop replace, Remove, and the **edit-form uploader
 still working** after the hook refactor. 390 px re-tested on both surfaces. **All test data removed** (2 test
 meetings, the auto-created test contact, 4 test PNGs; Sarah Shih back to no photo). `prepush` + full
-`npm run build` green. Not an NCQA-adaptation-plan task, so no task STATUS line changed.
+`npm run build` green. **Deploy verified rather than assumed:** the live site serves `index-BIWmkygu.js`, the
+same bundle as the local build of the pushed code, and `/api/health` returned `200 {status:ok, db:ok}` after
+the push — the server side booted with the new route. Not an NCQA-adaptation-plan task, so no task STATUS line
+changed.
+
+⚠ **Not exercised on the live site by the agent** (same limitation as the previous two sessions): the driven
+browser profile hits the app-password gate on `ari-search-book.netlify.app`, so every behavioral check above
+ran against the local DB. Owner confirmation is what covers production. On **touch** there is no hover, so the
+photo tile's camera overlay only appears after a tap — worth a glance if the phone feels different from desktop.
 
 ---
 

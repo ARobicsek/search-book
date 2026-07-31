@@ -25,6 +25,7 @@ import {
   conversationDisplayName,
   contactDisplayName,
 } from '@/lib/types'
+import { ContactPhotoTile } from '@/components/contact-photo-tile'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { mentionSnippet } from '@/lib/mentions'
 import { Badge } from '@/components/ui/badge'
@@ -417,17 +418,33 @@ export function ContactDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
+              {/* Avatar + inline photo editor: drop an image on it, Ctrl+V anywhere on
+                  the page while it's still empty, or click for browse/URL — no trip
+                  through Edit. Absolute (http) photoUrl or a relative /photos
+                  photoFile; the latter is served by the media proxy on Netlify (and
+                  express-static in dev). */}
               {(() => {
-                // Absolute (http) photoUrl or a relative /photos photoFile — the latter
-                // is served by the media proxy on Netlify (and express-static in dev).
                 const photoSrc = contact.photoUrl || contact.photoFile || null
-                return photoSrc ? (
-                  <img
-                    src={photoSrc}
-                    alt={contact.name}
-                    className="h-20 w-20 rounded-lg object-cover border"
+                return (
+                  <ContactPhotoTile
+                    contactId={contact.id}
+                    name={contactDisplayName(contact)}
+                    photo={photoSrc}
+                    size="lg"
+                    pagePaste={!photoSrc}
+                    onChange={(next) =>
+                      setContact((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              photoUrl: next && next.startsWith('http') ? next : null,
+                              photoFile: next && !next.startsWith('http') ? next : null,
+                            }
+                          : prev
+                      )
+                    }
                   />
-                ) : null
+                )
               })()}
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">{contactDisplayName(contact)}</h1>

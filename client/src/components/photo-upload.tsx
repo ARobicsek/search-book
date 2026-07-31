@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
-import { api } from '@/lib/api'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { Upload, X, Link as LinkIcon, ImageIcon } from 'lucide-react'
+import { useImageUpload } from '@/hooks/use-image-upload'
 
 interface PhotoUploadProps {
   /** Current photo path (e.g. "/photos/abc.jpg") or URL */
@@ -21,83 +21,19 @@ export function PhotoUpload({
   label = 'Photo',
   disabled = false,
 }: PhotoUploadProps) {
-  const [uploading, setUploading] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
   const [urlMode, setUrlMode] = useState(false)
   const [urlInput, setUrlInput] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith('image/')) {
-        toast.error('Only image files are allowed')
-        return
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('File must be under 5MB')
-        return
-      }
-      setUploading(true)
-      try {
-        const result = await api.uploadFile(file)
-        onChange(result.path)
-        toast.success('Photo uploaded')
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Upload failed')
-      } finally {
-        setUploading(false)
-      }
+  // Clipboard paste is accepted only while the drop zone is showing (no photo set
+  // yet) — see the hook's `pasteEnabled` note on why one target at a time.
+  const { uploading, dragOver, dropzone, browse, fileInputProps } = useImageUpload({
+    onUploaded: (path) => {
+      onChange(path)
+      toast.success('Photo uploaded')
     },
-    [onChange]
-  )
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setDragOver(false)
-      if (disabled || uploading) return
-      const file = e.dataTransfer.files[0]
-      if (file) uploadFile(file)
-    },
-    [disabled, uploading, uploadFile]
-  )
-
-  const handleDragOver = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      if (!disabled && !uploading) setDragOver(true)
-    },
-    [disabled, uploading]
-  )
-
-  const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) uploadFile(file)
-      // Reset so the same file can be selected again
-      e.target.value = ''
-    },
-    [uploadFile]
-  )
-
-  // Paste an image from the clipboard (Ctrl/Cmd+V) while the drop zone is showing
-  // (no photo set yet). A page-level listener means the user doesn't have to focus
-  // the box first; pastes aimed at a text field are ignored so it never hijacks
-  // typing into inputs/textareas (e.g. the notes editor).
-  useEffect(() => {
-    if (value || disabled) return
-    const onPaste = (e: ClipboardEvent) => {
-      const target = e.target as HTMLElement | null
-      if (target?.closest('input, textarea, [contenteditable="true"]')) return
-      const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'))
-      const file = item?.getAsFile()
-      if (!file) return
-      e.preventDefault()
-      void uploadFile(file)
-    }
-    document.addEventListener('paste', onPaste)
-    return () => document.removeEventListener('paste', onPaste)
-  }, [value, disabled, uploadFile])
+    disabled,
+    pasteEnabled: !value,
+  })
 
   const handleUrlSubmit = () => {
     const url = urlInput.trim()
@@ -139,15 +75,13 @@ export function PhotoUpload({
         </div>
       ) : (
         <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={() => setDragOver(false)}
+          {...dropzone}
           className={`flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors ${
             dragOver
               ? 'border-primary bg-primary/5'
               : 'border-muted-foreground/25 hover:border-muted-foreground/50'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-          onClick={() => !disabled && !uploading && fileInputRef.current?.click()}
+          onClick={browse}
         >
           {uploading ? (
             <p className="text-sm text-muted-foreground">Uploading...</p>
@@ -162,13 +96,7 @@ export function PhotoUpload({
         </div>
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
+      <input {...fileInputProps} />
 
       {!value && !disabled && (
         <div>
@@ -201,7 +129,7 @@ export function PhotoUpload({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={browse}
                 disabled={uploading}
               >
                 <Upload className="mr-1 h-3 w-3" />

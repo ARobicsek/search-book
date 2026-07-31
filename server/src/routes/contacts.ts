@@ -202,7 +202,9 @@ router.get('/names', async (_req: Request, res: Response) => {
   try {
     const [contacts, anchoredCounts, participantCounts, mentionCounts, documented] = await Promise.all([
       prisma.contact.findMany({
-        select: { id: true, name: true, preferredName: true, title: true, ecosystem: true, company: { select: { name: true } } },
+        // photoUrl/photoFile ride along so meeting participant rows can show whose
+        // card still has no photo (and never overwrite one that does).
+        select: { id: true, name: true, preferredName: true, title: true, ecosystem: true, photoUrl: true, photoFile: true, company: { select: { name: true } } },
         orderBy: { name: 'asc' },
       }),
       // "Met with": 1:1 meetings anchored on the contact + multi-person meetings
@@ -1038,6 +1040,45 @@ router.patch('/:id/flag', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error toggling contact flag:', error);
     res.status(500).json({ error: 'Failed to toggle contact flag' });
+  }
+});
+
+// PATCH /api/contacts/:id/photo — body { photo: string } ('' clears)
+//
+// Photo-only write, so a photo can be dropped/pasted straight onto a contact card
+// or a meeting's participant row without opening the edit form. Deliberately NOT a
+// PUT: that path runs the whole form payload through processFormData, so a
+// photo-only caller would have to send (and risk clobbering) every other field.
+// `photo` is whatever POST /api/upload returned — an absolute Blob URL (Vercel) or
+// a relative /photos path (Netlify + local dev) — and the two live in different
+// columns, so exactly one is set and the other cleared.
+router.patch('/:id/photo', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const raw = req.body?.photo;
+    if (raw !== '' && typeof raw !== 'string') {
+      res.status(400).json({ error: 'photo must be a string ("" to clear)' });
+      return;
+    }
+    const photo = raw.trim();
+    const existing = await prisma.contact.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      res.status(404).json({ error: 'Contact not found' });
+      return;
+    }
+    const isAbsolute = /^https?:\/\//i.test(photo);
+    const contact = await prisma.contact.update({
+      where: { id },
+      data: {
+        photoUrl: isAbsolute ? photo : null,
+        photoFile: isAbsolute || !photo ? null : photo,
+      },
+      select: { id: true, photoUrl: true, photoFile: true, updatedAt: true },
+    });
+    res.json(contact);
+  } catch (error) {
+    console.error('Error updating contact photo:', error);
+    res.status(500).json({ error: 'Failed to update contact photo' });
   }
 });
 

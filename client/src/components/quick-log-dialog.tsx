@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/resizable'
 import { Combobox, MultiCombobox, type ComboboxOption } from '@/components/ui/combobox'
 import { PersonTooltip } from '@/components/person-tooltip'
+import { ContactPhotoTile } from '@/components/contact-photo-tile'
 import { MeetingTimeRange } from '@/components/meeting-time-range'
 import { MarkdownTextarea } from '@/components/markdown-textarea'
 import { SaveStatusIndicator } from '@/components/save-status'
@@ -410,8 +411,10 @@ function QuickLogDialog({
 
   // Lookup data, fetched lazily on first open
   const [contactOptions, setContactOptions] = useState<ComboboxOption[]>([])
-  // Per-contact pronunciation + title + employer for the participant-chip hover tooltip, keyed by id string.
-  const [contactMeta, setContactMeta] = useState<Map<string, { pronunciation?: string | null; title?: string | null; employer?: string | null }>>(new Map())
+  // Per-contact pronunciation + title + employer for the participant-chip hover tooltip,
+  // plus their photo (or lack of one) for the inline avatar on each participant row,
+  // keyed by id string.
+  const [contactMeta, setContactMeta] = useState<Map<string, { pronunciation?: string | null; title?: string | null; employer?: string | null; photo?: string | null }>>(new Map())
   // Flat contact + company lists powering the notes "@mention" autocomplete.
   const [mentionContacts, setMentionContacts] = useState<{ id: number; name: string; title?: string | null }[]>([])
   const [mentionCompanies, setMentionCompanies] = useState<{ id: number; name: string }[]>([])
@@ -496,10 +499,10 @@ function QuickLogDialog({
     // org pickers and the @-mention autocomplete until a full page reload.
     // Names come back pre-sorted by relevance (rank), which the mention picker uses
     // directly and the participant/org comboboxes re-sort by (rank → prefix → alpha).
-    api.get<{ id: number; name: string; preferredName?: string | null; title?: string | null; company?: { name: string } | null; rank?: number }[]>('/contacts/names')
+    api.get<{ id: number; name: string; preferredName?: string | null; title?: string | null; photoUrl?: string | null; photoFile?: string | null; company?: { name: string } | null; rank?: number }[]>('/contacts/names')
       .then((data) => {
         setContactOptions(data.map((c) => ({ value: c.id.toString(), label: c.name, rank: c.rank })))
-        setContactMeta(new Map(data.map((c) => [c.id.toString(), { pronunciation: c.preferredName, title: c.title, employer: c.company?.name }])))
+        setContactMeta(new Map(data.map((c) => [c.id.toString(), { pronunciation: c.preferredName, title: c.title, employer: c.company?.name, photo: c.photoUrl || c.photoFile || null }])))
         setMentionContacts(data.map((c) => ({ id: c.id, name: c.name, title: c.title })))
       })
       .catch(() => { })
@@ -1629,6 +1632,26 @@ function QuickLogDialog({
           const isFav = isExisting && favorites.some((f) => f.id === Number(val))
           return (
             <div key={val} className="flex items-center gap-2">
+              {/* Photo, addable right here — you meet someone, add them to the meeting,
+                  and put a face on their card without leaving the log. h-7 keeps the
+                  row at the h-8 input's height, so adding it doesn't move anything. */}
+              {isExisting ? (
+                <ContactPhotoTile
+                  contactId={Number(val)}
+                  name={participantNameOf(val)}
+                  photo={contactMeta.get(val)?.photo ?? null}
+                  onChange={(next) =>
+                    setContactMeta((prev) => {
+                      const meta = prev.get(val)
+                      const nextMap = new Map(prev)
+                      nextMap.set(val, { ...meta, photo: next })
+                      return nextMap
+                    })
+                  }
+                />
+              ) : (
+                <span className="h-7 w-7 shrink-0" />
+              )}
               {isExisting ? (
                 <button
                   type="button"

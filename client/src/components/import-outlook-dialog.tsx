@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, Check, Clock, Loader2, Repeat } from 'lucide-react'
-import { api, ApiError } from '@/lib/api'
+import { AbortedError, api, ApiError } from '@/lib/api'
 import { formatStartTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -32,6 +32,15 @@ type EventRow = {
 }
 
 type Preset = 'today' | 'tomorrow' | 'week' | 'next7' | 'custom'
+
+const PRESETS = [
+  ['today', 'Today'],
+  ['tomorrow', 'Tomorrow'],
+  ['week', 'This week'],
+  ['next7', 'Next 7 days'],
+] as const
+
+const DEFAULT_PRESET: Exclude<Preset, 'custom'> = 'next7'
 
 const RANGE_KEY = 'outlook_import_range'
 const keyOf = (e: { uid: string; date: string }) => `${e.uid}|${e.date}`
@@ -79,6 +88,23 @@ function presetRange(preset: Exclude<Preset, 'custom'>): { from: string; to: str
   return { from: ymd(today), to: ymd(end) }
 }
 
+/** The last-used range, already resolved to concrete dates. A stored preset is
+ *  RE-resolved against today every time this is read, so a tab left open overnight
+ *  can't reopen showing yesterday's "Today". */
+function readSavedRange(): { preset: Preset; from: string; to: string } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RANGE_KEY) || 'null')
+    if (saved?.preset === 'custom' && saved.from && saved.to) {
+      return { preset: 'custom', from: saved.from, to: saved.to }
+    }
+    const known = PRESETS.find(([p]) => p === saved?.preset)
+    if (known) return { preset: known[0], ...presetRange(known[0]) }
+  } catch {
+    /* ignore */
+  }
+  return { preset: DEFAULT_PRESET, ...presetRange(DEFAULT_PRESET) }
+}
+
 function dayHeader(dateStr: string): string {
   return parseYmd(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
@@ -90,8 +116,18 @@ export function ImportOutlookDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const [preset, setPreset] = useState<Preset>('next7')
-  const [range, setRange] = useState(() => presetRange('next7'))
+  // Seeded from localStorage on the FIRST render — NOT in an effect afterwards. This
+  // dialog is mounted for the page's whole life, so when the restore was an on-open
+  // effect the first render still held the `next7` default, and the load effect below
+  // (same commit, state updates not yet applied) fired a request for it. Opening the
+  // dialog therefore always ran two overlapping fetches, and the wrong range painted
+  // first: the owner picked "Today" and watched it show 7 days, then tomorrow, then
+  // today — three responses with nothing deciding which one was still wanted.
+  const [preset, setPreset] = useState<Preset>(() => readSavedRange().preset)
+  const [range, setRange] = useState(() => {
+    const { from, to } = readSavedRange()
+    return { from, to }
+  })
   const [events, setEvents] = useState<EventRow[]>([])
   const [timezone, setTimezone] = useState<string>('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -100,21 +136,14 @@ export function ImportOutlookDialog({
   const [notConfigured, setNotConfigured] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Restore the last-used range when the dialog opens (it's a many-times-a-day tool).
+  // Re-resolve on open so a stored preset keeps following the calendar. Handing back
+  // the SAME range object when nothing moved is what keeps this from re-triggering the
+  // load effect below — the common case (open, unchanged range) must stay one request.
   useEffect(() => {
     if (!open) return
-    try {
-      const saved = JSON.parse(localStorage.getItem(RANGE_KEY) || 'null')
-      if (saved?.preset === 'custom' && saved.from && saved.to) {
-        setPreset('custom')
-        setRange({ from: saved.from, to: saved.to })
-      } else if (saved?.preset) {
-        setPreset(saved.preset)
-        setRange(presetRange(saved.preset))
-      }
-    } catch {
-      /* ignore */
-    }
+    const next = readSavedRange()
+    setPreset(next.preset)
+    setRange((r) => (r.from === next.from && r.to === next.to ? r : { from: next.from, to: next.to }))
   }, [open])
 
   const choosePreset = (p: Exclude<Preset, 'custom'>) => {
@@ -132,20 +161,37 @@ export function ImportOutlookDialog({
     })
   }
 
+  // Identifies the newest load. Changing the range twice in quick succession (opening
+  // the dialog, then picking a preset) leaves two fetches racing, and the ICS fetch is
+  // slow enough that they routinely land out of order — an older one must not paint its
+  // events, its error, or clear the spinner over the range the user is actually looking
+  // at. `finally` still runs after the early returns, so the guard has to be in there too.
+  const reqSeq = useRef(0)
+  const inFlight = useRef<AbortController | null>(null)
+
   const load = useCallback(async () => {
+    inFlight.current?.abort() // the superseded request's work is wasted; don't finish it
+    const controller = new AbortController()
+    inFlight.current = controller
+    const seq = ++reqSeq.current
+    const isCurrent = () => seq === reqSeq.current
     setLoading(true)
     setError(null)
     setNotConfigured(false)
     try {
       const res = await api.get<{ events: EventRow[]; timezone: string }>(
         `/calendar/events?from=${range.from}&to=${range.to}`,
+        { signal: controller.signal },
       )
+      if (!isCurrent()) return
       setEvents(res.events)
       setTimezone(res.timezone)
       // Default selection = everything actionable — not yet imported, plus anything imported
       // whose times we can now fill in (the common path is open → Import).
       setSelected(new Set(res.events.filter(isActionable).map(keyOf)))
     } catch (e) {
+      // An abort means we withdrew the request, not that the calendar failed.
+      if (!isCurrent() || e instanceof AbortedError) return
       if (e instanceof ApiError && e.status === 503) {
         setNotConfigured(true)
         setEvents([])
@@ -154,7 +200,7 @@ export function ImportOutlookDialog({
         setEvents([])
       }
     } finally {
-      setLoading(false)
+      if (isCurrent()) setLoading(false)
     }
   }, [range.from, range.to])
 
@@ -234,12 +280,7 @@ export function ImportOutlookDialog({
 
         {/* Range presets */}
         <div className="flex flex-wrap items-center gap-1.5 border-b p-3">
-          {([
-            ['today', 'Today'],
-            ['tomorrow', 'Tomorrow'],
-            ['week', 'This week'],
-            ['next7', 'Next 7 days'],
-          ] as const).map(([p, label]) => (
+          {PRESETS.map(([p, label]) => (
             <Button
               key={p}
               size="sm"

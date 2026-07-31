@@ -27,6 +27,7 @@ the Vercel Blob store, and that is what makes this reversible:
 | Backup job alert threshold | `searchbook-backup` notifies after **3** failures = 3 days of silent backup failure. Owner may want 1. |
 | Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |
 | Vercel-native backup cron | Still in `vercel.json`, still writing to Vercel Blob daily until the project is deleted. Harmless extra net. |
+| ⚠ **GitHub itself may be blocked on the NCQA work network** | Hit 2026-07-31: `git push` failed from the work network — `github.com` (140.82.114.3), `api.github.com` and `codeload.github.com` **all timed out on IPv4 *and* IPv6**, while `google.com`, `ari-search-book.netlify.app` and `raw.githubusercontent.com` (Fastly-hosted, so a different AS) were all fine. Same shape as the Vercel / `*.run.app` blocks. **Owner switched networks and the push went straight through.** If a push hangs, this is why — it is not git, credentials, or the agent's sandbox (verified with the sandbox disabled). The **published Outlook ICS feed also 417s** from that network (after 2 redirects, with any User-Agent), so local Outlook import shows "Could not read the Outlook calendar feed" there while working fine from Netlify. |
 | Contact edit form overflows at 390 px | Noticed 2026-07-30 while re-testing mobile: `/contacts/:id/edit` has 78 elements reaching `right=451` in a 390 px viewport (the `sm:col-span-2` fields in the Basic Info card). Pre-existing — confirmed by stash-and-remeasure. Not reported by the owner; ask before spending time on it. |
 | Global search: does any **single** group still time out? | Global search now runs one request per entity group (bug #12, `1c6d7c1`). If one group *alone* still exceeds Netlify's 9 s app-504 on the real data, the page names it in an amber banner with a Retry — ask the owner whether they've seen one, and check the per-group `[TIMING] search … scopes=<group> → Nms` lines in the function logs. `meetings`/`mentions` are the likely candidates (224+ meetings, long Copilot recaps). The declined **keep-warm ping** (bug #9) is still the cure for cold-start slowness. |
 
@@ -45,6 +46,50 @@ the Vercel Blob store, and that is what makes this reversible:
 
 After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated on decisions D5–D9
 (don't push on those until the owner raises them).
+
+---
+
+### What Was Just Completed — Outlook import picker showed the wrong days (2026-07-31)
+
+Owner: *"funny things happen when I try to import from outlook"* — clicking **Today** showed multiple days of
+meetings, then just Saturday, then the correct day. Three screenshots. **One commit to `main`, `81d07b8`,
+schema-free, client-only** (`client/src/components/import-outlook-dialog.tsx`). **Owner confirmed: "the fix
+appears to work."**
+
+**Two independent causes, and the second one made it more than cosmetic:**
+
+1. **The dialog always fetched the wrong range first.** It restored the last-used range in an **on-open
+   effect**, but it is mounted for the page's whole life, so the first render still held the `next7` default
+   and the load effect — same commit, state updates not yet applied — fired a request for *that*. Every open
+   ran two overlapping `/calendar/events` requests; clicking a preset added a third.
+2. **Nothing tracked which request was current.** Every response called `setEvents` + `setLoading(false)`
+   unconditionally, so all of them painted in arrival order.
+
+⚠ **When the stale 7-day request happened to be the SLOWEST, it won** — the dialog settled on a week of
+meetings with "Today" highlighted and `07/31 → 07/31` in the date inputs (exactly the owner's third
+screenshot, "Import 57"). That was the *final* state, not a flash, so pressing Import there would have
+created a week of meetings instead of today's.
+
+**Fix:** seed `preset`/`range` from `localStorage` in the **`useState` initializer**; the on-open effect now
+only *re-resolves* a stored preset against today's date (a tab left open overnight can't reopen on
+yesterday's "Today") and returns the **same range object** when nothing moved, so it can't re-trigger a
+fetch. `load()` stamps a **sequence number** and aborts the previous `AbortController` — the same pattern
+global search already uses — so a superseded response can't set events, report an error, or clear the
+spinner.
+
+**Measured, not eyeballed** — which response wins is a race, so it was reproduced with a latency-controlled
+`fetch` stub over the real component and the requests/paints counted: pre-fix **3 requests, 4 paints**, and
+the wrong final state when the stale request was slowest; post-fix **one request per user action, one
+content paint**, correct range in *both* response orderings, and an unchanged range on reopen still costs
+exactly one refresh. First-time-user path (no saved range) verified to default to Next 7 days in one
+request. `prepush` + full `npm run build` green; re-tested at **390 px** (one request per action, no
+overflow, "Add times"/"Imported" badges intact).
+
+⚠ **Could not verify against the live ICS feed**: from the work network the feed 417s and **GitHub was
+blocked outright**, so the diagnosis and proof come from the stubbed real component. Deploy was confirmed
+by bundle hash (`index-D3WDoXpe.js` on the live site == the local build of `81d07b8`) after the owner
+switched networks and pushed. Both network findings are in the carry-over table above. Not an
+NCQA-adaptation-plan task, so no task STATUS line changed.
 
 ---
 

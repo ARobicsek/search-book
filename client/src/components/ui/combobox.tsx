@@ -35,6 +35,16 @@ export interface ComboboxOption {
 const ITEM_HIGHLIGHT =
   'cursor-pointer data-[selected=true]:bg-blue-100 data-[selected=true]:text-blue-900 dark:data-[selected=true]:bg-blue-500/30 dark:data-[selected=true]:text-blue-50';
 
+// Clearing lives in a FOOTER, never as a `CommandItem`. cmdk auto-highlights the
+// first row in the list and Enter activates it — and the clear row was rendered
+// first and (deliberately) not filtered by the search box, so typing a name that
+// matched nothing left "Clear all" as the highlighted row: pressing Enter to add a
+// new person silently dropped every participant already on the meeting, with no
+// confirmation and no undo. A footer sits outside `CommandList`, so it is not a
+// cmdk item and no keystroke aimed at the list can reach it.
+const CLEAR_FOOTER = 'flex items-center justify-between gap-2 border-t px-2 py-1.5 text-xs text-muted-foreground';
+const CLEAR_BUTTON = 'rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground';
+
 // Sort comparator shared by both combobox variants. When the user is searching, a
 // word-prefix match ("sar" → "Sarah") beats a mid-word hit ("Ce-sar"); within a
 // tier, higher `rank` wins, then alphabetical. With no search / no ranks this is
@@ -124,16 +134,6 @@ export function Combobox({
               {showAddOption ? null : emptyMessage}
             </CommandEmpty>
             <CommandGroup>
-              {/* Clear option */}
-              {value && (
-                <CommandItem
-                  value="__clear__"
-                  onSelect={() => handleSelect('', false)}
-                  className={cn(ITEM_HIGHLIGHT, 'text-muted-foreground')}
-                >
-                  Clear selection
-                </CommandItem>
-              )}
               {/* Existing options */}
               {filteredOptions.map((option) => (
                 <CommandItem
@@ -164,6 +164,19 @@ export function Combobox({
               )}
             </CommandGroup>
           </CommandList>
+          {/* See CLEAR_FOOTER: clearing is a footer button, never a list row. */}
+          {value && (
+            <div className={CLEAR_FOOTER}>
+              <span className="truncate">{displayValue}</span>
+              <button
+                type="button"
+                onClick={() => handleSelect('', false)}
+                className={cn(CLEAR_BUTTON, 'shrink-0')}
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
         </Command>
       </PopoverContent>
     </Popover>
@@ -206,6 +219,10 @@ export function MultiCombobox({
 }: MultiComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  // Clearing a multi-select throws away several picks at once (a whole meeting's
+  // participants), so the footer button asks first. Armed state is dropped whenever
+  // the popover closes so it can never be left armed for the next open.
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const q = search.toLowerCase().trim();
   const filteredOptions = options
@@ -234,7 +251,13 @@ export function MultiCombobox({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setConfirmClear(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -310,16 +333,6 @@ export function MultiCombobox({
               {showAddOption ? null : emptyMessage}
             </CommandEmpty>
             <CommandGroup>
-              {/* Clear all option */}
-              {values.length > 0 && (
-                <CommandItem
-                  value="__clear_all__"
-                  onSelect={() => onChange([])}
-                  className={cn(ITEM_HIGHLIGHT, 'text-muted-foreground')}
-                >
-                  Clear all
-                </CommandItem>
-              )}
               {/* Existing options */}
               {filteredOptions.map((option) => (
                 <CommandItem
@@ -350,6 +363,35 @@ export function MultiCombobox({
               )}
             </CommandGroup>
           </CommandList>
+          {/* See CLEAR_FOOTER: clearing is a footer button, never a list row — and
+              here it takes two deliberate clicks. */}
+          {values.length > 0 && (
+            <div className={CLEAR_FOOTER}>
+              <span>{values.length} selected</span>
+              {confirmClear ? (
+                <span className="flex items-center gap-1">
+                  <span>Remove all {values.length}?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange([]);
+                      setConfirmClear(false);
+                    }}
+                    className={cn(CLEAR_BUTTON, 'font-medium text-destructive hover:bg-destructive/10 hover:text-destructive')}
+                  >
+                    Clear
+                  </button>
+                  <button type="button" onClick={() => setConfirmClear(false)} className={CLEAR_BUTTON}>
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <button type="button" onClick={() => setConfirmClear(true)} className={CLEAR_BUTTON}>
+                  Clear all
+                </button>
+              )}
+            </div>
+          )}
         </Command>
       </PopoverContent>
     </Popover>

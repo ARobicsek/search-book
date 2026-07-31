@@ -95,6 +95,31 @@ api/index.ts      # Vercel serverless entry point
 - **Global search fans out ONE REQUEST PER ENTITY GROUP** (`SEARCH_GROUPS` in `pages/search.tsx`): people / orgs / meetings / @-mentions / actions / ideas. A single all-scopes request ran six multi-table query waves inside one function invocation, which fit Vercel's 30s but **not Netlify's hard 10s** (`app.ts` fires its own 504 at 9s) — on the phone the spinner spun and the page silently blanked, while the *contacts* and *meetings* page searches (one narrow query each) kept working. Each group now gets the full 9s budget, they run in parallel across invocations, results paint as they land, and a group that fails is **named on screen with a Retry** instead of being swallowed. Two rules that go with it: (1) the URL-sync effect and the search effect must stay **separate** — `setSearchParams` is re-memoized on every URL change, so combining them fires every search twice (6 wasted invocations, not 1); (2) a superseded search **aborts** its in-flight requests via `api.get(path, { signal })`, which rejects with `AbortedError` and is never retried. The server is unchanged — it already accepted `scopes`, and the per-group `[TIMING] search … scopes=meetings → Nms` lines in the Netlify logs now say which group is slow.
 - **Restore persisted UI state in the `useState` initializer, and make a superseded fetch abort** — `components/import-outlook-dialog.tsx`. The Outlook import picker restored its last-used date range in an **on-open effect**, but the dialog is mounted for the page's whole life, so the first render still held the `next7` default and the load effect — *same commit, state updates not yet applied* — fetched **that** range before the restore landed. Every open ran two overlapping `/calendar/events` requests, and nothing decided which response was still wanted: picking "Today" painted 7 days, then tomorrow, then today; and when the stale wide request happened to be the slowest it **won**, leaving a week of meetings on screen with Today selected and `07/31 → 07/31` in the date inputs — importing from there would have created the wrong meetings, so this class of bug is not merely cosmetic. Two rules: (1) read `localStorage` in the **`useState` initializer** — an on-open effect may only *re-resolve* presets against today's date (so a tab left open overnight can't reopen on yesterday's "Today") and must hand back the **same object** when nothing moved, or it re-triggers the fetch; (2) `load()` stamps a **sequence number** and aborts the previous `AbortController`, so a superseded response can't set events, report an error, or clear the spinner — `finally` runs after an early `return`, so the guard belongs in there too. Same discipline as global search above. ⚠ **Measure a symptom whose appearance depends on timing** — which response wins is a race, so this was reproduced with a **latency-controlled `fetch` stub** and counted (pre-fix 3 requests / 4 paints, and the wrong final state when the stale one was slowest; post-fix one request per user action, one paint, correct in both orderings) rather than reasoned about.
 
+- **A destructive action must never be a `CommandItem`** — cmdk auto-highlights the **first row** in the
+  list and Enter activates it. `MultiCombobox`'s "Clear all" was rendered first *and* deliberately exempt
+  from the search filter, so typing a name that matched nothing (i.e. **adding someone new** — the single
+  most common thing the participant picker is for) left "Clear all" as the highlighted row: one Enter
+  silently dropped every participant already on the meeting, with no confirmation and no undo. Clearing
+  now lives in a **footer below `CommandList`** (`CLEAR_FOOTER` in `ui/combobox.tsx`) — outside the list, so
+  it is not a cmdk item and no keystroke aimed at the list can reach it — and the multi-select one **asks
+  first** (`Clear all` → `Remove all N? Clear / Cancel`, disarmed whenever the popover closes). The footer
+  doubles as an "N selected" readout. Same for the single `Combobox`'s "Clear selection". **Any new
+  clear/delete/reset affordance in a combobox belongs in the footer, not the list.**
+- **A photo can be added without opening the edit form** — `components/contact-photo-tile.tsx`. The
+  contact's avatar *is* the editor: drop an image straight on it, or click for browse / paste / URL, and it
+  saves immediately via the narrow **`PATCH /contacts/:id/photo`** (deliberately not the `PUT`, which runs
+  the whole form payload through `processFormData` — a photo-only caller would have to send, and risk
+  clobbering, every other field). Mounted at `size="lg"` in the contact-card header (where a contact with
+  no photo previously rendered *nothing* — now an initials tile, which is what makes it discoverable) and
+  at `size="sm"` on each **Quick Log participant row**, so a person added during a meeting gets a face
+  without leaving the log (`/contacts/names` carries `photoUrl`/`photoFile` for this). Upload mechanics are
+  shared with the form's `<PhotoUpload>` via **`hooks/use-image-upload.ts`**. ⚠ **Clipboard paste needs
+  exactly one enabled target at a time** — the listener is on `document`, so two mounted instances both
+  consume the same paste. Hence `pasteEnabled` is `open || pagePaste`: a tile only listens while its
+  popover is open, and the page-wide variant is opt-in *and* gated on the contact having **no photo yet**
+  (`pagePaste={!photoSrc}`), so a stray screenshot paste can never silently replace an existing photo. The
+  hook keeps the existing guard that ignores pastes aimed at `input`/`textarea`/`contenteditable`.
+
 ### Data Model Notes
 - **Multi-select actions**: `ActionContact`/`ActionCompany` junction tables. Legacy single `contactId`/`companyId` preserved for backward compat
 - **Multiple companies per contact**: `additionalCompanyIds` JSON array with `{id, isCurrent}` objects

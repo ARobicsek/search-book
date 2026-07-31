@@ -49,6 +49,48 @@ After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated 
 
 ---
 
+### What Was Just Completed — Participant picker wiped attendees on Enter; contact photos now editable in place (2026-07-31, s2)
+
+Two owner asks. **Two commits to `main`, both schema-free** (one new route, no new columns). Owner had not yet
+confirmed either on the live site at session end.
+
+**(1) "It's REALLY easy to clear all the participants in a meeting when I try to add a new one."**
+The owner's screenshot *was* the diagnosis: with `Michael Avotins` typed — a name not yet in the CRM — the
+dropdown held exactly two rows, **`Clear all` highlighted** and `Add "Michael Avotins"`. cmdk auto-highlights
+the first row and Enter activates it, and `MultiCombobox` rendered the clear row **first** *and* deliberately
+exempt from the search filter. So the Enter that should have added him **dropped all nine participants** — no
+confirm, no undo, and most likely to fire in precisely the case the field exists for.
+
+**Fix:** clearing moved **out of `CommandList` into a footer** (`CLEAR_FOOTER`, `ui/combobox.tsx`) — outside
+the list it isn't a cmdk item, so no list keystroke can reach it — and the multi-select one **asks first**
+(`Clear all` → `Remove all N? Clear / Cancel`, disarmed on close), doubling as an "N selected" readout. The
+single `Combobox`'s "Clear selection" moved too. **Invariant now in `CLAUDE.md`:** a destructive affordance in
+a combobox belongs in the footer, never in the list.
+
+**(2) "I often create a new contact while in a meeting, then want to add a photo"** — previously only via Edit.
+The avatar **is** the editor now (`components/contact-photo-tile.tsx`): drop an image on it (one gesture, no
+dialog), or click for browse / Ctrl+V / URL / Remove, saved through a new narrow **`PATCH /contacts/:id/photo`**
+(not the existing `PUT`, whose `processFormData` path would force a photo-only caller to send every other
+field). Mounted `lg` in the contact-card header — where a photoless contact previously rendered **nothing**, so
+the initials tile is what makes the affordance exist — and `sm` on every **Quick Log participant row**
+(`/contacts/names` now carries `photoUrl`/`photoFile` so a row can show who lacks one). Upload/drop/paste logic
+was **extracted from `<PhotoUpload>` into `hooks/use-image-upload.ts`** and shared, not duplicated.
+
+⚠ **Clipboard paste must have exactly one enabled target** — the listener is on `document`, so two enabled
+instances both eat the paste. `pasteEnabled = open || pagePaste`: a tile listens only while its popover is
+open, and the page-wide variant is opt-in **and** gated on the contact having no photo yet
+(`pagePaste={!photoSrc}`), which also means a stray screenshot paste can never silently replace one.
+
+**Verified by driving the real app in Chromium** (not by reading the code): the pre-fix wipe scenario
+reproduced and now benign (only row is `Add "…"`, it holds `data-selected`, Enter adds and keeps existing
+picks); confirm cancels non-destructively; photo paste from a participant row, page-level paste on the card,
+a second paste **refused** over an existing photo, drag-drop replace, Remove, and the **edit-form uploader
+still working** after the hook refactor. 390 px re-tested on both surfaces. **All test data removed** (2 test
+meetings, the auto-created test contact, 4 test PNGs; Sarah Shih back to no photo). `prepush` + full
+`npm run build` green. Not an NCQA-adaptation-plan task, so no task STATUS line changed.
+
+---
+
 ### What Was Just Completed — Outlook import picker showed the wrong days (2026-07-31)
 
 Owner: *"funny things happen when I try to import from outlook"* — clicking **Today** showed multiple days of

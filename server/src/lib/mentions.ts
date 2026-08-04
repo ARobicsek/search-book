@@ -1,6 +1,12 @@
-// @-mentions inside meeting notes. The client's inline "@" autocomplete writes
-// mention tokens into the note text; this module parses them and keeps the
-// ConversationMention index in sync so mentions are reviewable later.
+// @-mentions inside note prose. The client's inline "@" autocomplete writes
+// mention tokens into the text; this module parses them and keeps the mention
+// index in sync so mentions are reviewable later.
+//
+// There are two index tables, one per source shape, sharing every parsing rule
+// below: ConversationMention (a meeting's notes / next steps / prep notes) and
+// NoteMention (a contact's `notes`, an idea's `description`). See the NoteMention
+// model comment for why the second one is a separate table rather than nullable
+// columns on the first.
 //
 // Token format (valid markdown, so it degrades gracefully at any render site):
 //   [@Display Name](/contacts/123)  → resolved person mention (bound to contact 123)
@@ -156,6 +162,88 @@ export const mentionMeetingSelect = {
   },
 };
 
+// One mention row as the review/search surfaces render it. Deliberately the same
+// field set as the `mentions` block of mentionMeetingSelect above — MentionChip
+// takes either, so a note-sourced mention and a meeting-sourced one look alike.
+export const noteMentionRowSelect = {
+  id: true,
+  kind: true,
+  mentionedName: true,
+  contactId: true,
+  contact: { select: { id: true, name: true, preferredName: true } },
+  companyId: true,
+  company: { select: { id: true, name: true } },
+};
+
+// A contact / idea whose prose holds @-mentions, with the prose itself — the client
+// windows the text around each mention (lib/mentions.ts `mentionSnippets`), exactly
+// as it already does for meetings.
+export const mentionContactSourceSelect = {
+  id: true,
+  name: true,
+  preferredName: true,
+  notes: true,
+  updatedAt: true,
+  noteMentionsInMyNotes: { select: noteMentionRowSelect, orderBy: { id: 'asc' as const } },
+};
+
+export const mentionIdeaSourceSelect = {
+  id: true,
+  title: true,
+  description: true,
+  archived: true,
+  updatedAt: true,
+  createdAt: true,
+  mentions: { select: noteMentionRowSelect, orderBy: { id: 'asc' as const } },
+};
+
+// The uniform envelope both note sources are returned in, so one client component
+// renders either. `text` is the prose the mentions were parsed from; `href` is where
+// "open this" goes.
+export type NoteMentionGroup = {
+  sourceType: NoteMentionSourceType;
+  sourceId: number;
+  label: string;
+  /** Only set for a CONTACT source — lets the client apply contactDisplayName(). */
+  preferredName?: string | null;
+  text: string | null;
+  updatedAt: string | null;
+  mentions: unknown[];
+};
+
+const isoOrNull = (d: Date | string | null | undefined): string | null =>
+  d ? (typeof d === 'string' ? d : d.toISOString()) : null;
+
+export function contactToNoteGroup(c: any): NoteMentionGroup {
+  return {
+    sourceType: 'CONTACT',
+    sourceId: c.id,
+    label: c.name,
+    preferredName: c.preferredName ?? null,
+    text: c.notes ?? null,
+    updatedAt: isoOrNull(c.updatedAt),
+    mentions: c.noteMentionsInMyNotes ?? [],
+  };
+}
+
+export function ideaToNoteGroup(i: any): NoteMentionGroup {
+  return {
+    sourceType: 'IDEA',
+    sourceId: i.id,
+    label: i.title,
+    text: i.description ?? null,
+    // Idea.updatedAt is nullable (see the model comment) — fall back to createdAt so
+    // sorting never drops a pre-backfill row to the bottom.
+    updatedAt: isoOrNull(i.updatedAt ?? i.createdAt),
+    mentions: i.mentions ?? [],
+  };
+}
+
+// Newest-touched first, matching the meetings list's reverse-chronological feel.
+export function sortNoteGroups(groups: NoteMentionGroup[]): NoteMentionGroup[] {
+  return groups.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+}
+
 export function parseMentions(text: string | null | undefined): ParsedMention[] {
   if (!text) return [];
   const out: ParsedMention[] = [];
@@ -190,6 +278,110 @@ type MentionDb = {
   company: { findMany(args: any): Promise<{ id: number }[]> };
 };
 
+// The same, for the NoteMention index (contact notes / idea descriptions).
+type NoteMentionDb = {
+  noteMention: {
+    deleteMany(args: any): Promise<unknown>;
+    create(args: any): Promise<unknown>;
+  };
+  contact: { findMany(args: any): Promise<{ id: number }[]> };
+  company: { findMany(args: any): Promise<{ id: number }[]> };
+};
+
+// A mention row's target columns, after the ids have been checked against the DB.
+type ResolvedTarget = {
+  kind: MentionKind;
+  contactId: number | null;
+  companyId: number | null;
+  mentionedName: string;
+};
+
+// FK-safety: a token may reference a contact/company that no longer exists (e.g.
+// deleted after the note was written) — those degrade to LOOSE mentions rather
+// than blowing up the insert. The name is preserved either way. Shared by both
+// index tables so they degrade identically.
+async function resolveTargets(
+  db: { contact: { findMany(args: any): Promise<{ id: number }[]> }; company: { findMany(args: any): Promise<{ id: number }[]> } },
+  parsed: ParsedMention[],
+): Promise<ResolvedTarget[]> {
+  const contactIds = [...new Set(parsed.map((p) => p.contactId).filter((x): x is number => x != null))];
+  const existingContactIds = contactIds.length
+    ? new Set(
+        (await db.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true } })).map((c) => c.id),
+      )
+    : new Set<number>();
+  const companyIds = [...new Set(parsed.map((p) => p.companyId).filter((x): x is number => x != null))];
+  const existingCompanyIds = companyIds.length
+    ? new Set(
+        (await db.company.findMany({ where: { id: { in: companyIds } }, select: { id: true } })).map((c) => c.id),
+      )
+    : new Set<number>();
+
+  return parsed.map((p) => ({
+    kind: p.kind,
+    contactId: p.contactId != null && existingContactIds.has(p.contactId) ? p.contactId : null,
+    companyId: p.companyId != null && existingCompanyIds.has(p.companyId) ? p.companyId : null,
+    mentionedName: p.name,
+  }));
+}
+
+// Which record's prose holds a NoteMention. Exactly one field is set — the two
+// source FKs on the table are mutually exclusive (see the model comment).
+export type NoteMentionSource = { contactId: number } | { ideaId: number };
+
+export type NoteMentionSourceType = 'CONTACT' | 'IDEA';
+
+// Does this text hold at least one mention token? Lets a BULK writer skip the
+// per-row sync entirely for text that can't produce mentions (a spreadsheet's
+// notes column, almost always), instead of spending a query per row inside an
+// import that already has a tight function-timeout budget.
+export function hasMentionToken(text: string | null | undefined): boolean {
+  if (!text) return false;
+  MENTION_RE.lastIndex = 0;
+  return MENTION_RE.test(text);
+}
+
+export function noteSourceType(source: NoteMentionSource): NoteMentionSourceType {
+  return 'contactId' in source ? 'CONTACT' : 'IDEA';
+}
+
+// The NoteMention columns identifying `source`, used both as the `where` for a
+// re-sync's delete and as the `data` for its inserts.
+export function noteSourceColumns(source: NoteMentionSource): {
+  sourceContactId: number | null;
+  sourceIdeaId: number | null;
+} {
+  return 'contactId' in source
+    ? { sourceContactId: source.contactId, sourceIdeaId: null }
+    : { sourceContactId: null, sourceIdeaId: source.ideaId };
+}
+
+// Replace the mention rows for one note source with the ones currently in `text`
+// (a contact's `notes`, an idea's `description`). Same derive-from-the-text
+// contract as syncConversationMentions: delete-all for that source, re-create.
+export async function syncNoteMentions(
+  db: NoteMentionDb,
+  source: NoteMentionSource,
+  text: string | null | undefined,
+): Promise<void> {
+  const columns = noteSourceColumns(source);
+  const parsed = parseMentions(text);
+  // Match on the ONE set source column. A `where: columns` would also require the
+  // other column to be null — true today, but an explicit single-column filter says
+  // what is meant and can't be broken by a future third source type.
+  await db.noteMention.deleteMany({
+    where:
+      columns.sourceContactId != null
+        ? { sourceContactId: columns.sourceContactId }
+        : { sourceIdeaId: columns.sourceIdeaId },
+  });
+  if (parsed.length === 0) return;
+
+  for (const target of await resolveTargets(db, parsed)) {
+    await db.noteMention.create({ data: { ...columns, ...target } });
+  }
+}
+
 // Like MentionDb but also able to read the text that feeds the index.
 type ResyncDb = MentionDb & {
   conversation: { findUnique(args: any): Promise<{ notes: string | null; nextSteps: string | null } | null> };
@@ -208,27 +400,8 @@ export async function syncConversationMentions(
   await db.conversationMention.deleteMany({ where: { conversationId } });
   if (parsed.length === 0) return;
 
-  // FK-safety: a token may reference a contact/company that no longer exists
-  // (e.g. deleted after the note was written) — degrade those to loose mentions.
-  const contactIds = [...new Set(parsed.map((p) => p.contactId).filter((x): x is number => x != null))];
-  const existingContactIds = contactIds.length
-    ? new Set(
-        (await db.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true } })).map((c) => c.id),
-      )
-    : new Set<number>();
-  const companyIds = [...new Set(parsed.map((p) => p.companyId).filter((x): x is number => x != null))];
-  const existingCompanyIds = companyIds.length
-    ? new Set(
-        (await db.company.findMany({ where: { id: { in: companyIds } }, select: { id: true } })).map((c) => c.id),
-      )
-    : new Set<number>();
-
-  for (const p of parsed) {
-    const contactId = p.contactId != null && existingContactIds.has(p.contactId) ? p.contactId : null;
-    const companyId = p.companyId != null && existingCompanyIds.has(p.companyId) ? p.companyId : null;
-    await db.conversationMention.create({
-      data: { conversationId, kind: p.kind, contactId, companyId, mentionedName: p.name },
-    });
+  for (const target of await resolveTargets(db, parsed)) {
+    await db.conversationMention.create({ data: { conversationId, ...target } });
   }
 }
 

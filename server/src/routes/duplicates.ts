@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
-import { resyncConversationMentions } from '../lib/mentions';
+import { resyncConversationMentions, syncNoteMentions } from '../lib/mentions';
 
 const router = Router();
 
@@ -355,6 +355,60 @@ function unionUsefulFor(keepVal: string | null, removeVal: string | null): strin
   return `${keepText}\n\n${removeText}`;              // both differ → keep both
 }
 
+// Re-point @-mention tokens inside the NOTE sources — `Contact.notes` and
+// `Idea.description` — at the surviving record, then re-derive their NoteMention rows.
+// The meeting-side equivalent is inlined in each merge below; this is the same
+// obligation for the two sources that feed the other mention index.
+//
+// ⚠ Must run BEFORE the removed record is deleted. NoteMention's target columns are
+// `onDelete: SetNull`, so once the delete lands there is nothing left pointing at
+// `removeId` to tell us which sources need re-syncing — and a dead `(/contacts/N)`
+// left in the prose degrades to a *loose* mention on the next save, re-offering
+// "Create" for the record just merged away.
+//
+// Raw SQL for the rewrite on purpose: a merge is a re-link, not a content edit, so it
+// must not bump `updatedAt` (same reasoning as the Conversation rewrite below).
+async function rewriteNoteMentionTokens(
+  tx: any,
+  oldToken: string,
+  newToken: string,
+  mentionTargetWhere: Record<string, unknown>,
+): Promise<void> {
+  const [noteContacts, descIdeas, targeted] = await Promise.all([
+    tx.contact.findMany({ where: { notes: { contains: oldToken } }, select: { id: true } }),
+    tx.idea.findMany({ where: { description: { contains: oldToken } }, select: { id: true } }),
+    tx.noteMention.findMany({
+      where: mentionTargetWhere,
+      select: { sourceContactId: true, sourceIdeaId: true },
+    }),
+  ]);
+  const contactIds = new Set<number>([
+    ...noteContacts.map((c: { id: number }) => c.id),
+    ...targeted
+      .map((t: { sourceContactId: number | null }) => t.sourceContactId)
+      .filter((x: number | null): x is number => x != null),
+  ]);
+  const ideaIds = new Set<number>([
+    ...descIdeas.map((i: { id: number }) => i.id),
+    ...targeted
+      .map((t: { sourceIdeaId: number | null }) => t.sourceIdeaId)
+      .filter((x: number | null): x is number => x != null),
+  ]);
+  if (contactIds.size === 0 && ideaIds.size === 0) return;
+
+  const like = `%${oldToken}%`;
+  await tx.$executeRaw`UPDATE "Contact" SET "notes" = REPLACE("notes", ${oldToken}, ${newToken}) WHERE "notes" LIKE ${like}`;
+  await tx.$executeRaw`UPDATE "Idea" SET "description" = REPLACE("description", ${oldToken}, ${newToken}) WHERE "description" LIKE ${like}`;
+  for (const id of contactIds) {
+    const c = await tx.contact.findUnique({ where: { id }, select: { notes: true } });
+    await syncNoteMentions(tx, { contactId: id }, c?.notes);
+  }
+  for (const id of ideaIds) {
+    const i = await tx.idea.findUnique({ where: { id }, select: { description: true } });
+    await syncNoteMentions(tx, { ideaId: id }, i?.description);
+  }
+}
+
 // Shared contact merge logic — called by both the POST /merge endpoint and the auto-merge
 // path in GET /. No field selections = keep all of the "keep" contact's fields as-is.
 async function runContactMerge(
@@ -494,6 +548,13 @@ async function runContactMerge(
         await resyncConversationMentions(tx, convId);
       }
     }
+    await rewriteNoteMentionTokens(tx, oldMentionToken, newMentionToken, { contactId: removeId });
+
+    // The kept contact's own `notes` may have just been REPLACED by the removed
+    // contact's (field selections copy whole values), so its index is re-derived
+    // unconditionally rather than only when a token rewrite touched it.
+    const keptNotes = await tx.contact.findUnique({ where: { id: keepId }, select: { notes: true } });
+    await syncNoteMentions(tx, { contactId: keepId }, keptNotes?.notes);
 
     await tx.conversationContact.deleteMany({ where: { contactId: removeId } });
     await tx.contactTag.deleteMany({ where: { contactId: removeId } });
@@ -972,6 +1033,7 @@ async function runCompanyMerge(
         await resyncConversationMentions(tx, convId);
       }
     }
+    await rewriteNoteMentionTokens(tx, oldOrgToken, newOrgToken, { companyId: removeId });
 
     await tx.company.delete({ where: { id: removeId } });
   });

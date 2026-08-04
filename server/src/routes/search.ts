@@ -3,9 +3,14 @@ import prisma from '../db';
 import {
   humanizeMentions,
   mentionMeetingSelect,
+  mentionContactSourceSelect,
+  mentionIdeaSourceSelect,
+  contactToNoteGroup,
+  ideaToNoteGroup,
   mentionMatchesTarget,
   mentionTargetClause,
   parseMentionTarget,
+  type NoteMentionGroup,
 } from '../lib/mentions';
 
 const router = Router();
@@ -522,6 +527,66 @@ router.get('/', async (req: Request, res: Response) => {
       })
       : Promise.resolve([]);
 
+    // The other mention index: a contact's `notes` and an idea's `description`
+    // (NoteMention). Same two modes as the meeting half above — with a pinned target
+    // the query words narrow the SOURCE record's own text, without one they have to be
+    // satisfied by a single mention row. The relation name and the "own text" fields
+    // differ per source, so this is parameterised rather than duplicated.
+    const noteMentionWhere = (
+      relation: 'noteMentionsInMyNotes' | 'mentions',
+      sourceTextClausesFor: (term: string) => Record<string, unknown>[],
+      tagRelation: 'tags' | 'tagLinks',
+    ): Record<string, unknown> =>
+      mentionTarget
+        ? {
+          AND: [
+            { [relation]: { some: mentionTargetClause(mentionTarget) } },
+            ...terms.map((t) => ({ OR: sourceTextClausesFor(t) })),
+            ...tagClause(tagRelation),
+          ],
+        }
+        : {
+          AND: [
+            {
+              [relation]: {
+                some: terms.length ? { AND: terms.map((t) => ({ OR: mentionClausesFor(t) })) } : {},
+              },
+            },
+            ...tagClause(tagRelation),
+          ],
+        };
+
+    // Kept in lockstep with collectNoteSourceFields below, for the same reason as the
+    // meeting pair: a field the DB can match but the JS verifier can't see would be
+    // fetched and then silently dropped.
+    const contactNoteTextClausesFor = (term: string): Record<string, unknown>[] => [
+      { name: { contains: term } },
+      { preferredName: { contains: term } },
+      { notes: { contains: term } },
+    ];
+    const ideaNoteTextClausesFor = (term: string): Record<string, unknown>[] => [
+      { title: { contains: term } },
+      { description: { contains: term } },
+    ];
+
+    const noteMentionContactsPromise: Promise<any[]> = scopes.has('mentions')
+      ? prisma.contact.findMany({
+        where: noteMentionWhere('noteMentionsInMyNotes', contactNoteTextClausesFor, 'tags'),
+        select: mentionContactSourceSelect,
+        take,
+        orderBy: { updatedAt: 'desc' },
+      })
+      : Promise.resolve([]);
+
+    const noteMentionIdeasPromise: Promise<any[]> = scopes.has('mentions')
+      ? prisma.idea.findMany({
+        where: noteMentionWhere('mentions', ideaNoteTextClausesFor, 'tagLinks'),
+        select: mentionIdeaSourceSelect,
+        take,
+        orderBy: { createdAt: 'desc' },
+      })
+      : Promise.resolve([]);
+
     const collectMentionFields = (m: any): FieldVal[] => {
       const fields: FieldVal[] = [];
       pushField(fields, 'mentioned', m.mentionedName, 3);
@@ -538,6 +603,18 @@ router.get('/', async (req: Request, res: Response) => {
       pushField(fields, 'next steps', humanizeMentions(c.nextSteps), 1);
       pushField(fields, 'attendees', c.attendeesDescription, 1);
       for (const pn of c.prepNotes || []) pushField(fields, 'prep note', humanizeMentions(pn.content), 1);
+      return fields;
+    };
+
+    // The note-source equivalent, reading the already-normalised NoteMentionGroup so one
+    // verifier covers both source types. Mirrors contactNoteTextClausesFor /
+    // ideaNoteTextClausesFor: `label` is the contact name or idea title, `text` is the
+    // notes or description.
+    const collectNoteSourceFields = (g: NoteMentionGroup): FieldVal[] => {
+      const fields: FieldVal[] = [];
+      pushField(fields, g.sourceType === 'IDEA' ? 'title' : 'name', g.label, 3);
+      if (g.preferredName) pushField(fields, 'name', g.preferredName, 3);
+      pushField(fields, g.sourceType === 'IDEA' ? 'description' : 'notes', humanizeMentions(g.text), 1);
       return fields;
     };
 
@@ -607,8 +684,12 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Independent top-level queries run concurrently (one round-trip wave instead
     // of five sequential ones — the other half of the ~20s fix).
-    const [contacts, companies, conversations, mentionMeetings, actions, ideas] = await Promise.all([
+    const [
+      contacts, companies, conversations, mentionMeetings, actions, ideas,
+      noteMentionContacts, noteMentionIdeas,
+    ] = await Promise.all([
       contactsPromise, companiesPromise, conversationsPromise, mentionsPromise, actionsPromise, ideasPromise,
+      noteMentionContactsPromise, noteMentionIdeasPromise,
     ]);
 
     const collectIdeaFields = (i: any): FieldVal[] => {
@@ -685,6 +766,42 @@ router.get('/', async (req: Request, res: Response) => {
       })
       .filter((conv): conv is NonNullable<typeof conv> => conv !== null);
 
+    // The note-source half of the @-Mentions group, evaluated by exactly the same two
+    // rules as the meetings above — the only difference is which record carries the text.
+    const evNoteMentions = [
+      ...noteMentionContacts.map(contactToNoteGroup),
+      ...noteMentionIdeas.map(ideaToNoteGroup),
+    ]
+      .map((group) => {
+        let score = 0;
+        let matches: MatchEvidence[] = [];
+        let matched: any[];
+
+        if (mentionTarget) {
+          const verified = evaluateRecord(collectNoteSourceFields(group), terms, caseSensitive);
+          if (!verified) return null;
+          score = verified.score;
+          matches = verified.matches;
+          matched = (group.mentions as any[]).filter((m) => mentionMatchesTarget(m, mentionTarget));
+        } else {
+          matched = (group.mentions as any[]).filter((m) => {
+            const r = evaluateRecord(collectMentionFields(m), terms, caseSensitive);
+            if (!r) return false;
+            score = Math.max(score, r.score);
+            return true;
+          });
+        }
+
+        if (matched.length === 0) return null;
+        return {
+          ...group,
+          mentions: matched,
+          _matches: matches,
+          _s: { score, recency: group.updatedAt || '', alpha: group.label },
+        };
+      })
+      .filter((g): g is NonNullable<typeof g> => g !== null);
+
     let evContacts = evaluate(contacts, collectContactFields, (c) => isoOf(c.updatedAt), (c) => c.name);
     const evCompanies = evaluate(companies, collectCompanyFields, (c) => isoOf(c.updatedAt), (c) => c.name);
     const evConversations = evaluate(conversations, collectConversationFields, (c) => c.date || '', (c) => c.title || c.contact?.name || c.company?.name || '');
@@ -724,6 +841,7 @@ router.get('/', async (req: Request, res: Response) => {
     sortRecords(evCompanies, sort);
     sortRecords(evConversations, sort);
     sortRecords(evMentionMeetings, sort);
+    sortRecords(evNoteMentions, sort);
     sortRecords(evActions, sort);
     sortRecords(evIdeas, sort);
 
@@ -732,6 +850,7 @@ router.get('/', async (req: Request, res: Response) => {
     const cappedCompanies = cap(evCompanies);
     const cappedConversations = cap(evConversations);
     const cappedMentionMeetings = cap(evMentionMeetings);
+    const cappedNoteMentions = cap(evNoteMentions);
     const cappedActions = cap(evActions);
     const cappedIdeas = cap(evIdeas);
 
@@ -762,7 +881,9 @@ router.get('/', async (req: Request, res: Response) => {
         contacts: evContacts.length,
         companies: evCompanies.length,
         conversations: evConversations.length,
-        mentions: evMentionMeetings.length,
+        // One group, two indexes: the "@-Mentions" count is meetings PLUS note sources,
+        // matching the single list the client renders.
+        mentions: evMentionMeetings.length + evNoteMentions.length,
         actions: evActions.length,
         ideas: evIdeas.length,
       };
@@ -801,7 +922,12 @@ router.get('/', async (req: Request, res: Response) => {
       ]);
       totals = {
         contacts: tContacts, companies: tCompanies, conversations: tConversations,
-        mentions: tMentions, actions: tActions, ideas: tIdeas,
+        // Note sources are counted from the verified rows, never with a COUNT: one
+        // source record holds ONE mention-bearing field, so a single target reaching
+        // `take` (25) distinct contacts/ideas doesn't happen in practice — and if it
+        // ever did, the "show all" link would still list everything fetched.
+        mentions: tMentions + evNoteMentions.length,
+        actions: tActions, ideas: tIdeas,
       };
     }
 
@@ -890,6 +1016,13 @@ router.get('/', async (req: Request, res: Response) => {
       matches: _matches,
     }));
 
+    // The note-source half of the same group. Ships the source's prose for the same
+    // reason: the client windows it around each mention itself.
+    const noteMentionResults = cappedNoteMentions.map(({ _s, _matches, ...group }: any) => ({
+      ...group,
+      matches: _matches,
+    }));
+
     // Echo the picked target back, resolved to a display name, so a deep link
     // (?mention=contact:440) can label its chip without a second round-trip.
     let mentionEcho: { key: string; name: string; kind: string; bound: boolean } | null = null;
@@ -903,8 +1036,12 @@ router.get('/', async (req: Request, res: Response) => {
       } else {
         // The key is lowercased (it has to be, to group case variants), so prefer the
         // name as actually typed in a note — otherwise a deep link's chip shouts
-        // "anne marie smith" back at you.
-        name = mentionResults[0]?.mentions?.[0]?.mentionedName ?? mentionTarget.name;
+        // "anne marie smith" back at you. Either index can supply it: a loose name may
+        // live only in a contact's notes or an idea, with no meeting at all.
+        name =
+          mentionResults[0]?.mentions?.[0]?.mentionedName ??
+          (noteMentionResults[0]?.mentions?.[0] as any)?.mentionedName ??
+          mentionTarget.name;
       }
       mentionEcho = {
         key: String(req.query.mention).trim(),
@@ -918,7 +1055,8 @@ router.get('/', async (req: Request, res: Response) => {
       `[TIMING] search q="${qStr}" terms=${terms.length} tags=${tagIds.length} scopes=${[...scopes].join('+')} ` +
       `cs=${caseSensitive} sort=${sort} → ${Date.now() - tStart}ms ` +
       `(contacts ${contactResults.length}/${totals.contacts}, companies ${companyResults.length}/${totals.companies}, ` +
-      `meetings ${conversationResults.length}/${totals.conversations}, mentions ${mentionResults.length}/${totals.mentions}, ` +
+      `meetings ${conversationResults.length}/${totals.conversations}, ` +
+      `mentions ${mentionResults.length}+${noteMentionResults.length}/${totals.mentions}, ` +
       `actions ${actionResults.length}/${totals.actions}, ideas ${ideaResults.length}/${totals.ideas})`
     );
 
@@ -936,6 +1074,7 @@ router.get('/', async (req: Request, res: Response) => {
       ideas: ideaResults,
       conversations: conversationResults,
       mentions: mentionResults,
+      noteMentions: noteMentionResults,
       mention: mentionEcho,
     });
   } catch (error) {

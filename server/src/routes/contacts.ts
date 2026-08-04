@@ -4,6 +4,7 @@ import { deleteWithSnapshot } from '../lib/undo';
 import { StaleWriteError, parseExpectedUpdatedAt, CONFLICT_MESSAGE, assertNotStale } from '../concurrency';
 import { currentEmployerCompanyIds, promoteCompaniesToConnected } from '../company-status';
 import { resolveExistingCompanyByName } from './duplicates';
+import { syncNoteMentions, hasMentionToken } from '../lib/mentions';
 
 const router = Router();
 
@@ -462,6 +463,9 @@ router.post('/', async (req: Request, res: Response) => {
       if (created.status === 'CONNECTED') {
         await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(created));
       }
+      // Index any @-mentions in the notes (a contact can be created with notes
+      // already filled in — e.g. from an import or a paste).
+      await syncNoteMentions(tx, { contactId: created.id }, created.notes);
       return created;
     });
 
@@ -876,6 +880,13 @@ router.post('/import-match', async (req: Request, res: Response) => {
                 if (filledCompanyId && match.status === 'CONNECTED') {
                   await promoteCompaniesToConnected(tx, [filledCompanyId]);
                 }
+                // Spreadsheet text essentially never holds mention tokens, so this
+                // costs nothing on a normal import — but a notes column pasted out of
+                // the app itself would, and a silently unindexed mention is exactly the
+                // "loose token nothing ever retro-binds" trap.
+                if (hasMentionToken(data.notes as string | null)) {
+                  await syncNoteMentions(tx, { contactId: match.id }, data.notes as string);
+                }
               });
               result.updated++;
             }
@@ -928,6 +939,9 @@ router.post('/import-match', async (req: Request, res: Response) => {
             });
             if (created.status === 'CONNECTED') {
               await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(created));
+            }
+            if (hasMentionToken(created.notes)) {
+              await syncNoteMentions(tx, { contactId: created.id }, created.notes);
             }
             return created;
           });
@@ -1007,6 +1021,12 @@ router.put('/:id', async (req: Request, res: Response) => {
       // to CONNECTED (reads post-update company fields in case they changed too).
       if (data.status === 'CONNECTED' && existing.status !== 'CONNECTED' && updated) {
         await promoteCompaniesToConnected(tx, currentEmployerCompanyIds(updated));
+      }
+      // Re-index @-mentions from the post-update notes. Guarded on the field actually
+      // being in the payload: this PUT is also used for partial updates that never
+      // touch `notes`, and re-syncing from an undefined value would wipe the index.
+      if (data.notes !== undefined) {
+        await syncNoteMentions(tx, { contactId: id }, updated?.notes);
       }
       return updated;
     });

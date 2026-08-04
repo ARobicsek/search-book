@@ -2,7 +2,13 @@ import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import {
   resyncConversationMentions,
+  syncNoteMentions,
   mentionMeetingSelect,
+  mentionContactSourceSelect,
+  mentionIdeaSourceSelect,
+  contactToNoteGroup,
+  ideaToNoteGroup,
+  sortNoteGroups,
   looseMentionToken,
   resolvedMentionToken,
   looseOrgMentionToken,
@@ -24,14 +30,22 @@ type BindTx = {
 
 // Point every loose token for `name` — BOTH the person (`#mention`) and org
 // (`#org-mention`) forms, so a name first mis-tagged as the wrong kind still
-// resolves — at a real record, then re-derive the meeting's mention index from the
-// new text. Covers notes, next steps AND prep notes. Literal string replace
-// (split/join) avoids regex-escaping the name.
+// resolves — at `boundToken`. Literal string replace (split/join) avoids
+// regex-escaping the name.
 //
 // The token's display text is left exactly as typed: the prose keeps the owner's
 // wording while MentionChip renders the linked record's canonical name. That matters
 // when linking to an existing record whose name differs from what was written
 // ("Peterson Health" in the note → "Peterson Center on Healthcare" on the chip).
+function rewriteLooseTokens(text: string | null, name: string, boundToken: string): string | null {
+  if (!text) return text;
+  return text
+    .split(looseMentionToken(name)).join(boundToken)
+    .split(looseOrgMentionToken(name)).join(boundToken);
+}
+
+// Rewrite a meeting's loose tokens for `name`, then re-derive its mention index from
+// the new text. Covers notes, next steps AND prep notes.
 async function bindLooseTokens(
   tx: BindTx,
   conv: { id: number; notes: string | null; nextSteps: string | null },
@@ -40,8 +54,7 @@ async function bindLooseTokens(
 ): Promise<void> {
   const loosePerson = looseMentionToken(name);
   const looseOrg = looseOrgMentionToken(name);
-  const rewrite = (t: string | null) =>
-    t ? t.split(loosePerson).join(boundToken).split(looseOrg).join(boundToken) : t;
+  const rewrite = (t: string | null) => rewriteLooseTokens(t, name, boundToken);
 
   await tx.conversation.update({
     where: { id: conv.id },
@@ -63,6 +76,220 @@ async function bindLooseTokens(
 
   await resyncConversationMentions(tx, conv.id);
 }
+
+// The NoteMention counterpart of bindLooseTokens: rewrite the loose tokens for `name`
+// in the ONE record whose prose holds this mention (a contact's `notes` or an idea's
+// `description`), then re-derive that source's mention rows.
+async function bindLooseNoteTokens(
+  tx: any,
+  mention: { sourceContactId: number | null; sourceIdeaId: number | null },
+  name: string,
+  boundToken: string,
+): Promise<void> {
+  if (mention.sourceContactId != null) {
+    const id = mention.sourceContactId;
+    const contact = await tx.contact.findUnique({ where: { id }, select: { notes: true } });
+    const notes = rewriteLooseTokens(contact?.notes ?? null, name, boundToken);
+    await tx.contact.update({ where: { id }, data: { notes } });
+    await syncNoteMentions(tx, { contactId: id }, notes);
+    return;
+  }
+  if (mention.sourceIdeaId != null) {
+    const id = mention.sourceIdeaId;
+    const idea = await tx.idea.findUnique({ where: { id }, select: { description: true } });
+    const description = rewriteLooseTokens(idea?.description ?? null, name, boundToken);
+    await tx.idea.update({ where: { id }, data: { description } });
+    await syncNoteMentions(tx, { ideaId: id }, description);
+  }
+}
+
+// Load a NoteMention and assert it is still LOOSE — the shared preamble of the three
+// note-mention resolution routes. Returns an error message instead of throwing so each
+// route keeps its own status code / wording.
+async function loadLooseNoteMention(
+  id: number,
+): Promise<
+  | { ok: true; mention: { id: number; mentionedName: string; kind: string; sourceContactId: number | null; sourceIdeaId: number | null } }
+  | { ok: false; status: number; error: string }
+> {
+  const mention = await prisma.noteMention.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      mentionedName: true,
+      kind: true,
+      contactId: true,
+      companyId: true,
+      sourceContactId: true,
+      sourceIdeaId: true,
+    },
+  });
+  if (!mention) return { ok: false, status: 404, error: 'Mention not found' };
+  if (mention.contactId) return { ok: false, status: 400, error: 'This mention is already linked to a contact' };
+  if (mention.companyId) return { ok: false, status: 400, error: 'This mention is already linked to an organization' };
+  return { ok: true, mention };
+}
+
+// GET /api/mentions/notes — the non-meeting half of the review list: contacts whose
+// `notes` and ideas whose `description` hold @-mentions, newest-touched first. Each
+// group carries the prose so the client can window it around each mention, exactly as
+// it does for meetings.
+//
+// Optional `contactId` / `companyId` narrow to sources that mention THAT record — the
+// note-source half of the "Mentioned in" cards on a contact / organization page.
+//
+// Archived ideas are deliberately INCLUDED (badged client-side): archiving sets an idea
+// aside, it doesn't delete it, and hiding it here would make any loose name in its text
+// permanently unresolvable — the exact dead-token trap this page exists to prevent.
+router.get('/notes', async (req: Request, res: Response) => {
+  try {
+    const { contactId, companyId } = req.query;
+    const take = Math.min(parseInt(req.query.limit as string) || 100, 200);
+
+    const mentionFilter = contactId
+      ? { some: { contactId: parseInt(contactId as string) } }
+      : companyId
+        ? { some: { companyId: parseInt(companyId as string) } }
+        : { some: {} };
+
+    const [contacts, ideas] = await Promise.all([
+      prisma.contact.findMany({
+        where: { noteMentionsInMyNotes: mentionFilter },
+        select: mentionContactSourceSelect,
+        orderBy: { updatedAt: 'desc' },
+        take,
+      }),
+      prisma.idea.findMany({
+        where: { mentions: mentionFilter },
+        select: mentionIdeaSourceSelect,
+        orderBy: { createdAt: 'desc' },
+        take,
+      }),
+    ]);
+
+    const data = sortNoteGroups([
+      ...contacts.map(contactToNoteGroup),
+      ...ideas.map(ideaToNoteGroup),
+    ]);
+
+    res.json({
+      data,
+      // No offset pagination: a source record holds ONE mention-bearing field, so these
+      // groups are counted in tens where meetings are counted in hundreds. `truncated`
+      // says the cap was hit rather than pretending to a page count.
+      total: data.length,
+      truncated: contacts.length === take || ideas.length === take,
+    });
+  } catch (error) {
+    console.error('Error fetching note mentions:', error);
+    res.status(500).json({ error: 'Failed to fetch note mentions' });
+  }
+});
+
+// POST /api/mentions/note/:id/create-contact — the NoteMention counterpart of
+// /:id/create-contact above. Same find-or-create contract (never a blind create — see
+// that route's note on the duplicate organizations it produced) and the same tolerance
+// for a mention loosely tagged as the wrong kind.
+router.post('/note/:id/create-contact', async (req: Request, res: Response) => {
+  try {
+    const loaded = await loadLooseNoteMention(parseInt(req.params.id as string));
+    if (!loaded.ok) {
+      res.status(loaded.status).json({ error: loaded.error });
+      return;
+    }
+    const { mention } = loaded;
+    const name = mention.mentionedName.trim();
+    const existing = await resolveExistingContactByName(name);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const contact =
+        existing ??
+        (await tx.contact.create({
+          data: { name, ecosystem: 'NETWORK', status: 'NONE' },
+          select: { id: true, name: true },
+        }));
+      await bindLooseNoteTokens(tx, mention, name, resolvedMentionToken(name, contact.id));
+      return contact;
+    });
+
+    res.status(201).json({ contact: result, linked: !!existing });
+  } catch (error) {
+    console.error('Error creating contact from note mention:', error);
+    res.status(500).json({ error: 'Failed to create contact from mention' });
+  }
+});
+
+// POST /api/mentions/note/:id/create-company — the org counterpart.
+router.post('/note/:id/create-company', async (req: Request, res: Response) => {
+  try {
+    const loaded = await loadLooseNoteMention(parseInt(req.params.id as string));
+    if (!loaded.ok) {
+      res.status(loaded.status).json({ error: loaded.error });
+      return;
+    }
+    const { mention } = loaded;
+    const name = mention.mentionedName.trim();
+    const existing = await resolveExistingCompanyByName(name);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const company =
+        existing ??
+        (await tx.company.create({
+          data: { name, status: 'NONE' },
+          select: { id: true, name: true },
+        }));
+      await bindLooseNoteTokens(tx, mention, name, resolvedOrgMentionToken(name, company.id));
+      return company;
+    });
+
+    res.status(201).json({ company: result, linked: !!existing });
+  } catch (error) {
+    console.error('Error creating organization from note mention:', error);
+    res.status(500).json({ error: 'Failed to create organization from mention' });
+  }
+});
+
+// POST /api/mentions/note/:id/link — bind a loose NoteMention to an EXISTING record the
+// owner picks: body `{ contactId }` or `{ companyId }` (exactly one). Creates nothing.
+router.post('/note/:id/link', async (req: Request, res: Response) => {
+  try {
+    const { contactId, companyId } = req.body as { contactId?: unknown; companyId?: unknown };
+    const wantContact = Number.isInteger(contactId) && (contactId as number) > 0;
+    const wantCompany = Number.isInteger(companyId) && (companyId as number) > 0;
+    if (wantContact === wantCompany) {
+      res.status(400).json({ error: 'Provide exactly one of contactId or companyId' });
+      return;
+    }
+
+    const loaded = await loadLooseNoteMention(parseInt(req.params.id as string));
+    if (!loaded.ok) {
+      res.status(loaded.status).json({ error: loaded.error });
+      return;
+    }
+    const { mention } = loaded;
+    const name = mention.mentionedName.trim();
+
+    const target = wantContact
+      ? await prisma.contact.findUnique({ where: { id: contactId as number }, select: { id: true, name: true } })
+      : await prisma.company.findUnique({ where: { id: companyId as number }, select: { id: true, name: true } });
+    if (!target) {
+      res.status(404).json({ error: wantContact ? 'Contact not found' : 'Organization not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const bound = wantContact
+        ? resolvedMentionToken(name, target.id)
+        : resolvedOrgMentionToken(name, target.id);
+      await bindLooseNoteTokens(tx, mention, name, bound);
+    });
+
+    res.json(wantContact ? { contact: target, linked: true } : { company: target, linked: true });
+  } catch (error) {
+    console.error('Error linking note mention:', error);
+    res.status(500).json({ error: 'Failed to link mention' });
+  }
+});
 
 // The contact counterpart of resolveExistingCompanyByName: an EXISTING contact whose
 // name matches exactly (case-insensitively), or null. Prisma's `equals` is
@@ -122,39 +349,44 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/mentions/index?q=&limit= — the distinct people/organizations that have
-// actually BEEN @-mentioned, each with the number of meetings it was mentioned in.
+// actually BEEN @-mentioned, each with the number of places it was mentioned in.
 // This backs the "@" picker in global search: you can't type the exact spelling of a
 // name if you can't see it, so the picker offers the real spellings — including loose
 // names that were never made contacts — and every option is guaranteed to have a hit.
 //
 // Aggregated in JS rather than with groupBy/_count (the Turso adapter gotcha). Mention
-// rows are already one-per-meeting-per-entity, so a row count IS a meeting count.
+// rows are already one-per-source-per-entity, so a row count IS a place count — summed
+// across BOTH indexes (meetings + contact notes / ideas) so the picker's number matches
+// what a search for that target actually returns.
 router.get('/index', async (req: Request, res: Response) => {
   try {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
 
-    const rows = await prisma.conversationMention.findMany({
-      where: q
-        ? {
-          OR: [
-            { mentionedName: { contains: q } },
-            { contact: { name: { contains: q } } },
-            { contact: { preferredName: { contains: q } } },
-            { company: { name: { contains: q } } },
-          ],
-        }
-        : undefined,
-      select: {
-        kind: true,
-        mentionedName: true,
-        contactId: true,
-        contact: { select: { id: true, name: true } },
-        companyId: true,
-        company: { select: { id: true, name: true } },
-      },
-      take: 500,
-    });
+    const nameFilter = q
+      ? {
+        OR: [
+          { mentionedName: { contains: q } },
+          { contact: { name: { contains: q } } },
+          { contact: { preferredName: { contains: q } } },
+          { company: { name: { contains: q } } },
+        ],
+      }
+      : undefined;
+    const targetSelect = {
+      kind: true,
+      mentionedName: true,
+      contactId: true,
+      contact: { select: { id: true, name: true } },
+      companyId: true,
+      company: { select: { id: true, name: true } },
+    };
+
+    const [meetingRows, noteRows] = await Promise.all([
+      prisma.conversationMention.findMany({ where: nameFilter, select: targetSelect, take: 500 }),
+      prisma.noteMention.findMany({ where: nameFilter, select: targetSelect, take: 500 }),
+    ]);
+    const rows = [...meetingRows, ...noteRows];
 
     // One entry per distinct target. A mention bound to a CRM record is keyed by id
     // (so two people with the same name stay distinct, and a later rename doesn't

@@ -91,6 +91,7 @@ const TABLES_PARENT_FIRST = [
   'ConversationPrepNote', 'ConversationAttachment',
   'ConversationOrg',
   'ConversationMention',
+  'NoteMention',
   'DismissedDuplicate', 'DuplicateMergeRule',
 ];
 const TABLES_CHILD_FIRST = [...TABLES_PARENT_FIRST].reverse();

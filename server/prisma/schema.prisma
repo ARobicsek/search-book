@@ -59,6 +59,10 @@ model Contact {
   participantInConversations ConversationParticipant[] @relation("ParticipantInConversations")
   discussedInConversations ConversationContact[] @relation("DiscussedInConversations")
   mentionedInConversations ConversationMention[] @relation("MentionedInConversations")
+  // Two sides of NoteMention: mentions written INSIDE this contact's own notes,
+  // and mentions OF this contact written in someone else's notes / an idea.
+  noteMentionsInMyNotes    NoteMention[] @relation("NoteMentionSourceContact")
+  mentionedInNotes         NoteMention[] @relation("MentionedInNotes")
   ideaContacts             IdeaContact[]
   actionContacts           ActionContact[] @relation("ActionContacts")
 }
@@ -91,6 +95,7 @@ model Company {
   activities               CompanyActivity[]
   companyPrepNotes         CompanyPrepNote[]
   mentionedInConversations ConversationMention[] @relation("OrgMentionedInConversations")
+  mentionedInNotes         NoteMention[]         @relation("OrgMentionedInNotes")
 }
 
 // ─── Company Activities (company-level action log) ──────────
@@ -236,6 +241,43 @@ model ConversationMention {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId])
+  @@index([contactId])
+  @@index([companyId])
+}
+
+// The sibling of ConversationMention for the two NON-meeting places that carry
+// mention-bearing prose: a contact's own `notes` and an idea's `description`.
+// Same derived-from-the-text contract — every save of the source re-parses its
+// tokens and replaces these rows.
+//
+// ⚠ Why a separate table instead of nullable columns on ConversationMention:
+// making `conversationId` nullable is a SQLite TABLE REBUILD, and the Turso
+// migration path is additive-DDL-only (see CLAUDE.md). A new table is a plain
+// CREATE TABLE, which that path can take.
+//
+// EXACTLY ONE source FK is set; `sourceType` is derived from which one (not
+// stored — a stored discriminator could drift out of step with the FKs). Both
+// source FKs cascade, so deleting a contact or idea takes its mention rows with
+// it; the mention TARGETS are SetNull, matching ConversationMention.
+model NoteMention {
+  id              Int      @id @default(autoincrement())
+  sourceContactId Int?
+  sourceContact   Contact? @relation("NoteMentionSourceContact", fields: [sourceContactId], references: [id], onDelete: Cascade)
+  sourceIdeaId    Int?
+  sourceIdea      Idea?    @relation(fields: [sourceIdeaId], references: [id], onDelete: Cascade)
+  // Target of the mention — same three columns as ConversationMention: `kind`
+  // ('CONTACT' | 'COMPANY') is what disambiguates a LOOSE mention, where both ids
+  // are null because the name isn't in the CRM yet.
+  kind            String   @default("CONTACT")
+  contactId       Int?
+  contact         Contact? @relation("MentionedInNotes", fields: [contactId], references: [id], onDelete: SetNull)
+  companyId       Int?
+  company         Company? @relation("OrgMentionedInNotes", fields: [companyId], references: [id], onDelete: SetNull)
+  mentionedName   String
+  createdAt       DateTime @default(now())
+
+  @@index([sourceContactId])
+  @@index([sourceIdeaId])
   @@index([contactId])
   @@index([companyId])
 }
@@ -428,6 +470,7 @@ model Idea {
   contacts    IdeaContact[]
   companies   IdeaCompany[]
   tagLinks    IdeaTag[]
+  mentions    NoteMention[]
 }
 
 // Junction: tags on an idea (shares the app-wide Tag entity with contacts/companies/meetings)

@@ -30,6 +30,8 @@ const TABLES_PARENT_FIRST = [
   'ConversationOrg',
   // @-mentions of people in meeting notes (parents Conversation + Contact appear earlier)
   'ConversationMention',
+  // The same index over contact notes / idea descriptions (parents Contact, Idea, Company appear earlier)
+  'NoteMention',
   // Duplicate-management preferences (no FK dependencies — safe to append last)
   'DismissedDuplicate', 'DuplicateMergeRule',
 ] as const;
@@ -74,7 +76,8 @@ async function readAllTables(
   onProgress?: (progress: BackupProgress) => void
 ): Promise<Record<string, unknown>> {
   const data: Record<string, unknown> = {
-    _meta: { exportedAt: new Date().toISOString(), version: 7 },
+    // v8 = 33 tables (v7's 32 + NoteMention) — see the server export's note.
+    _meta: { exportedAt: new Date().toISOString(), version: 8 },
   };
 
   for (let i = 0; i < TABLES_PARENT_FIRST.length; i++) {

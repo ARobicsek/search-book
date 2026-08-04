@@ -44,7 +44,7 @@ async function buildExport() {
     contactStatusHistory, companyStatusHistory, companyActivities,
     companyPrepNotes, conversationParticipants, conversationTags,
     conversationPrepNotes, conversationAttachments, conversationOrgs,
-    conversationMentions, series, ideaTags,
+    conversationMentions, noteMentions, series, ideaTags,
     dismissedDuplicates, duplicateMergeRules,
   ] = await Promise.all([
     prisma.contact.findMany(),
@@ -75,6 +75,7 @@ async function buildExport() {
     prisma.conversationAttachment.findMany(),
     prisma.conversationOrg.findMany(),
     prisma.conversationMention.findMany(),
+    prisma.noteMention.findMany(),
     prisma.series.findMany(),
     prisma.ideaTag.findMany(),
     prisma.dismissedDuplicate.findMany(),
@@ -82,7 +83,9 @@ async function buildExport() {
   ]);
 
   return {
-    _meta: { exportedAt: new Date().toISOString(), version: 7 },
+    // v8 = 33 tables (v7's 32 + NoteMention). Informational only — /import keys off
+    // each table's presence (`data.X?.length`), so a v7 file still restores.
+    _meta: { exportedAt: new Date().toISOString(), version: 8 },
     Contact: contacts,
     Company: companies,
     EmploymentHistory: employmentHistory,
@@ -116,6 +119,8 @@ async function buildExport() {
     ConversationOrg: conversationOrgs,
     // @-mentions of people inside meeting notes (derived index over the note text)
     ConversationMention: conversationMentions,
+    // The same index over the non-meeting sources: a contact's notes, an idea's description
+    NoteMention: noteMentions,
     // Recurring-meeting series (parent of Conversation.seriesId)
     Series: series,
     // Tags-on-ideas junction (shares the app-wide Tag entity)
@@ -537,6 +542,7 @@ router.post('/import', async (req: Request, res: Response) => {
       await tx.conversationAttachment.deleteMany();
       await tx.conversationOrg.deleteMany();
       await tx.conversationMention.deleteMany();
+      await tx.noteMention.deleteMany();
       await tx.contactTag.deleteMany();
       await tx.companyTag.deleteMany();
       await tx.ideaContact.deleteMany();
@@ -614,6 +620,8 @@ router.post('/import', async (req: Request, res: Response) => {
       if (data.ConversationOrg?.length) await tx.conversationOrg.createMany({ data: transformRecords(data.ConversationOrg) });
       // @-mentions (parents Conversation + Contact already inserted)
       if (data.ConversationMention?.length) await tx.conversationMention.createMany({ data: transformRecords(data.ConversationMention) });
+      // @-mentions in contact notes / idea descriptions (parents Contact, Idea, Company already inserted)
+      if (data.NoteMention?.length) await tx.noteMention.createMany({ data: transformRecords(data.NoteMention) });
       // Duplicate management preferences (no FK deps — safe to insert anytime)
       if (data.DismissedDuplicate?.length) await tx.dismissedDuplicate.createMany({ data: transformRecords(data.DismissedDuplicate) });
       if (data.DuplicateMergeRule?.length) await tx.duplicateMergeRule.createMany({ data: transformRecords(data.DuplicateMergeRule) });

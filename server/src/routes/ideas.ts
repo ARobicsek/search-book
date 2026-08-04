@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { deleteWithSnapshot } from '../lib/undo';
+import { syncNoteMentions } from '../lib/mentions';
 
 const router = Router();
 
@@ -65,21 +66,25 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Title is required' });
       return;
     }
-    const idea = await prisma.idea.create({
-      data: {
-        title: title.trim(),
-        ...rest,
-        contacts: contactIds?.length
-          ? { create: (contactIds as number[]).map((cId) => ({ contactId: cId })) }
-          : undefined,
-        companies: companyIds?.length
-          ? { create: (companyIds as number[]).map((cId) => ({ companyId: cId })) }
-          : undefined,
-        tagLinks: tagIds?.length
-          ? { create: (tagIds as number[]).map((tId) => ({ tagId: tId })) }
-          : undefined,
-      },
-      include: ideaIncludes,
+    const idea = await prisma.$transaction(async (tx) => {
+      const created = await tx.idea.create({
+        data: {
+          title: title.trim(),
+          ...rest,
+          contacts: contactIds?.length
+            ? { create: (contactIds as number[]).map((cId) => ({ contactId: cId })) }
+            : undefined,
+          companies: companyIds?.length
+            ? { create: (companyIds as number[]).map((cId) => ({ companyId: cId })) }
+            : undefined,
+          tagLinks: tagIds?.length
+            ? { create: (tagIds as number[]).map((tId) => ({ tagId: tId })) }
+            : undefined,
+        },
+      });
+      // Index any @-mentions in the description.
+      await syncNoteMentions(tx, { ideaId: created.id }, created.description);
+      return tx.idea.findUnique({ where: { id: created.id }, include: ideaIncludes });
     });
     res.status(201).json(idea);
   } catch (error) {
@@ -131,6 +136,13 @@ router.put('/:id', async (req: Request, res: Response) => {
             : undefined,
         },
       });
+
+      // Re-index @-mentions from the post-update description. Guarded on the field
+      // being in the payload — a partial PUT that never sends `description` must not
+      // wipe the index (same rule as the contact PUT).
+      if (data.description !== undefined) {
+        await syncNoteMentions(tx, { ideaId: id }, data.description as string | null);
+      }
     });
 
     const idea = await prisma.idea.findUnique({

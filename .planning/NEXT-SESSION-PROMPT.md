@@ -5,16 +5,19 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-## ✅ 2026-08-04 shipped: @-mentions in contact notes and ideas — DDL applied, pushed, deployed
+## ✅ 2026-08-04 shipped: @-mentions in contact notes and ideas — **owner confirmed live: "working great"**
 
 The `NoteMention` DDL was applied by the owner in the Turso web SQL console (`SELECT COUNT(*)` → `0`
-confirmed) **before** the push, per the non-negotiable. All four commits are on `origin/main`
-(`d985a43`, `d84b530`, `fef5a7c`, `9bc95cd`). Deploy verified: the live site serves
-`assets/index-nzBYCQhi.js`, the same bundle the local build of the pushed commit produced, and
-`/api/health` held `{status:ok, db:ok}` across the deploy window. ⚠ **The server routes could not be
-probed externally** — the app-password gate returns 401 for *every* `/api/*` path including nonexistent
-ones, so a 401 on `/api/mentions/notes` proves nothing about whether the route exists. Owner testing on
-the live site is what closes that gap; nothing agent-side can.
+confirmed) **before** the push, per the non-negotiable. Commits on `origin/main`: `d985a43`, `d84b530`,
+`fef5a7c`, `9bc95cd`, `4afa3e8`. Deploy verified: the live site serves `assets/index-nzBYCQhi.js`, the
+same bundle the local build of the pushed commit produced, and `/api/health` held `{status:ok, db:ok}`
+across the deploy window. **Owner then exercised it on the live site and reported "working great."**
+
+⚠ **A verification limit worth remembering: server routes cannot be probed from outside.** The
+app-password gate returns 401 for *every* `/api/*` path — confirmed by requesting a deliberately
+nonexistent one and getting the same 401 — so a 401 on a new route is **not** evidence it exists. Bundle-
+hash comparison against a local build is the usable signal for the client; for the server, only owner
+testing closes the gap.
 
 ## ▶ START HERE NEXT SESSION — the migration is DONE; **Phase 6 (decommission Vercel) after a few normal days**
 
@@ -60,11 +63,11 @@ After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated 
 
 ---
 
-### What Was Just Completed — @-mentions extended to contact Notes and Ideas (2026-08-04) — ⚠ AWAITING DDL, NOT PUSHED
+### What Was Just Completed — @-mentions extended to contact Notes and Ideas (2026-08-04) — DEPLOYED, owner confirmed
 
 Owner: *"let's add at-mentions to the Notes section of Contacts and to Ideas."* Asked the owner how far to go;
 they chose **full** — author + render + **index** — and **Notes only** on the contact form (not Role
-description / Useful for / Personal details). **Three commits on local `main`, unpushed pending the DDL above.**
+description / Useful for / Personal details). **Three feature commits plus two doc commits, all on `main` and deployed** (the DDL was applied first).
 
 **The design question was where the index lives.** @-mentions were meeting-only (`ConversationMention`), and
 that table is what makes a *loose* mention (`#mention` — a name not in the CRM) more than dead text: it drives
@@ -107,8 +110,9 @@ Now `tsc -b --force` (own commit, `d84b530`). **Production was never at risk** �
 `tsc -b && vite build`, so the deploy gate was real — but the pre-push signal was fake, the same
 silently-skipped-check shape the backup guard exists to prevent.
 
-**Not exercised on the live site** (unchanged limitation: the driven browser hits the app-password gate), and
-it *can't* be until the DDL is applied and the code pushed. Owner confirmation still covers production.
+**Not exercised on the live site by the agent** (unchanged limitation: the driven browser hits the
+app-password gate), so every behavioural check above ran against the local DB. **The owner then used it on
+the live site and confirmed "working great."**
 
 ---
 

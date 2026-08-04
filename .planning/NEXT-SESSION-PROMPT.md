@@ -31,6 +31,14 @@ are broken** (the DB now stores relative `/photos/`·`/files/` paths, which only
 **The "few normal days" condition is now SATISFIED** — 9 days in, all post-cutover checks green (table
 below). The only thing still gating Phase 6 is the owner's call on the rollback.
 
+⛔ **ASKED AND DEFERRED — owner chose "not yet, keep waiting" on 2026-08-04.** Presented with all checks
+green plus the recommendation to go; they opted to keep the rollback open. **Don't re-litigate this at the
+top of the next session** — it was a deliberate choice, not an oversight. Raise it again only if the owner
+brings it up, or if the cost of waiting changes (see below). Cost of waiting, for when it is revisited:
+two live deploys, a redundant daily Vercel-native backup cron in `vercel.json`, and the leftover
+credentials file in step 5 — **though that last one is separable and does not need Phase 6** (it was
+offered separately the same day; see step 5's note).
+
 **Do NOT start Phase 6 until the owner is sure they will never want the rollback**, because step 2 deletes
 the Vercel Blob store, and that is what makes this reversible:
 `node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
@@ -72,8 +80,19 @@ safety net — just the only one-command one.
    Keep `check:backup` in the build.
 4. **Docs:** update `CLAUDE.md` (storage = Netlify Blobs via proxy) and move `VERCEL-EXIT-PLAN.md` +
    `NETLIFY-MIGRATION-PLAN.md` to `.planning/archive/`.
-5. **Delete the scratchpad** — it still holds the VAPID private key, `CRON_SECRET`, and the Turso and
-   Netlify tokens.
+5. **Delete the leftover env file** — located 2026-08-04, exactly one file, `1842` bytes, dated Jul 26:
+   `%LOCALAPPDATA%\Temp\claude\c--dev-personal-searchbook\037afcb5-f85e-44f5-82e8-7bbb0fbf9a9b\scratchpad\phase4.env.ps1`
+   ⚠ **Correction to the old wording here:** it holds `BLOB_READ_WRITE_TOKEN`, `NETLIFY_AUTH_TOKEN`,
+   `NETLIFY_SITE_ID`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL` — **not** the VAPID private key or
+   `CRON_SECRET`, as this list previously claimed. No other session scratchpad contains secrets (all 150
+   were swept).
+   ⚠ **This is NOT purely a cleanup — read before deleting.** `CLAUDE.md` records that the Turso token
+   committed in `server/.env` is **stale (hard 401)**, which is the entire reason DDL has to be
+   hand-pasted into the Turso web console. This file may hold a **working** Turso token, i.e. the
+   capability to apply DDL and run scripts directly. Whether it still authenticates is **unverified** —
+   the attempt to probe it was blocked by the permission classifier (reading a credentials file), and that
+   block was not worked around. **Ask the owner** whether to test it, rotate it into `server/.env`, or
+   just delete it. This is decoupled from Phase 6 and can be settled at any time.
 
 After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated on decisions D5–D9
 (don't push on those until the owner raises them).

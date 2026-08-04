@@ -958,7 +958,47 @@ failure notifications serves that role.
 
 ## Appendix A — free-tier math & the cron/quota watch-item
 
-### R10 ANSWERED (2026-07-26) — and it is tight
+### R10 CLOSED — **MEASURED** on the live site 9 days after cutover (2026-08-04)
+
+The estimate below was ~2× conservative. Real numbers, owner's dashboard (**Serverless Functions daily
+usage**, Aug 1–4):
+
+| Meter | Measured | Projected month | Share of limit |
+|---|---|---|---|
+| Compute | **0.42 GB-Hrs** over 3 full days + a half | **~3.9 GB-Hrs** (~39 credits) | **~13%** |
+| Requests | **2.6 K** | **~35 K** | ~28% of the classic 125 K cap |
+| (July, incl. the soak + agent testing) | 1.4 GB-Hrs / 8.5 K | — | — |
+
+⚠ **The owner's plan does not display credits at all** — the dashboard meters **GB-Hrs and requests**
+per-meter, with no credit pool shown. The credit model described below may be a different/newer plan tier
+than the one this account is on. It didn't need resolving, because the measured figures sit far under
+*either* reading of the limit. **Don't re-raise this as a scare item without a number.**
+
+**Two structural findings that make the projection trustworthy:**
+
+1. **Function memory is 512 MB** — the optimistic end of the range the estimate below couldn't pin down.
+   Derivation: the cron floor is exactly 289 invocations/day (`searchbook-alert` at `*/5` = 288, plus the
+   daily backup) × ~2.5 s = 0.2 h/day, which at 512 MB is ~0.10 GB-Hrs/day — matching the observed daily
+   bars almost exactly.
+2. **The cron is ~80% of the compute bill, and it is weekend-flat.** So weekday/weekend weighting barely
+   moves compute (a naive 4-day average gave 11%; correcting for two weekend days and a half-elapsed
+   Tuesday gave 13%). **Requests** are the usage-driven meter and moved much more under the same
+   correction (16% → 28%) — that's the one to re-measure if usage patterns change.
+
+⚠ **Don't project a rate from a naive average over a window containing weekends or a partial day.**
+Reconstruct per-day first: subtract the known-constant cron floor, then split weekday vs weekend. The
+day-of-week split here was ~1,200 app requests on a workday vs **~50** on a weekend day — a 24× spread,
+and the weekend bars landing on the computed 289 floor is what validated the whole reconstruction.
+
+**Stress test:** 31 consecutive days of the heaviest day ever observed (~0.24 GB-Hrs, late July — and
+those peaks include agent testing, so they overstate real use) still comes to ~7.4 GB-Hrs, about a
+quarter of the budget. There is no realistic usage pattern that approaches a limit.
+
+**The one lever, if it ever matters, is still the cron cadence** (the 80%), not app usage. At ~13% there
+is no reason to touch it — and lengthening it would cost cold starts, since ~0.2 s/request assumes a warm
+function while a cold one is 3–13 s.
+
+### R10 as ESTIMATED pre-cutover (2026-07-26) — kept for the reasoning; superseded by the measurement above
 
 Netlify's 2026 model is **credit-based**, not invocation-based:
 
@@ -983,6 +1023,8 @@ or actually using the app. This was flagged as "may be a large slice of the free
 
 **Action:** check Usage & billing ~4 days after cutover. Budget is ~10 credits/day; if the Compute meter
 trends above that, pull a lever before the 50% email.
+→ **DONE 2026-08-04 (9 days after cutover): ~1.3 credit-equivalents/day, ~13% of a 300 budget. No lever
+needed.** See the measured section at the top of this appendix.
 
 ### DECIDED (owner, 2026-07-26): reminders run **every 5 minutes** — `*/5 * * * *`
 

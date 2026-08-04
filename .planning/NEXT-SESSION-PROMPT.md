@@ -26,24 +26,41 @@ testing closes the gap.
 Phases 0–5 are all complete (2026-07-26). **`searchbook-three.vercel.app` must not be used — its images
 are broken** (the DB now stores relative `/photos/`·`/files/` paths, which only Netlify serves).
 
-**Kickoff prompt:** *"Run Netlify migration Phase 6"* — `NETLIFY-MIGRATION-PLAN.md` **§8**. It is
-deliberately **not urgent**: let the app run normally for a few days first.
+**Kickoff prompt:** *"Run Netlify migration Phase 6"* — `NETLIFY-MIGRATION-PLAN.md` **§8**.
+
+**The "few normal days" condition is now SATISFIED** — 9 days in, all post-cutover checks green (table
+below). The only thing still gating Phase 6 is the owner's call on the rollback.
 
 **Do NOT start Phase 6 until the owner is sure they will never want the rollback**, because step 2 deletes
 the Vercel Blob store, and that is what makes this reversible:
 `node server/scripts/rewrite-blob-urls.mjs sv1nlcmvomldhzg3.public.blob.vercel-storage.com --undo`
+⚠ **Sequencing:** the point of no return is the **owner's dashboard deletion (step 2)**, not the repo
+cleanup (step 3) — and the plan's order is deliberate. Doing the repo cleanup first would break the Vercel
+deploy while the store still exists, so a rollback would then need a `git revert` as well. Also note the
+undo script itself only works while the Blob store exists; the backup **ZIP is a complete offline copy of
+all 238 binaries** regardless (proven by the 2026-07-26 restore drill), so the store is not the only
+safety net — just the only one-command one.
+
+### ✅ 9-day post-cutover checks — ALL GREEN (owner-confirmed 2026-08-04)
+
+| Check | Result |
+|---|---|
+| **Netlify free-tier usage** | **~13% of budget. R10 CLOSED — measured, not estimated.** 0.42 GB-Hrs + 2.6 K requests over Aug 1–4 → ~3.9 GB-Hrs (~39 credits) / ~35 K requests per month. Function memory is **512 MB**; the cron is **~80% of compute and weekend-flat**. Full arithmetic + the projection method in `NETLIFY-MIGRATION-PLAN.md` Appendix A. ⚠ The owner's plan shows **GB-Hrs/requests, no credit pool** — don't re-raise this as a scare item without a number. |
+| Daily backup cron | **Running.** (The `searchbook-backup` 401-on-missing-`CRON_SECRET` failure mode did not materialise.) |
+| Global search | **"has been great"** — no group has exceeded the 9 s budget on real data, so bug #12's residual never fired. |
+| iPhone push reminders | **Working** on the `*/5` cadence. |
+| `/api/health` | `200 {status:ok, db:ok}` (agent-verified 2026-08-04 16:23Z). |
 
 ### Carry-overs to check first
 
 | Item | Why |
 |---|---|
-| ⚠ **Netlify credit usage** | Check **Team dashboard → Usage & billing → Account usage insights** (~4 days in). Free plan = **300 credits/mo, hard limit — at 100% every project is PAUSED**, not throttled. The reminders cron was cut from every-1-min to **every-5-min** for exactly this; est. ~20% of budget, but that is an estimate, not a measurement. Netlify emails at 50/75/100%. |
-| Backup job alert threshold | `searchbook-backup` notifies after **3** failures = 3 days of silent backup failure. Owner may want 1. |
+| Backup job alert threshold | `searchbook-backup` notifies after **3** failures = 3 days of silent backup failure. Owner may want 1. (Backups themselves confirmed running 2026-08-04 — this is the alerting config only.) |
 | Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |
 | Vercel-native backup cron | Still in `vercel.json`, still writing to Vercel Blob daily until the project is deleted. Harmless extra net. |
 | ⚠ **GitHub itself may be blocked on the NCQA work network** | Hit 2026-07-31: `git push` failed from the work network — `github.com` (140.82.114.3), `api.github.com` and `codeload.github.com` **all timed out on IPv4 *and* IPv6**, while `google.com`, `ari-search-book.netlify.app` and `raw.githubusercontent.com` (Fastly-hosted, so a different AS) were all fine. Same shape as the Vercel / `*.run.app` blocks. **Owner switched networks and the push went straight through.** If a push hangs, this is why — it is not git, credentials, or the agent's sandbox (verified with the sandbox disabled). The **published Outlook ICS feed also 417s** from that network (after 2 redirects, with any User-Agent), so local Outlook import shows "Could not read the Outlook calendar feed" there while working fine from Netlify. |
 | Contact edit form overflows at 390 px | Noticed 2026-07-30 while re-testing mobile: `/contacts/:id/edit` has 78 elements reaching `right=451` in a 390 px viewport (the `sm:col-span-2` fields in the Basic Info card). Pre-existing — confirmed by stash-and-remeasure. Not reported by the owner; ask before spending time on it. |
-| Global search: does any **single** group still time out? | Global search now runs one request per entity group (bug #12, `1c6d7c1`). If one group *alone* still exceeds Netlify's 9 s app-504 on the real data, the page names it in an amber banner with a Retry — ask the owner whether they've seen one, and check the per-group `[TIMING] search … scopes=<group> → Nms` lines in the function logs. `meetings`/`mentions` are the likely candidates (224+ meetings, long Copilot recaps). The declined **keep-warm ping** (bug #9) is still the cure for cold-start slowness. |
+| ~~Global search: does any **single** group still time out?~~ | **RESOLVED 2026-08-04 — owner: "has been great."** No amber banner seen in 9 days of real use, so no group exceeds the 9 s budget on the live data. The per-group `[TIMING] search … scopes=<group> → Nms` log lines remain the diagnostic if it ever regresses. |
 
 ### Phase 6 = (§8)
 

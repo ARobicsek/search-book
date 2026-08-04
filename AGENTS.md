@@ -41,8 +41,11 @@ of every doc.
   `EXEMPT` set if ephemeral. The `check-backup-coverage.mjs` guard (in `prepush` + the Vercel build)
   fails the build otherwise. Details in `CLAUDE.md`.
 - **Re-test mobile (390px)** for any UI change, plus desktop.
-- Run a full `vite build` / `tsc -b` (not just `npm run prepush`) before pushing — it catches
-  unused imports the typecheck misses.
+- Run a full `vite build` before pushing. (Until 2026-08-04 this bullet also said `tsc -b` "catches
+  unused imports the typecheck misses" — the real reason was that the client's `typecheck` script was
+  `tsc --noEmit` against a **solution** tsconfig with `"files": []`, so it checked **zero files** and
+  always passed. It is now `tsc -b --force`, so `prepush` genuinely typechecks the client; keep it that
+  way and don't "simplify" it back to `tsc --noEmit`.)
 
 ## Where things live (doc map)
 

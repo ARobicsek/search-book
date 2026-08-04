@@ -5,6 +5,20 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+## 🛑 BLOCKING: three commits are on local `main` but **NOT PUSHED** — they need Turso DDL first
+
+`d985a43` + `d84b530` + `fef5a7c` (2026-08-04, @-mentions in contact notes and ideas) add a **new table**,
+`NoteMention`. Per the non-negotiable, schema-touching code must not reach the deploy before the DDL is
+applied to Turso — the app would 500 on every contact/idea save (`no such table: NoteMention`).
+
+**To unblock (owner, ~1 minute):** open the **Turso web SQL console** (the rw token commented in
+`server/.env` is stale — hard 401, so a script won't work), paste the whole of
+**`.planning/ddl/2026-08-04-note-mentions.sql`**, run it, then `SELECT COUNT(*) FROM "NoteMention";` → `0`.
+It is purely additive — one `CREATE TABLE` + four indexes, nothing existing altered — so it is safe to apply
+while the current build is live; the table just sits empty until the code ships. **Then `git push origin main`.**
+
+Everything is verified locally (see "What Was Just Completed" below). `npm run prepush` is green.
+
 ## ▶ START HERE NEXT SESSION — the migration is DONE; **Phase 6 (decommission Vercel) after a few normal days**
 
 **🎉 SearchBook now runs on Netlify.** `main` is the source of truth, Netlify deploys from `main` (**confirmed
@@ -46,6 +60,58 @@ the Vercel Blob store, and that is what makes this reversible:
 
 After that, the next real work is **`NCQA-ADAPTATION-PLAN.md` Phase 3+**, gated on decisions D5–D9
 (don't push on those until the owner raises them).
+
+---
+
+### What Was Just Completed — @-mentions extended to contact Notes and Ideas (2026-08-04) — ⚠ AWAITING DDL, NOT PUSHED
+
+Owner: *"let's add at-mentions to the Notes section of Contacts and to Ideas."* Asked the owner how far to go;
+they chose **full** — author + render + **index** — and **Notes only** on the contact form (not Role
+description / Useful for / Personal details). **Three commits on local `main`, unpushed pending the DDL above.**
+
+**The design question was where the index lives.** @-mentions were meeting-only (`ConversationMention`), and
+that table is what makes a *loose* mention (`#mention` — a name not in the CRM) more than dead text: it drives
+the Mentions page's one-click Create / Link, the `@` picker, and the search scope. Without indexing, a loose
+name typed in a contact's notes could never be resolved. But `ConversationMention.conversationId` can't be made
+nullable — **that's a SQLite table rebuild and the Turso path is additive-only** — so the second source got a
+**new sibling table, `NoteMention`**, sharing every parsing rule via `server/src/lib/mentions.ts`. Exactly one
+of `sourceContactId`/`sourceIdeaId` is set (both cascade) and `sourceType` is **derived**, not stored.
+
+**Both fields already used `MarkdownTextarea`**, which carries the `@` autocomplete — so authoring was mostly
+feeding it the name lists each page already fetched. The read sites were the real gap: all four rendered plain
+`ReactMarkdown` and would have shown raw `[@Name](/contacts/7)` tokens; they now use `MentionableMarkdown`.
+
+**Merge safety was the part that needed care**, and it's the bug class `CLAUDE.md` already documents for
+meetings: `NoteMention`'s target columns are `SetNull`, so a merge that deleted an org while leaving
+`(/companies/<removeId>)` in a contact's notes would leave a dead chip that **degrades back to a loose mention
+on the next save** — re-offering "Create" and re-minting the duplicate just merged away. `rewriteNoteMentionTokens`
+now covers `Contact.notes` + `Idea.description` (raw SQL, so a re-link doesn't bump `updatedAt`), and
+`runContactMerge` re-derives the *kept* contact's index unconditionally because field selections can replace its
+whole `notes` value. **Tested by actually merging two throwaway orgs** with the doomed one mentioned from both a
+contact's notes and an idea: both tokens re-pointed, index resynced, no orphaned or nulled rows.
+
+Also verified against the local DB: all four token kinds indexed from both source types; `link` rewrote the
+token **in place** (prose keeps the owner's wording, only the target changes); `create-contact` bound; guards
+returned 400/404. Then **driven in Chromium**: `@Viv` in a contact's Notes opened the picker with titles + both
+loose options, picking inserted the token, the saved detail page showed a linked chip and a dashed inert one and
+**no raw tokens**, the Mentions page showed the new "Contact notes" card and its **Create actually created,
+rebound the chip and rewrote the prose**, the pinned search `?mention=contact:185` counted **5 = 1 note source +
+4 meetings** and rendered both card kinds, and the Ideas dialog picker offered the org with its subtitle.
+**All test data removed** (test contact, 2 test ideas, 2 throwaway orgs, the merge rule, undo snapshots; Sarah
+Shih's notes restored byte-for-byte).
+
+Backup: `NoteMention` added to all five enumerations the coverage guard cross-checks (**33 tables**), format
+stamped **v8** (informational — `/import` keys off per-table presence, so v7 files still restore).
+
+⚠ **Found en route: `npm run typecheck --prefix client` was checking NOTHING.** `client/tsconfig.json` is a
+solution file (`"files": []` + references), and plain `tsc --noEmit` honours that literally — zero files, exit 0.
+Proven: code with two undeclared names passed, while `tsc -p tsconfig.app.json --noEmit` reported five errors.
+Now `tsc -b --force` (own commit, `d84b530`). **Production was never at risk** — `client`'s `build` is
+`tsc -b && vite build`, so the deploy gate was real — but the pre-push signal was fake, the same
+silently-skipped-check shape the backup guard exists to prevent.
+
+**Not exercised on the live site** (unchanged limitation: the driven browser hits the app-password gate), and
+it *can't* be until the DDL is applied and the code pushed. Owner confirmation still covers production.
 
 ---
 

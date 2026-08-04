@@ -199,6 +199,23 @@ export function meetingMentionSnippets(meeting: {
   return out
 }
 
+// The note context around a NON-meeting source's @-mentions — a contact's `notes` or
+// an idea's `description`. The single-field counterpart of meetingMentionSnippets, so
+// the review page and search render both source kinds through the same path.
+export function noteMentionSnippets(source: {
+  text: string | null
+  mentions: { kind: 'CONTACT' | 'COMPANY'; mentionedName: string; contactId: number | null; companyId: number | null }[]
+}): string[] {
+  const matchers: MentionMatcher[] = source.mentions.map((m) =>
+    m.contactId != null
+      ? { contactId: m.contactId }
+      : m.companyId != null
+        ? { companyId: m.companyId }
+        : { name: m.mentionedName, kind: m.kind },
+  )
+  return mentionSnippets(source.text, matchers)
+}
+
 // Characters allowed inside the in-progress "@query" (names: letters incl.
 // accents, digits, spaces, and . ' -). Anything else ends the mention.
 const QUERY_CHAR = /[\p{L}\p{N} .'’-]/u

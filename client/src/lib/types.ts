@@ -322,10 +322,30 @@ export interface MentionMeeting {
   matches?: SearchMatch[];
 }
 
+/** A NON-meeting source of @-mentions — a contact whose `notes` or an idea whose
+ *  `description` holds them (the NoteMention index). One envelope for both kinds:
+ *  `text` is the prose the mentions were parsed from, which the client windows around
+ *  each mention exactly as it does a meeting's notes. */
+export interface NoteMentionSource {
+  sourceType: 'CONTACT' | 'IDEA';
+  sourceId: number;
+  /** The contact's name or the idea's title. */
+  label: string;
+  /** CONTACT sources only — feeds contactDisplayName(). */
+  preferredName?: string | null;
+  text: string | null;
+  updatedAt: string | null;
+  mentions: ConversationMention[];
+  /** Why it matched, in the search page's "@-Mentions" group. Same contract as
+   *  MentionMeeting.matches: only present with a picked target plus query words. */
+  matches?: SearchMatch[];
+}
+
 /** One row in the "@" picker: a person or organization that has actually been
- *  @-mentioned somewhere, with the number of meetings mentioning it. `bound` is false
- *  for a loose name (never made a contact) — it can only be identified by its name,
- *  which is exactly why the picker exists: to show the real spelling. */
+ *  @-mentioned somewhere, with the number of places mentioning it (meetings plus
+ *  contact notes / ideas). `bound` is false for a loose name (never made a contact) —
+ *  it can only be identified by its name, which is exactly why the picker exists: to
+ *  show the real spelling. */
 export interface MentionIndexEntry {
   key: string;
   kind: 'CONTACT' | 'COMPANY';
@@ -512,6 +532,9 @@ export interface SearchResult {
   /** Meetings that @-mention someone matching the query, each carrying only the
    *  matching mentions (the "@-Mentions" scope). */
   mentions?: MentionMeeting[];
+  /** The other half of the same group: contact notes / ideas that @-mention them.
+   *  `totals.mentions` counts both, since the client renders them as one list. */
+  noteMentions?: NoteMentionSource[];
   /** The @-mention target picked from the "@" picker, resolved to a display name so a
    *  deep link can label its chip. Non-null means the search was pinned to this
    *  person/org, and only the mentions group was searched. */

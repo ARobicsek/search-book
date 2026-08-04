@@ -13,6 +13,7 @@ import type {
   DatePrecision,
   RelationshipType,
   MentionMeeting,
+  NoteMentionSource,
 } from '@/lib/types'
 import {
   ECOSYSTEM_OPTIONS,
@@ -795,7 +796,10 @@ export function ContactDetailPage() {
             </CardHeader>
             <CardContent>
               {contact.notes ? (
-                <div className="prep-note-markdown"><ReactMarkdown>{contact.notes}</ReactMarkdown></div>
+                // MentionableMarkdown (not plain ReactMarkdown): Notes can hold
+                // @-mention tokens, which must render as linked chips rather than raw
+                // markdown. Same for the compact variant further down this file.
+                <div className="prep-note-markdown"><MentionableMarkdown>{contact.notes}</MentionableMarkdown></div>
               ) : (
                 <p className="text-sm text-muted-foreground">No notes yet. Add notes via Edit.</p>
               )}
@@ -1211,11 +1215,14 @@ function MeetingTakeawaysCard({
   )
 }
 
-// ─── Mentioned-in-meetings card (@-mentions) ────────────────
-// Meetings whose notes @-mention this contact, newest first — the inverse of the
-// Mentions page, scoped to one person. Self-fetches from /mentions?contactId=.
+// ─── Mentioned-in card (@-mentions) ─────────────────────────
+// Everywhere this contact was @-mentioned, newest first — the inverse of the Mentions
+// page, scoped to one person. Two indexes feed it: meetings (/mentions?contactId=) and
+// contact notes / ideas (/mentions/notes?contactId=). Each row shows the text
+// surrounding the mention, so it reads as evidence rather than a bare link.
 function MentionedInMeetingsCard({ contactId }: { contactId: number }) {
   const [meetings, setMeetings] = useState<MentionMeeting[]>([])
+  const [noteSources, setNoteSources] = useState<NoteMentionSource[]>([])
 
   useEffect(() => {
     let active = true
@@ -1223,18 +1230,45 @@ function MentionedInMeetingsCard({ contactId }: { contactId: number }) {
       .get<{ data: MentionMeeting[] }>(`/mentions?contactId=${contactId}&limit=50`)
       .then((res) => { if (active) setMeetings(res.data) })
       .catch(() => { /* non-critical secondary panel */ })
+    api
+      .get<{ data: NoteMentionSource[] }>(`/mentions/notes?contactId=${contactId}`)
+      .then((res) => { if (active) setNoteSources(res.data) })
+      .catch(() => { /* non-critical secondary panel */ })
     return () => { active = false }
   }, [contactId])
 
-  if (meetings.length === 0) return null
+  if (meetings.length === 0 && noteSources.length === 0) return null
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Mentioned in Meetings</CardTitle>
+        <CardTitle>Mentioned In</CardTitle>
       </CardHeader>
       <CardContent>
         <ul className="space-y-3">
+          {noteSources.map((s) => {
+            const snippet = mentionSnippet(s.text, { contactId })
+            const isContact = s.sourceType === 'CONTACT'
+            return (
+              <li key={`${s.sourceType}-${s.sourceId}`} className="text-sm">
+                <p className="text-xs text-muted-foreground">
+                  {isContact ? 'Contact notes' : 'Idea'}
+                  {' — '}
+                  <Link
+                    to={isContact ? `/contacts/${s.sourceId}` : `/ideas?id=${s.sourceId}`}
+                    className="text-primary hover:underline"
+                  >
+                    {s.label}
+                  </Link>
+                </p>
+                {snippet && (
+                  <div className="prep-note-markdown mt-0.5 line-clamp-4 text-muted-foreground">
+                    <MentionableMarkdown>{snippet}</MentionableMarkdown>
+                  </div>
+                )}
+              </li>
+            )
+          })}
           {meetings.map((m) => {
             // Show the note text surrounding where THIS contact was @-mentioned
             // (notes → next steps → prep notes).
@@ -2314,7 +2348,7 @@ function PrepSheetTab({
             )}
             {contact.notes && (
               <Field label="Notes">
-                <div className="prep-note-markdown"><ReactMarkdown>{contact.notes}</ReactMarkdown></div>
+                <div className="prep-note-markdown"><MentionableMarkdown>{contact.notes}</MentionableMarkdown></div>
               </Field>
             )}
           </dl>

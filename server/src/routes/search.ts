@@ -340,7 +340,10 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
       if (peopleNotes) {
-        pushField(fields, 'notes', c.notes, 1);
+        // Notes can hold @-mention tokens now, so they get the same humanizing the
+        // meeting fields get — a raw `[@Name](/contacts/7)` reads terribly in a
+        // snippet. Term matching is unaffected: the display name survives the rewrite.
+        pushField(fields, 'notes', humanizeMentions(c.notes), 1);
         pushField(fields, 'personal details', c.personalDetails, 1);
         pushField(fields, 'open questions', c.openQuestions, 1);
         pushField(fields, 'mutual connections', c.mutualConnections, 1);
@@ -697,7 +700,9 @@ router.get('/', async (req: Request, res: Response) => {
       pushField(fields, 'title', i.title, 3);
       for (const tl of i.tagLinks || []) if (tl.tag.name !== FAVORITE_TAG_NAME) pushField(fields, 'tag', tl.tag.name, 2);
       pushField(fields, 'tags', i.tags, 2); // legacy comma-string, back-compat
-      pushField(fields, 'description', i.description, 1);
+      // Humanized for the same reason as contact notes above — the description is now
+      // an @-mention source.
+      pushField(fields, 'description', humanizeMentions(i.description), 1);
       return fields;
     };
 

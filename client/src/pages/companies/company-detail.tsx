@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { Company, Contact, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType, Conversation, MentionMeeting, DatePrecision } from '@/lib/types'
+import type { Company, Contact, Action, LinkRecord, CompanyStatus, CompanyActivity, CompanyActivityType, Conversation, MentionMeeting, NoteMentionSource, DatePrecision } from '@/lib/types'
 import { COMPANY_STATUS_OPTIONS, ECOSYSTEM_OPTIONS, CONTACT_STATUS_OPTIONS, ACTION_TYPE_OPTIONS, ACTION_PRIORITY_OPTIONS, COMPANY_ACTIVITY_TYPE_OPTIONS, conversationDisplayName } from '@/lib/types'
 import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import { mentionSnippet } from '@/lib/mentions'
@@ -131,11 +131,13 @@ function formatMentionDate(dateStr: string, precision: DatePrecision) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// Meetings whose notes @-mention this organization, newest first — the org
-// counterpart of the contact page's "Mentioned in Meetings" card. Self-fetches
-// from /mentions?companyId=. Each row shows the note text surrounding the mention.
+// Everywhere this organization was @-mentioned, newest first — the org counterpart of
+// the contact page's "Mentioned In" card. Two indexes: meetings (/mentions?companyId=)
+// and contact notes / ideas (/mentions/notes?companyId=). Each row shows the note text
+// surrounding the mention.
 function OrgMentionedInMeetingsCard({ companyId }: { companyId: number }) {
   const [meetings, setMeetings] = useState<MentionMeeting[]>([])
+  const [noteSources, setNoteSources] = useState<NoteMentionSource[]>([])
 
   useEffect(() => {
     let active = true
@@ -143,18 +145,45 @@ function OrgMentionedInMeetingsCard({ companyId }: { companyId: number }) {
       .get<{ data: MentionMeeting[] }>(`/mentions?companyId=${companyId}&limit=50`)
       .then((res) => { if (active) setMeetings(res.data) })
       .catch(() => { /* non-critical secondary panel */ })
+    api
+      .get<{ data: NoteMentionSource[] }>(`/mentions/notes?companyId=${companyId}`)
+      .then((res) => { if (active) setNoteSources(res.data) })
+      .catch(() => { /* non-critical secondary panel */ })
     return () => { active = false }
   }, [companyId])
 
-  if (meetings.length === 0) return null
+  if (meetings.length === 0 && noteSources.length === 0) return null
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Mentioned in Meetings</CardTitle>
+        <CardTitle>Mentioned In</CardTitle>
       </CardHeader>
       <CardContent>
         <ul className="space-y-3">
+          {noteSources.map((s) => {
+            const snippet = mentionSnippet(s.text, { companyId })
+            const isContact = s.sourceType === 'CONTACT'
+            return (
+              <li key={`${s.sourceType}-${s.sourceId}`} className="text-sm">
+                <p className="text-xs text-muted-foreground">
+                  {isContact ? 'Contact notes' : 'Idea'}
+                  {' — '}
+                  <Link
+                    to={isContact ? `/contacts/${s.sourceId}` : `/ideas?id=${s.sourceId}`}
+                    className="text-primary hover:underline"
+                  >
+                    {s.label}
+                  </Link>
+                </p>
+                {snippet && (
+                  <div className="prep-note-markdown mt-0.5 line-clamp-4 text-muted-foreground">
+                    <MentionableMarkdown>{snippet}</MentionableMarkdown>
+                  </div>
+                )}
+              </li>
+            )
+          })}
           {meetings.map((m) => {
             const snippet =
               [m.notes, m.nextSteps, ...m.prepNotes.map((p) => p.content)]

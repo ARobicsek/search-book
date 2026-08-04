@@ -9,6 +9,7 @@ import type {
   ContactSearchResult,
   CompanySearchResult,
   MentionMeeting,
+  NoteMentionSource,
   MentionIndexEntry,
   Ecosystem,
   ContactStatus,
@@ -17,7 +18,7 @@ import type {
   Tag,
 } from '@/lib/types'
 import { contactDisplayName, conversationDisplayName } from '@/lib/types'
-import { meetingMentionSnippets, detectMentionQuery } from '@/lib/mentions'
+import { meetingMentionSnippets, noteMentionSnippets, detectMentionQuery } from '@/lib/mentions'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -132,6 +133,7 @@ const emptyResult = (query: string): SearchResult => ({
   ideas: [],
   conversations: [],
   mentions: [],
+  noteMentions: [],
   mention: null,
 })
 
@@ -159,8 +161,11 @@ function mergeGroup(base: SearchResult, key: GroupKey, res: SearchResult): Searc
       totals.conversations = res.totals?.conversations ?? next.conversations.length
       break
     case 'mentions':
+      // One group, two indexes: meetings AND the note sources (contact notes / ideas).
+      // `totals.mentions` already covers both server-side.
       next.mentions = res.mentions ?? []
-      totals.mentions = res.totals?.mentions ?? next.mentions.length
+      next.noteMentions = res.noteMentions ?? []
+      totals.mentions = res.totals?.mentions ?? next.mentions.length + next.noteMentions.length
       // The picked @-mention's resolved display name only comes back on this request.
       next.mention = res.mention ?? null
       break
@@ -299,7 +304,8 @@ function totalResults(results: SearchResult): number {
     results.actions.length +
     results.ideas.length +
     (results.conversations?.length || 0) +
-    (results.mentions?.length || 0)
+    (results.mentions?.length || 0) +
+    (results.noteMentions?.length || 0)
   )
 }
 
@@ -460,6 +466,68 @@ function MentionSearchCard({
             of the meeting those words hit. */}
         <MatchEvidence matches={meeting.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
         <ResultTags tags={meeting.tags} onTagClick={onTagClick} />
+      </CardContent>
+    </Card>
+  )
+}
+
+/** The other half of the "@-Mentions" group: a contact's notes or an idea's description
+ *  where someone matching the query was @-mentioned. Same anatomy as MentionSearchCard
+ *  — who was mentioned, then the prose around it — but it navigates to the source record
+ *  instead of opening the meeting dialog, so it's a plain Link rather than a click
+ *  handler. */
+function NoteMentionSearchCard({
+  source,
+  ev,
+}: {
+  source: NoteMentionSource
+  ev: EvidenceProps
+}) {
+  const isContact = source.sourceType === 'CONTACT'
+  const href = isContact ? `/contacts/${source.sourceId}` : `/ideas?id=${source.sourceId}`
+  const snippets = noteMentionSnippets(source)
+
+  return (
+    <Card className="mb-2 transition-colors hover:border-primary/40">
+      <CardContent className="space-y-1.5 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to={href} className="font-medium hover:underline">
+            <HighlightedText
+              text={isContact
+                ? contactDisplayName({ name: source.label, preferredName: source.preferredName })
+                : source.label}
+              terms={ev.terms}
+              caseSensitive={ev.caseSensitive}
+            />
+          </Link>
+          <Badge variant="outline" className="text-xs">
+            {isContact ? (
+              <><User className="mr-1 h-3 w-3" />Contact notes</>
+            ) : (
+              <><Lightbulb className="mr-1 h-3 w-3" />Idea</>
+            )}
+          </Badge>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          {source.mentions.map((m) => (
+            <MentionChip key={m.id} mention={m} />
+          ))}
+        </div>
+
+        {snippets.map((snippet, i) => (
+          <div
+            key={i}
+            className="prep-note-markdown line-clamp-6 border-l-2 border-muted pl-3 text-sm text-muted-foreground"
+          >
+            <MentionableMarkdown highlightTerms={ev.terms} caseSensitive={ev.caseSensitive}>
+              {snippet}
+            </MentionableMarkdown>
+          </div>
+        ))}
+
+        <MatchEvidence matches={source.matches} terms={ev.terms} caseSensitive={ev.caseSensitive} />
       </CardContent>
     </Card>
   )
@@ -1181,6 +1249,9 @@ export function SearchPage() {
   const mentionLabel = mentionFilter ? (mentionFilter.label || results?.mention?.name || '…') : ''
 
   const totals = results?.totals
+  // The @-Mentions group is one list over two indexes — meetings plus note sources
+  // (contact notes / ideas) — so every count and "showing N of M" reads from the sum.
+  const mentionHitCount = (results?.mentions?.length ?? 0) + (results?.noteMentions?.length ?? 0)
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -1230,7 +1301,9 @@ export function SearchPage() {
       <div className="flex flex-wrap items-center gap-2">
         {mentionFilter ? (
           <>
-            <span className="text-xs text-muted-foreground">Meetings that @-mention</span>
+            {/* "Notes" covers all three sources the mentions scope now searches:
+                meeting notes, a contact's notes, an idea's description. */}
+            <span className="text-xs text-muted-foreground">Notes that @-mention</span>
             <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-xs text-blue-800">
               <AtSign className="h-3 w-3" />
               {mentionLabel}
@@ -1244,7 +1317,7 @@ export function SearchPage() {
                 <X className="h-3 w-3" />
               </button>
             </Badge>
-            <span className="text-xs text-muted-foreground">— add words to narrow to particular meetings</span>
+            <span className="text-xs text-muted-foreground">— add words to narrow to particular notes</span>
           </>
         ) : (
           <>
@@ -1413,7 +1486,7 @@ export function SearchPage() {
             {showMentions && (
               <TabsTrigger value="mentions">
                 <AtSign className="mr-1 h-4 w-4" />
-                Mentions ({totals?.mentions ?? results.mentions?.length ?? 0})
+                Mentions ({totals?.mentions ?? mentionHitCount})
               </TabsTrigger>
             )}
             {showActions && (
@@ -1497,17 +1570,22 @@ export function SearchPage() {
               </div>
             )}
 
-            {results.mentions && results.mentions.length > 0 && (
+            {mentionHitCount > 0 && (
               <div className="mb-6">
                 <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <AtSign className="h-5 w-5" /> @-Mentions
                 </h2>
-                {results.mentions.slice(0, 5).map((meeting) => (
+                {/* Note sources first — the group's smaller half would otherwise be
+                    invisible behind five meetings and a "View all". */}
+                {results.noteMentions?.slice(0, 3).map((s) => (
+                  <NoteMentionSearchCard key={`${s.sourceType}-${s.sourceId}`} source={s} ev={ev} />
+                ))}
+                {results.mentions?.slice(0, 5).map((meeting) => (
                   <MentionSearchCard key={meeting.id} meeting={meeting} ev={ev} onOpen={setOpenMeetingId} onTagClick={addTagFilter} />
                 ))}
-                {results.mentions.length > 5 && (
+                {mentionHitCount > 8 && (
                   <Button variant="link" className="px-0" onClick={() => setTab('mentions')}>
-                    View all {totals?.mentions ?? results.mentions.length} meetings with mentions
+                    View all {totals?.mentions ?? mentionHitCount} places with mentions
                   </Button>
                 )}
               </div>
@@ -1604,12 +1682,15 @@ export function SearchPage() {
           </TabsContent>
 
           <TabsContent value="mentions" className="mt-4">
+            {results.noteMentions?.map((s) => (
+              <NoteMentionSearchCard key={`${s.sourceType}-${s.sourceId}`} source={s} ev={ev} />
+            ))}
             {results.mentions?.map((meeting) => (
               <MentionSearchCard key={meeting.id} meeting={meeting} ev={ev} onOpen={setOpenMeetingId} onTagClick={addTagFilter} />
             ))}
-            {totals && totals.mentions > (results.mentions?.length ?? 0) && (
+            {totals && totals.mentions > mentionHitCount && (
               <p className="text-sm text-muted-foreground">
-                Showing {results.mentions?.length ?? 0} of {totals.mentions} meetings with a matching @-mention — narrow the search to see the rest.
+                Showing {mentionHitCount} of {totals.mentions} places with a matching @-mention — narrow the search to see the rest.
               </p>
             )}
           </TabsContent>

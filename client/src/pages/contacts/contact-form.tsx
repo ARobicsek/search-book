@@ -208,7 +208,9 @@ export function ContactFormPage() {
   // Track manual changes in 'new' mode for realistic "saving..." animation
   const [isDraftSaving, setIsDraftSaving] = useState(false)
   const [companies, setCompanies] = useState<{ id: number; name: string }[]>([])
-  const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
+  // `title` is carried so the Notes @-mention picker can subtitle each person — the
+  // same list already backs the "referred by" combobox.
+  const [allContacts, setAllContacts] = useState<{ id: number; name: string; title?: string | null }[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -284,7 +286,7 @@ export function ContactFormPage() {
 
   useEffect(() => {
     api.get<{ id: number; name: string }[]>('/companies/names').then(setCompanies).catch(() => toast.error('Failed to load companies'))
-    api.get<{ id: number; name: string }[]>('/contacts/names').then(
+    api.get<{ id: number; name: string; title?: string | null }[]>('/contacts/names').then(
       (data) => setAllContacts(data)
     ).catch(() => { })
 
@@ -1035,16 +1037,25 @@ export function ContactFormPage() {
         <Card>
           <CardHeader>
             <CardTitle>Notes</CardTitle>
-            <CardDescription>General notes and research about this person</CardDescription>
+            <CardDescription>
+              General notes and research about this person — type <span className="font-mono">@</span> to mention
+              someone else or an organization
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
+              {/* The only field on this form with the @-mention picker: Notes is the
+                  narrative box, so it's where a third party actually gets brought up.
+                  Mentions typed here are indexed (NoteMention) and reviewable on the
+                  Mentions page, exactly like a meeting note's. */}
               <MarkdownTextarea
                 id="notes"
                 value={form.notes}
                 onChange={(v) => set('notes', v)}
-                placeholder="General personalized research notes — paste or drag in screenshots; use the toolbar for headings, bold, lists"
+                placeholder="General personalized research notes — type @ to mention a person or organization; paste or drag in screenshots"
                 rows={6}
+                mentionContacts={allContacts}
+                mentionCompanies={companies}
               />
             </div>
           </CardContent>

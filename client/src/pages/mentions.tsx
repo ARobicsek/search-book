@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { DatePrecision, MentionMeeting } from '@/lib/types'
-import { CONVERSATION_TYPE_OPTIONS, conversationDisplayName } from '@/lib/types'
+import type { ConversationMention, DatePrecision, MentionMeeting, NoteMentionSource } from '@/lib/types'
+import { CONVERSATION_TYPE_OPTIONS, contactDisplayName, conversationDisplayName } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,9 +16,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { meetingMentionSnippets } from '@/lib/mentions'
+import { meetingMentionSnippets, noteMentionSnippets } from '@/lib/mentions'
 import { toast } from 'sonner'
-import { AtSign, Building2, ChevronDown, Link2, Loader2, Pencil, User, UserPlus, X } from 'lucide-react'
+import { AtSign, Building2, ChevronDown, Lightbulb, Link2, Loader2, Pencil, User, UserPlus, X } from 'lucide-react'
 
 const PAGE_SIZE = 25
 
@@ -132,15 +132,19 @@ function LinkExistingPicker({
   )
 }
 
-// One meeting card in the Mentions list: who was @-mentioned (resolved contacts
-// link out; loose names get a one-click "Create contact"), plus the note context.
-function MentionMeetingCard({
-  meeting,
+// The chip row shared by every card on this page: one MentionChip per mention, with the
+// one-click Create / Link controls beside each LOOSE one. `basePath` is what makes it
+// reusable across the two mention indexes — '/mentions' for a meeting's mentions,
+// '/mentions/note' for a contact-note's or idea's, whose routes mirror them exactly.
+function MentionResolveRow({
+  mentions,
+  basePath,
   contacts,
   companies,
   onChanged,
 }: {
-  meeting: MentionMeeting
+  mentions: ConversationMention[]
+  basePath: '/mentions' | '/mentions/note'
   contacts: NamedContact[]
   companies: NamedCompany[]
   onChanged: () => void
@@ -151,10 +155,6 @@ function MentionMeetingCard({
   const [resolvingIds, setResolvingIds] = useState<Set<number>>(new Set())
   // The one mention whose "Link to existing" picker is open, if any.
   const [linkingId, setLinkingId] = useState<number | null>(null)
-
-  // The note context shown is the text *surrounding* the @-mentions (notes, next
-  // steps, or prep notes), not the whole note.
-  const snippets = meetingMentionSnippets(meeting)
 
   function hide(mentionId: number) {
     setResolvingIds((prev) => new Set(prev).add(mentionId))
@@ -174,7 +174,7 @@ function MentionMeetingCard({
     hide(mentionId)
     try {
       const { contact, linked } = await api.post<{ contact: { id: number; name: string }; linked: boolean }>(
-        `/mentions/${mentionId}/create-contact`,
+        `${basePath}/${mentionId}/create-contact`,
         {},
       )
       toast.success(
@@ -191,7 +191,7 @@ function MentionMeetingCard({
     hide(mentionId)
     try {
       const { company, linked } = await api.post<{ company: { id: number; name: string }; linked: boolean }>(
-        `/mentions/${mentionId}/create-company`,
+        `${basePath}/${mentionId}/create-company`,
         {},
       )
       toast.success(
@@ -211,7 +211,7 @@ function MentionMeetingCard({
     hide(mentionId)
     try {
       const res = await api.post<{ contact?: { name: string }; company?: { name: string } }>(
-        `/mentions/${mentionId}/link`,
+        `${basePath}/${mentionId}/link`,
         target,
       )
       toast.success(`Linked to “${res.contact?.name ?? res.company?.name}”`)
@@ -222,6 +222,119 @@ function MentionMeetingCard({
     }
   }
 
+  return (
+    <>
+      {/* Who / what was mentioned. Loose mentions (not in the CRM yet) get the
+          one-click "Create" that is this page's reason for existing. The primary
+          click follows the mention's kind (person vs org), but the caret always
+          offers the other type — so a name first mis-tagged as an organization can
+          be turned into a contact (and vice versa) without editing the note — plus
+          "Link to existing", for when the record is already in the CRM under a
+          different spelling and "Create" would only make a duplicate. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+        {mentions.map((m) => (
+          <span key={m.id} className="inline-flex items-center gap-1">
+            <MentionChip mention={m} />
+            {!m.contact && !m.company && !resolvingIds.has(m.id) && (
+              <div className="inline-flex items-center rounded-md border border-input">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 rounded-r-none px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => (m.kind === 'COMPANY' ? createCompany(m.id) : createContact(m.id))}
+                  title={
+                    m.kind === 'COMPANY'
+                      ? `Create an organization for ${m.mentionedName}`
+                      : `Create a contact for ${m.mentionedName}`
+                  }
+                >
+                  {m.kind === 'COMPANY' ? (
+                    <Building2 className="h-3 w-3" />
+                  ) : (
+                    <UserPlus className="h-3 w-3" />
+                  )}
+                  <span className="ml-1">Create</span>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 rounded-l-none border-l border-input px-0.5 text-muted-foreground hover:text-foreground"
+                      title="Create as contact or organization, or link to an existing record"
+                      aria-label={`Resolve ${m.mentionedName}`}
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => createContact(m.id)}>
+                      <UserPlus className="mr-2 h-3.5 w-3.5" />
+                      Create as contact
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => createCompany(m.id)}>
+                      <Building2 className="mr-2 h-3.5 w-3.5" />
+                      Create as organization
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setLinkingId(m.id)}>
+                      <Link2 className="mr-2 h-3.5 w-3.5" />
+                      Link to existing…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+          </span>
+        ))}
+      </div>
+
+      {/* Only one picker is open at a time, so it lives below the chip row rather
+          than inside a chip — no reflow of the wrapped badges when it opens. */}
+      {linkingId != null && (() => {
+        const m = mentions.find((x) => x.id === linkingId)
+        if (!m) return null
+        return (
+          <LinkExistingPicker
+            mentionedName={m.mentionedName}
+            contacts={contacts}
+            companies={companies}
+            onPick={(target) => linkMention(m.id, target)}
+            onCancel={() => setLinkingId(null)}
+          />
+        )
+      })()}
+    </>
+  )
+}
+
+// The note context around the @-mentions — the text they were written in, not the whole
+// note. A mention only means something with its sentence.
+function MentionSnippets({ snippets }: { snippets: string[] }) {
+  return (
+    <>
+      {snippets.map((snippet, i) => (
+        <div key={i} className="prep-note-markdown line-clamp-6 border-l-2 border-muted pl-3 text-sm text-muted-foreground">
+          <MentionableMarkdown>{snippet}</MentionableMarkdown>
+        </div>
+      ))}
+    </>
+  )
+}
+
+// One meeting card: which meeting, who was @-mentioned in it, and the note context.
+function MentionMeetingCard({
+  meeting,
+  contacts,
+  companies,
+  onChanged,
+}: {
+  meeting: MentionMeeting
+  contacts: NamedContact[]
+  companies: NamedCompany[]
+  onChanged: () => void
+}) {
   return (
     <Card>
       <CardContent className="space-y-2 p-4">
@@ -245,94 +358,71 @@ function MentionMeetingCard({
           </Link>
         </div>
 
-        {/* Who / what was mentioned. Loose mentions (not in the CRM yet) get the
-            one-click "Create" that is this page's reason for existing. The primary
-            click follows the mention's kind (person vs org), but the caret always
-            offers the other type — so a name first mis-tagged as an organization can
-            be turned into a contact (and vice versa) without editing the note — plus
-            "Link to existing", for when the record is already in the CRM under a
-            different spelling and "Create" would only make a duplicate. */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
-          {meeting.mentions.map((m) => (
-            <span key={m.id} className="inline-flex items-center gap-1">
-              <MentionChip mention={m} />
-              {!m.contact && !m.company && !resolvingIds.has(m.id) && (
-                <div className="inline-flex items-center rounded-md border border-input">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 rounded-r-none px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => (m.kind === 'COMPANY' ? createCompany(m.id) : createContact(m.id))}
-                    title={
-                      m.kind === 'COMPANY'
-                        ? `Create an organization for ${m.mentionedName}`
-                        : `Create a contact for ${m.mentionedName}`
-                    }
-                  >
-                    {m.kind === 'COMPANY' ? (
-                      <Building2 className="h-3 w-3" />
-                    ) : (
-                      <UserPlus className="h-3 w-3" />
-                    )}
-                    <span className="ml-1">Create</span>
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 rounded-l-none border-l border-input px-0.5 text-muted-foreground hover:text-foreground"
-                        title="Create as contact or organization, or link to an existing record"
-                        aria-label={`Resolve ${m.mentionedName}`}
-                      >
-                        <ChevronDown className="h-3 w-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => createContact(m.id)}>
-                        <UserPlus className="mr-2 h-3.5 w-3.5" />
-                        Create as contact
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => createCompany(m.id)}>
-                        <Building2 className="mr-2 h-3.5 w-3.5" />
-                        Create as organization
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => setLinkingId(m.id)}>
-                        <Link2 className="mr-2 h-3.5 w-3.5" />
-                        Link to existing…
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
-            </span>
-          ))}
+        <MentionResolveRow
+          mentions={meeting.mentions}
+          basePath="/mentions"
+          contacts={contacts}
+          companies={companies}
+          onChanged={onChanged}
+        />
+
+        <MentionSnippets snippets={meetingMentionSnippets(meeting)} />
+      </CardContent>
+    </Card>
+  )
+}
+
+// One contact-notes / idea card. Same body as a meeting card — the resolve controls and
+// the note context are shared — differing only in the header that says WHERE the
+// mention was written and where "open" goes.
+function NoteMentionCard({
+  source,
+  contacts,
+  companies,
+  onChanged,
+}: {
+  source: NoteMentionSource
+  contacts: NamedContact[]
+  companies: NamedCompany[]
+  onChanged: () => void
+}) {
+  const isContact = source.sourceType === 'CONTACT'
+  // A contact's notes are edited on its form; ideas are edited inline on the Ideas page,
+  // which opens the matching card via ?id=.
+  const href = isContact ? `/contacts/${source.sourceId}` : `/ideas?id=${source.sourceId}`
+
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {isContact ? (
+              <><User className="mr-1 h-3 w-3" />Contact notes</>
+            ) : (
+              <><Lightbulb className="mr-1 h-3 w-3" />Idea</>
+            )}
+          </Badge>
+          <Link to={href} className="text-sm font-semibold text-primary hover:underline">
+            {isContact ? contactDisplayName({ name: source.label, preferredName: source.preferredName }) : source.label}
+          </Link>
+          <Link
+            to={href}
+            className="ml-auto text-muted-foreground hover:text-foreground"
+            title={isContact ? 'Open the contact' : 'Open in Ideas'}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Link>
         </div>
 
-        {/* Only one picker is open at a time, so it lives below the chip row rather
-            than inside a chip — no reflow of the wrapped badges when it opens. */}
-        {linkingId != null && (() => {
-          const m = meeting.mentions.find((x) => x.id === linkingId)
-          if (!m) return null
-          return (
-            <LinkExistingPicker
-              mentionedName={m.mentionedName}
-              contacts={contacts}
-              companies={companies}
-              onPick={(target) => linkMention(m.id, target)}
-              onCancel={() => setLinkingId(null)}
-            />
-          )
-        })()}
+        <MentionResolveRow
+          mentions={source.mentions}
+          basePath="/mentions/note"
+          contacts={contacts}
+          companies={companies}
+          onChanged={onChanged}
+        />
 
-        {/* Note context — the text surrounding each @-mention */}
-        {snippets.map((snippet, i) => (
-          <div key={i} className="prep-note-markdown line-clamp-6 border-l-2 border-muted pl-3 text-sm text-muted-foreground">
-            <MentionableMarkdown>{snippet}</MentionableMarkdown>
-          </div>
-        ))}
+        <MentionSnippets snippets={noteMentionSnippets(source)} />
       </CardContent>
     </Card>
   )
@@ -343,6 +433,10 @@ export function MentionsPage() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
+  // The other mention index: contact notes and idea descriptions. Fetched separately
+  // and NOT paginated — one source record holds one mention-bearing field, so these
+  // come in tens where meetings come in hundreds (see GET /mentions/notes).
+  const [noteSources, setNoteSources] = useState<NoteMentionSource[]>([])
   // Name lists for the "Link to existing" picker. Fetched once, alongside the list —
   // a failure here only disables linking, so it stays silent rather than toasting.
   const [contacts, setContacts] = useState<NamedContact[]>([])
@@ -364,9 +458,26 @@ export function MentionsPage() {
     }
   }, [])
 
-  useEffect(() => {
+  const loadNotes = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: NoteMentionSource[] }>('/mentions/notes')
+      setNoteSources(res.data)
+    } catch {
+      toast.error('Failed to load mentions in contact notes and ideas')
+    }
+  }, [])
+
+  // Any resolution rewrites the token in ONE source, but a loose name is usually
+  // written in several places — so both lists reload, or a name just created would
+  // still offer "Create" on its other cards.
+  const reloadAll = useCallback(() => {
     void load(0)
-  }, [load])
+    void loadNotes()
+  }, [load, loadNotes])
+
+  useEffect(() => {
+    reloadAll()
+  }, [reloadAll])
 
   useEffect(() => {
     api.get<NamedContact[]>('/contacts/names').then(setContacts).catch(() => {})
@@ -380,43 +491,69 @@ export function MentionsPage() {
           <AtSign className="h-6 w-6" /> Mentions
         </h1>
         <p className="text-sm text-muted-foreground">
-          People and organizations you @-mentioned in meeting notes. Loose names (not in the CRM yet) can be
-          created — or linked to an existing record — with one click.
+          People and organizations you @-mentioned in meeting notes, contact notes and ideas. Loose names (not in
+          the CRM yet) can be created — or linked to an existing record — with one click.
         </p>
       </div>
 
-      {loading && meetings.length === 0 ? (
+      {loading && meetings.length === 0 && noteSources.length === 0 ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
-      ) : meetings.length === 0 ? (
+      ) : meetings.length === 0 && noteSources.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            No mentions yet. While taking meeting notes, type <span className="font-mono">@</span> to flag someone the
-            other person brings up — they’ll show up here.
+            No mentions yet. While writing a meeting note, a contact’s notes or an idea, type{' '}
+            <span className="font-mono">@</span> to flag someone who comes up — they’ll show up here.
           </CardContent>
         </Card>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">{total} meeting{total === 1 ? '' : 's'} with mentions</p>
-          <div className="space-y-3">
-            {meetings.map((m) => (
-              <MentionMeetingCard
-                key={m.id}
-                meeting={m}
-                contacts={contacts}
-                companies={companies}
-                onChanged={() => load(0)}
-              />
-            ))}
-          </div>
-          {hasMore && (
-            <div className="flex justify-center">
-              <Button variant="outline" onClick={() => load(meetings.length)} disabled={loading}>
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Load more
-              </Button>
-            </div>
+          {/* Contact notes and ideas come first: they're the smaller, newer list and
+              would otherwise sit below a "Load more" the owner has to exhaust. */}
+          {noteSources.length > 0 && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {noteSources.length} contact note{noteSources.length === 1 ? '' : 's'} / idea
+                {noteSources.length === 1 ? '' : 's'} with mentions
+              </p>
+              <div className="space-y-3">
+                {noteSources.map((s) => (
+                  <NoteMentionCard
+                    key={`${s.sourceType}-${s.sourceId}`}
+                    source={s}
+                    contacts={contacts}
+                    companies={companies}
+                    onChanged={reloadAll}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {meetings.length > 0 && (
+            <>
+              <p className="text-sm text-muted-foreground">{total} meeting{total === 1 ? '' : 's'} with mentions</p>
+              <div className="space-y-3">
+                {meetings.map((m) => (
+                  <MentionMeetingCard
+                    key={m.id}
+                    meeting={m}
+                    contacts={contacts}
+                    companies={companies}
+                    onChanged={reloadAll}
+                  />
+                ))}
+              </div>
+              {hasMore && (
+                <div className="flex justify-center">
+                  <Button variant="outline" onClick={() => load(meetings.length)} disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Load more
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

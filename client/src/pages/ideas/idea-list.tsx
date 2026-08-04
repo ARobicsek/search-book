@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MarkdownTextarea } from '@/components/markdown-textarea'
-import ReactMarkdown from 'react-markdown'
+import { MentionableMarkdown } from '@/components/mentionable-markdown'
 import {
   Card,
   CardContent,
@@ -31,7 +31,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { HighlightedText } from '@/components/highlighted-text'
-import { highlightRehype } from '@/lib/highlight-markdown'
 import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Lightbulb, Search, Loader2, RotateCcw, Star, CaseSensitive, Archive, ArchiveRestore, Image as ImageIcon, List as ListIcon, LayoutGrid, X } from 'lucide-react'
 import type { SaveStatus } from '@/hooks/use-auto-save'
@@ -184,7 +183,8 @@ export function IdeaListPage() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const [allContacts, setAllContacts] = useState<{ id: number; name: string }[]>([])
+  // `title` is carried so the description's @-mention picker can subtitle each person.
+  const [allContacts, setAllContacts] = useState<{ id: number; name: string; title?: string | null }[]>([])
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([])
   // App-wide tags (shared with contacts/companies/meetings) for autocomplete
   const [allTags, setAllTags] = useState<{ id: number; name: string }[]>([])
@@ -222,7 +222,7 @@ export function IdeaListPage() {
   }, [loadIdeas])
 
   useEffect(() => {
-    api.get<{ id: number; name: string }[]>('/contacts/names').then(
+    api.get<{ id: number; name: string; title?: string | null }[]>('/contacts/names').then(
       (data) => setAllContacts(data)
     ).catch(() => {})
     api.get<Company[]>('/companies').then((data) =>
@@ -273,9 +273,8 @@ export function IdeaListPage() {
       ? <HighlightedText text={text} terms={searchTerms} caseSensitive={caseSensitive} />
       : text
 
-  // …and inside the rendered markdown description (rehype plugin wraps matches in
-  // <mark>), so search terms are highlighted anywhere in the card.
-  const descRehype = searchTerms.length ? [highlightRehype(searchTerms, caseSensitive)] : undefined
+  // …and inside the rendered markdown description, where MentionableMarkdown applies
+  // the same <mark> rehype plugin itself (it also turns @-mention tokens into chips).
 
   // Reset the shared autosave bookkeeping each time the dialog opens. `id` is the
   // existing record (edit mode) or null (a new idea, created by the first autosave).
@@ -819,7 +818,9 @@ export function IdeaListPage() {
                   <div className="mt-2 border-t pt-2" onClick={(e) => e.stopPropagation()}>
                     {idea.description ? (
                       <div className="prep-note-markdown text-sm text-muted-foreground">
-                        <ReactMarkdown rehypePlugins={descRehype}>{idea.description}</ReactMarkdown>
+                        <MentionableMarkdown highlightTerms={searchTerms} caseSensitive={caseSensitive}>
+                          {idea.description}
+                        </MentionableMarkdown>
                       </div>
                     ) : (
                       <p className="text-sm italic text-muted-foreground/50">No description</p>
@@ -872,7 +873,9 @@ export function IdeaListPage() {
                   // Collapsed: clamp text to 4 lines AND hide images so screenshots
                   // never stretch the card. Expanded shows the full markdown + images.
                   <div className={cn('prep-note-markdown text-sm text-muted-foreground', !expanded && 'line-clamp-4 [&_img]:hidden')}>
-                    <ReactMarkdown rehypePlugins={descRehype}>{idea.description}</ReactMarkdown>
+                    <MentionableMarkdown highlightTerms={searchTerms} caseSensitive={caseSensitive}>
+                      {idea.description}
+                    </MentionableMarkdown>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">No description</p>
@@ -927,12 +930,18 @@ export function IdeaListPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
+              {/* @-mentions are indexed from this field (NoteMention) and reviewable on
+                  the Mentions page, same as a meeting note's. Distinct from the
+                  "Related Contacts / Organizations" pickers below: those file the idea
+                  under a record, a mention calls someone out mid-sentence. */}
               <MarkdownTextarea
                 id="description"
                 value={form.description}
                 onChange={(v) => setForm((p) => ({ ...p, description: v }))}
-                placeholder="More details..."
+                placeholder="More details — type @ to mention a person or organization"
                 rows={4}
+                mentionContacts={allContacts}
+                mentionCompanies={allCompanies}
               />
             </div>
             <div className="space-y-2">

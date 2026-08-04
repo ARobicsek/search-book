@@ -5,19 +5,16 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-## 🛑 BLOCKING: three commits are on local `main` but **NOT PUSHED** — they need Turso DDL first
+## ✅ 2026-08-04 shipped: @-mentions in contact notes and ideas — DDL applied, pushed, deployed
 
-`d985a43` + `d84b530` + `fef5a7c` (2026-08-04, @-mentions in contact notes and ideas) add a **new table**,
-`NoteMention`. Per the non-negotiable, schema-touching code must not reach the deploy before the DDL is
-applied to Turso — the app would 500 on every contact/idea save (`no such table: NoteMention`).
-
-**To unblock (owner, ~1 minute):** open the **Turso web SQL console** (the rw token commented in
-`server/.env` is stale — hard 401, so a script won't work), paste the whole of
-**`.planning/ddl/2026-08-04-note-mentions.sql`**, run it, then `SELECT COUNT(*) FROM "NoteMention";` → `0`.
-It is purely additive — one `CREATE TABLE` + four indexes, nothing existing altered — so it is safe to apply
-while the current build is live; the table just sits empty until the code ships. **Then `git push origin main`.**
-
-Everything is verified locally (see "What Was Just Completed" below). `npm run prepush` is green.
+The `NoteMention` DDL was applied by the owner in the Turso web SQL console (`SELECT COUNT(*)` → `0`
+confirmed) **before** the push, per the non-negotiable. All four commits are on `origin/main`
+(`d985a43`, `d84b530`, `fef5a7c`, `9bc95cd`). Deploy verified: the live site serves
+`assets/index-nzBYCQhi.js`, the same bundle the local build of the pushed commit produced, and
+`/api/health` held `{status:ok, db:ok}` across the deploy window. ⚠ **The server routes could not be
+probed externally** — the app-password gate returns 401 for *every* `/api/*` path including nonexistent
+ones, so a 401 on `/api/mentions/notes` proves nothing about whether the route exists. Owner testing on
+the live site is what closes that gap; nothing agent-side can.
 
 ## ▶ START HERE NEXT SESSION — the migration is DONE; **Phase 6 (decommission Vercel) after a few normal days**
 

@@ -5,6 +5,29 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+## ✅ 2026-08-04 (s2): post-cutover checklist worked to completion — **ALL GREEN**, free-tier risk R10 closed with real numbers
+
+Owner asked to be walked through the post-Netlify checks. Every item came back clean (table under START
+HERE), and the one substantive piece of work was **measuring** the free-tier usage instead of continuing to
+estimate it: **~13% of budget**, roughly half the pre-cutover projection. Two docs-only commits, `e1acba1`
++ `fc7ffd7`, no code touched.
+
+**Three things the next session should not redo:**
+1. **R10 is closed.** ~3.9 GB-Hrs (~39 credit-equivalents) and ~35 K requests/month. Function memory is
+   **512 MB**; the cron is **~80% of compute and weekend-flat**. ⚠ The owner's plan shows **GB-Hrs and
+   requests, no credit pool** — the 300-credit model may be a different tier. **Don't re-raise this as a
+   risk without a number.**
+2. **Phase 6 was offered and deliberately deferred** (see the ⛔ note below). Not an oversight.
+3. **Global search's bug #12 residual never fired** and the **daily backup is running** — both were
+   carry-over questions; both are answered.
+
+⚠ **Still open, and it is not just cleanup:** the leftover credentials file (Phase 6 step 5) may hold a
+**working Turso token**, which would restore direct-DDL capability that `CLAUDE.md` currently says is
+unavailable. Unverified — the probe was blocked by the permission classifier and not worked around. It is a
+question for the owner, decoupled from Phase 6.
+
+---
+
 ## ✅ 2026-08-04 shipped: @-mentions in contact notes and ideas — **owner confirmed live: "working great"**
 
 The `NoteMention` DDL was applied by the owner in the Turso web SQL console (`SELECT COUNT(*)` → `0`
@@ -63,7 +86,8 @@ safety net — just the only one-command one.
 
 | Item | Why |
 |---|---|
-| Backup job alert threshold | `searchbook-backup` notifies after **3** failures = 3 days of silent backup failure. Owner may want 1. (Backups themselves confirmed running 2026-08-04 — this is the alerting config only.) |
+| ⚠ **Leftover credentials file — ask the owner, don't just delete** | `%LOCALAPPDATA%\Temp\claude\c--dev-personal-searchbook\037afcb5-…\scratchpad\phase4.env.ps1` (Jul 26, 1842 B) holds `BLOB_READ_WRITE_TOKEN`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL`. **It may hold a *working* Turso token** — `CLAUDE.md` records the committed one as stale, which is the whole reason DDL is hand-pasted into the web console — so deleting it may throw away a capability. **Unverified**: the read-only probe was blocked by the permission classifier (reading a credentials file) and deliberately not circumvented. Owner's choice: keep the paste-into-console workflow and delete it, or approve a test and rotate it into `server/.env` (commented). Decoupled from Phase 6; also listed as its step 5. |
+| ~~Backup job alert threshold~~ | **DONE 2026-08-04 — owner set `searchbook-backup` to alert after 2 consecutive failures** (was 3, i.e. three silent days). Backups themselves confirmed running. |
 | Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |
 | Vercel-native backup cron | Still in `vercel.json`, still writing to Vercel Blob daily until the project is deleted. Harmless extra net. |
 | ⚠ **GitHub itself may be blocked on the NCQA work network** | Hit 2026-07-31: `git push` failed from the work network — `github.com` (140.82.114.3), `api.github.com` and `codeload.github.com` **all timed out on IPv4 *and* IPv6**, while `google.com`, `ari-search-book.netlify.app` and `raw.githubusercontent.com` (Fastly-hosted, so a different AS) were all fine. Same shape as the Vercel / `*.run.app` blocks. **Owner switched networks and the push went straight through.** If a push hangs, this is why — it is not git, credentials, or the agent's sandbox (verified with the sandbox disabled). The **published Outlook ICS feed also 417s** from that network (after 2 redirects, with any User-Agent), so local Outlook import shows "Could not read the Outlook calendar feed" there while working fine from Netlify. |

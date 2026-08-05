@@ -5,10 +5,17 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-## ✅ 2026-08-05: Outlook import picker — four owner asks, all shipped (`4839e35`)
+## ✅ 2026-08-05: Outlook import picker — four owner asks, all shipped (`4839e35`) — **owner confirmed: "they work well"**
 
 Owner listed four things wrong with "Import from Outlook". **One commit to `main`, `4839e35`, schema-free.**
-**Not yet owner-confirmed on the live site** — that is the first thing to ask about next session.
+**✅ Owner exercised it and confirmed all four work** (2026-08-05, same session).
+
+⚠ **That confirmation is worth more than usual: it is the only test against the REAL feed.** Microsoft's
+published-ICS endpoint 500s from this network, so every agent-side check ran on a stubbed feed — meaning the
+subject filter had never met a real calendar subject, and "opens blank" had never been driven through a real
+ICS round-trip. The owner's confirmation is what closes that gap. It also implicitly accepts the
+**hide-vs-drop** call on excluded blocks (they were not asked about it separately, so if the "N skipped —
+Show" line ever proves annoying, that is a live design question, not a defect).
 
 1. **It no longer searches on open, and no longer remembers the last range.** Opening the dialog costs **zero**
    `/calendar/events` requests: no preset selected, empty date inputs, an idle "Pick a date range" prompt. A
@@ -116,7 +123,7 @@ safety net — just the only one-command one.
 
 | Item | Why |
 |---|---|
-| ⚠ **Outlook import changes (`4839e35`) are NOT owner-confirmed yet** | Shipped 2026-08-05, verified only against a stubbed feed (Microsoft's ICS endpoint 500s from here). **Ask first:** does the picker open blank, does a range come back with lunch/travel collapsed into the "N skipped — Show" line, does the dialog close after importing? Also worth asking whether the **hide-vs-drop** call is what they wanted — the ask was "should not import", and what shipped is "never imported by default, but revealable", because a first-word rule catches `Hotel Industry Roundtable`. |
+| ~~Outlook import changes (`4839e35`) not owner-confirmed~~ | **DONE 2026-08-05 — owner: "I confirm that they work well."** Nothing to re-check. The only thing left open is a *preference*, not a bug: the **hide-vs-drop** call on excluded blocks was never put to them separately, so if the "N skipped — Show" line ever irritates, dropping those events outright is a one-line change in `calendar-filter.ts`'s consumer. |
 | ⚠ **Leftover credentials file — ask the owner, don't just delete** | `%LOCALAPPDATA%\Temp\claude\c--dev-personal-searchbook\037afcb5-…\scratchpad\phase4.env.ps1` (Jul 26, 1842 B) holds `BLOB_READ_WRITE_TOKEN`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL`. **It may hold a *working* Turso token** — `CLAUDE.md` records the committed one as stale, which is the whole reason DDL is hand-pasted into the web console — so deleting it may throw away a capability. **Unverified**: the read-only probe was blocked by the permission classifier (reading a credentials file) and deliberately not circumvented. Owner's choice: keep the paste-into-console workflow and delete it, or approve a test and rotate it into `server/.env` (commented). Decoupled from Phase 6; also listed as its step 5. |
 | ~~Backup job alert threshold~~ | **DONE 2026-08-04 — owner set `searchbook-backup` to alert after 2 consecutive failures** (was 3, i.e. three silent days). Backups themselves confirmed running. |
 | Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |

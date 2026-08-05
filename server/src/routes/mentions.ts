@@ -332,7 +332,12 @@ router.get('/', async (req: Request, res: Response) => {
       prisma.conversation.findMany({
         where,
         select: mentionMeetingSelect,
-        orderBy: { date: 'desc' },
+        // Newest first, same tie-break as the meetings list: startTime orders same-day
+        // meetings by time of day (zero-padded "HH:MM" sorts correctly, and SQLite ranks
+        // NULL smallest, so an untimed meeting sits last within its day). Pagination
+        // depends on this being total — the client merges these pages with the note
+        // sources and re-sorts, which only holds if each page is itself in order.
+        orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
         take,
         skip,
       }),

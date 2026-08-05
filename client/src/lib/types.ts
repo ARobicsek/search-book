@@ -304,6 +304,10 @@ export interface MentionMeeting {
   id: number;
   title: string | null;
   date: string;
+  /** Local HH:MM start/end (null on date-only meetings). Order the review feed within a
+   *  day and drive its "Now" marker — see Conversation.startTime for the full contract. */
+  startTime?: string | null;
+  endTime?: string | null;
   datePrecision: DatePrecision;
   type: ConversationType;
   notes: string | null;

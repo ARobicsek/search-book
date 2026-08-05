@@ -131,6 +131,10 @@ export const mentionMeetingSelect = {
   id: true,
   title: true,
   date: true,
+  // Clock times: they order same-day items in the review feed, and they're what lets
+  // it show the "Now" marker for a meeting in progress (same rule as the meetings list).
+  startTime: true,
+  endTime: true,
   datePrecision: true,
   type: true,
   notes: true,

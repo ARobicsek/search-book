@@ -46,6 +46,8 @@ import {
 } from 'lucide-react'
 import { AttachmentChips } from '@/components/attachment-chips'
 import { formatStartTime } from '@/lib/utils'
+import { easternNowParts, isHappeningNow } from '@/lib/meeting-time'
+import { useClockTick } from '@/hooks/use-clock-tick'
 import { ImportOutlookDialog } from '@/components/import-outlook-dialog'
 
 const conversationTypeColors: Record<string, string> = {
@@ -95,23 +97,6 @@ function getLabel(value: string, options: { value: string; label: string }[]) {
   return options.find((o) => o.value === value)?.label ?? value
 }
 
-// Current Eastern-time "today" (YYYY-MM-DD) + "now" (HH:MM, 24h), in the same shapes
-// as a meeting's stored date/startTime so they compare with plain string comparisons.
-// Meeting dates/start times are stored in the app's Eastern timezone and the upcoming
-// rule keys off 5 PM ET, so anchor to America/New_York regardless of the browser's
-// zone (handles DST automatically). Works in the PWA — pure Intl, no deps.
-function easternNowParts() {
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })
-  const p: Record<string, string> = {}
-  for (const part of fmt.formatToParts(new Date())) p[part.type] = part.value
-  const hour = p.hour === '24' ? '00' : p.hour // some engines emit '24' at midnight
-  return { today: `${p.year}-${p.month}-${p.day}`, hhmm: `${hour}:${p.minute}` }
-}
-
 // End-of-business cutoff for untimed meetings dated today (5 PM Eastern).
 const END_OF_BUSINESS = '17:00'
 
@@ -130,35 +115,6 @@ function isUpcomingMeeting(conv: Conversation, today: string, hhmm: string): boo
   return hhmm < END_OF_BUSINESS && !documented
 }
 
-// How long a timed meeting is assumed to run when no end time was recorded — older
-// records, and anything logged by hand without one. Meetings imported from Outlook
-// carry a real endTime (the ICS DTEND), so they don't rely on this.
-const ASSUMED_MEETING_MINUTES = 60
-
-// Add minutes to an HH:MM wall clock, clamped to the end of the day (a meeting can't
-// run past midnight on its own single stored date).
-function addMinutes(hhmm: string, minutes: number): string {
-  const [h, m] = hhmm.split(':').map(Number)
-  const total = h * 60 + m + minutes
-  if (!Number.isFinite(total)) return hhmm
-  if (total >= 24 * 60) return '23:59'
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
-}
-
-// A meeting is happening RIGHT NOW when it's today, its start time has passed, and it
-// hasn't ended — the recorded endTime, or start + ASSUMED_MEETING_MINUTES when none was
-// recorded. An untimed meeting can never qualify: with no clock time there's nothing to
-// be in the middle of. Mutually exclusive with "upcoming" by construction (that rule
-// requires startTime > now).
-function isHappeningNow(conv: Conversation, today: string, hhmm: string): boolean {
-  if (conv.date !== today || !conv.startTime) return false
-  const end =
-    conv.endTime && conv.endTime > conv.startTime
-      ? conv.endTime
-      : addMinutes(conv.startTime, ASSUMED_MEETING_MINUTES)
-  return conv.startTime <= hhmm && hhmm < end
-}
-
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value)
   useEffect(() => {
@@ -166,18 +122,6 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(timer)
   }, [value, delay])
   return debouncedValue
-}
-
-// "Now" has to move on its own: re-render on a timer so a meeting lights up when it
-// starts and dims when it ends, without the owner reloading the page. 30s keeps the
-// marker within half a minute of the truth — the clock is read fresh on each render,
-// this only forces the render.
-function useClockTick(ms = 30_000) {
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), ms)
-    return () => clearInterval(id)
-  }, [ms])
 }
 
 const PAGE_SIZE = 20
@@ -903,7 +847,7 @@ export function MeetingsPage() {
     // Past/upcoming scoping needs the client's Eastern wall clock so the server
     // applies the same cutoff as the "Upcoming" badge.
     if (whenFilter === 'past' || whenFilter === 'upcoming') {
-      const { today, hhmm } = easternNowParts()
+      const { date: today, hhmm } = easternNowParts()
       params.set(whenFilter === 'past' ? 'hideUpcoming' : 'onlyUpcoming', '1')
       params.set('today', today)
       params.set('now', hhmm)
@@ -1048,7 +992,7 @@ export function MeetingsPage() {
   // once per render so all cards agree on the same instant. The tick re-renders on a
   // timer so the "Now" marker turns itself on and off as meetings start and end.
   useClockTick()
-  const { today: todayStr, hhmm: nowHHMM } = easternNowParts()
+  const { date: todayStr, hhmm: nowHHMM } = easternNowParts()
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

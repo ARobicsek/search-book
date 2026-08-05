@@ -5,6 +5,9 @@
 //   [@Display Name](#mention)       → loose person mention (a name not yet a contact)
 //   [@Org Name](#org-mention)       → loose org mention (an org not yet a company)
 
+import type { MentionMeeting, NoteMentionSource } from './types'
+import { easternPartsOfTimestamp } from './meeting-time'
+
 export function looseMentionToken(name: string): string {
   return `[@${name}](#mention)`
 }
@@ -214,6 +217,49 @@ export function noteMentionSnippets(source: {
         : { name: m.mentionedName, kind: m.kind },
   )
   return mentionSnippets(source.text, matchers)
+}
+
+/** One row of the Mentions review feed. Meetings and note sources (contact notes,
+ *  ideas) are ONE stream rather than two lists, ordered by when each was logged. */
+export type MentionFeedItem =
+  | { key: string; type: 'MEETING'; meeting: MentionMeeting; date: string; time: string }
+  | { key: string; type: 'NOTE'; source: NoteMentionSource; date: string; time: string }
+
+// Merge the two mention indexes into one reverse-chronological feed: newest day first,
+// and within a day newest time first.
+//
+// "When it was logged" means different fields on the two kinds — a meeting's own
+// date + startTime (what its card shows, and what the meetings list sorts by), a note
+// source's `updatedAt`. Those aren't the same kind of value: `updatedAt` is an INSTANT
+// while a meeting's date/time is Eastern wall clock, so the timestamp is projected into
+// Eastern before the two are compared, or a note logged at 9 PM ET would sort into the
+// next day. An item with no time (an untimed / month-precision meeting, or a timestamp
+// that wouldn't parse) sorts last within its day — the convention the meetings list
+// already uses for a null startTime.
+export function mentionFeed(
+  meetings: MentionMeeting[],
+  noteSources: NoteMentionSource[],
+): MentionFeedItem[] {
+  const items: MentionFeedItem[] = [
+    ...noteSources.map((source): MentionFeedItem => {
+      const when = easternPartsOfTimestamp(source.updatedAt)
+      return {
+        key: `note-${source.sourceType}-${source.sourceId}`,
+        type: 'NOTE',
+        source,
+        date: when?.date ?? '',
+        time: when?.hhmm ?? '',
+      }
+    }),
+    ...meetings.map((meeting): MentionFeedItem => ({
+      key: `meeting-${meeting.id}`,
+      type: 'MEETING',
+      meeting,
+      date: meeting.date,
+      time: meeting.startTime ?? '',
+    })),
+  ]
+  return items.sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
 }
 
 // Characters allowed inside the in-progress "@query" (names: letters incl.

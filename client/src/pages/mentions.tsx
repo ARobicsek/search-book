@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { ConversationMention, DatePrecision, MentionMeeting, NoteMentionSource } from '@/lib/types'
@@ -16,7 +16,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { meetingMentionSnippets, noteMentionSnippets } from '@/lib/mentions'
+import { meetingMentionSnippets, mentionFeed, noteMentionSnippets } from '@/lib/mentions'
+import { easternNowParts, easternPartsOfTimestamp, isHappeningNow } from '@/lib/meeting-time'
+import { useClockTick } from '@/hooks/use-clock-tick'
+import { formatStartTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { AtSign, Building2, ChevronDown, Lightbulb, Link2, Loader2, Pencil, User, UserPlus, X } from 'lucide-react'
 
@@ -53,8 +56,29 @@ function formatMeetingDate(dateStr: string, precision: DatePrecision) {
   }
 }
 
+// When a contact note / idea was last logged, rendered like a meeting's date so the
+// mixed feed's ordering is legible on the cards. Eastern, for the same reason the feed
+// sorts in Eastern: it's the clock the meetings beside it are dated in.
+function formatLoggedAt(updatedAt: string | null): string {
+  const when = easternPartsOfTimestamp(updatedAt)
+  if (!when) return ''
+  return `${formatMeetingDate(when.date, 'DAY')} · ${formatStartTime(when.hhmm)}`
+}
+
 function typeLabel(value: string) {
   return CONVERSATION_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value
+}
+
+// What the one merged list is counting. `total` is every meeting with mentions (the
+// server's count, not just the loaded page); note sources are never paginated, so their
+// number is exact.
+function countLabel(total: number, notes: number): string {
+  const parts: string[] = []
+  if (total > 0) parts.push(`${total} meeting${total === 1 ? '' : 's'}`)
+  if (notes > 0) {
+    parts.push(`${notes} contact note${notes === 1 ? '' : 's'} / idea${notes === 1 ? '' : 's'}`)
+  }
+  return `${parts.join(' and ')} with mentions, newest first`
 }
 
 // Picker for "Link to existing" — bind a loose mention to a record that's already in
@@ -324,25 +348,47 @@ function MentionSnippets({ snippets }: { snippets: string[] }) {
 }
 
 // One meeting card: which meeting, who was @-mentioned in it, and the note context.
+// A meeting in progress gets the meetings list's green left border and pulsing "Now"
+// marker — identical rule (lib/meeting-time), so the two pages can never disagree.
 function MentionMeetingCard({
   meeting,
+  happeningNow,
   contacts,
   companies,
   onChanged,
 }: {
   meeting: MentionMeeting
+  happeningNow: boolean
   contacts: NamedContact[]
   companies: NamedCompany[]
   onChanged: () => void
 }) {
   return (
-    <Card>
+    <Card className={happeningNow ? 'border-l-4 border-l-emerald-500' : undefined}>
       <CardContent className="space-y-2 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="text-xs">{typeLabel(meeting.type)}</Badge>
           <span className="text-sm text-muted-foreground">
             {formatMeetingDate(meeting.date, meeting.datePrecision)}
+            {meeting.startTime && ` · ${formatStartTime(meeting.startTime)}`}
           </span>
+          {happeningNow && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+              title={
+                meeting.endTime
+                  ? 'This meeting is happening now'
+                  : 'Started recently — no end time recorded, so an hour is assumed'
+              }
+            >
+              {/* A live marker should look live: the dot pulses. */}
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              </span>
+              Now
+            </span>
+          )}
           <Link
             to={`/meetings?id=${meeting.id}`}
             className="text-sm font-semibold text-primary hover:underline"
@@ -390,6 +436,7 @@ function NoteMentionCard({
   // A contact's notes are edited on its form; ideas are edited inline on the Ideas page,
   // which opens the matching card via ?id=.
   const href = isContact ? `/contacts/${source.sourceId}` : `/ideas?id=${source.sourceId}`
+  const loggedAt = formatLoggedAt(source.updatedAt)
 
   return (
     <Card>
@@ -402,6 +449,15 @@ function NoteMentionCard({
               <><Lightbulb className="mr-1 h-3 w-3" />Idea</>
             )}
           </Badge>
+          {/* The date this was last written — sitting where a meeting's date sits,
+              because it's what places this card in the shared ordering. Omitted, rather
+              than left blank, when there's no usable timestamp: an empty span would
+              still eat a gap in this flex row. */}
+          {loggedAt && (
+            <span className="text-sm text-muted-foreground" title="Last updated">
+              {loggedAt}
+            </span>
+          )}
           <Link to={href} className="text-sm font-semibold text-primary hover:underline">
             {isContact ? contactDisplayName({ name: source.label, preferredName: source.preferredName }) : source.label}
           </Link>
@@ -484,6 +540,17 @@ export function MentionsPage() {
     api.get<NamedCompany[]>('/companies/names').then(setCompanies).catch(() => {})
   }, [])
 
+  // One reverse-chronological stream. Every note source is already loaded while meetings
+  // arrive a page at a time, so "Load more" adds items that mostly land at the bottom but
+  // can interleave with the older notes tail — the list stays correctly ordered at every
+  // point, which is the property that matters.
+  const feed = useMemo(() => mentionFeed(meetings, noteSources), [meetings, noteSources])
+
+  // "Now" snapshot (Eastern), computed once per render so every card agrees on the same
+  // instant; the tick re-renders on a timer so the marker turns itself on and off.
+  useClockTick()
+  const { date: todayStr, hhmm: nowHHMM } = easternNowParts()
+
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div>
@@ -509,51 +576,36 @@ export function MentionsPage() {
         </Card>
       ) : (
         <>
-          {/* Contact notes and ideas come first: they're the smaller, newer list and
-              would otherwise sit below a "Load more" the owner has to exhaust. */}
-          {noteSources.length > 0 && (
-            <>
-              <p className="text-sm text-muted-foreground">
-                {noteSources.length} contact note{noteSources.length === 1 ? '' : 's'} / idea
-                {noteSources.length === 1 ? '' : 's'} with mentions
-              </p>
-              <div className="space-y-3">
-                {noteSources.map((s) => (
-                  <NoteMentionCard
-                    key={`${s.sourceType}-${s.sourceId}`}
-                    source={s}
-                    contacts={contacts}
-                    companies={companies}
-                    onChanged={reloadAll}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-
-          {meetings.length > 0 && (
-            <>
-              <p className="text-sm text-muted-foreground">{total} meeting{total === 1 ? '' : 's'} with mentions</p>
-              <div className="space-y-3">
-                {meetings.map((m) => (
-                  <MentionMeetingCard
-                    key={m.id}
-                    meeting={m}
-                    contacts={contacts}
-                    companies={companies}
-                    onChanged={reloadAll}
-                  />
-                ))}
-              </div>
-              {hasMore && (
-                <div className="flex justify-center">
-                  <Button variant="outline" onClick={() => load(meetings.length)} disabled={loading}>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Load more
-                  </Button>
-                </div>
-              )}
-            </>
+          <p className="text-sm text-muted-foreground">{countLabel(total, noteSources.length)}</p>
+          <div className="space-y-3">
+            {feed.map((item) =>
+              item.type === 'MEETING' ? (
+                <MentionMeetingCard
+                  key={item.key}
+                  meeting={item.meeting}
+                  happeningNow={isHappeningNow(item.meeting, todayStr, nowHHMM)}
+                  contacts={contacts}
+                  companies={companies}
+                  onChanged={reloadAll}
+                />
+              ) : (
+                <NoteMentionCard
+                  key={item.key}
+                  source={item.source}
+                  contacts={contacts}
+                  companies={companies}
+                  onChanged={reloadAll}
+                />
+              ),
+            )}
+          </div>
+          {hasMore && (
+            <div className="flex justify-center">
+              <Button variant="outline" onClick={() => load(meetings.length)} disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Load more
+              </Button>
+            </div>
           )}
         </>
       )}

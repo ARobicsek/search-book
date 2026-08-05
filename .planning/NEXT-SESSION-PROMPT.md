@@ -5,6 +5,36 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+## ✅ 2026-08-05: Outlook import picker — four owner asks, all shipped (`4839e35`)
+
+Owner listed four things wrong with "Import from Outlook". **One commit to `main`, `4839e35`, schema-free.**
+**Not yet owner-confirmed on the live site** — that is the first thing to ask about next session.
+
+1. **It no longer searches on open, and no longer remembers the last range.** Opening the dialog costs **zero**
+   `/calendar/events` requests: no preset selected, empty date inputs, an idle "Pick a date range" prompt. A
+   preset click or both custom dates is what triggers the one request. The `outlook_import_range` localStorage
+   key is now **dead** (nothing reads it; it will sit in the owner's browsers harmlessly).
+2. **Lunch / Private Appointment / Travel time / Flight… / Hotel… are filtered** — new
+   `server/src/lib/calendar-filter.ts`, flagged `excluded` by `GET /calendar/events`.
+3. **The import shows progress** — body reads "Importing N meetings…", range controls disable.
+4. **A successful import closes the dialog**; a failed one stays open with the selection intact.
+
+⚠ **The filter HIDES, it does not drop — don't "simplify" that away.** A first-word rule on *Hotel* catches
+`Hotel Industry Roundtable`, so excluded rows sit behind an "N skipped — **Show**" disclosure, are out of the
+default selection **and** out of "Select all", but stay **tickable**. `POST /calendar/import` deliberately does
+**not** re-check the filter — what it receives is what the owner explicitly ticked, so a server-side re-check
+would silently break the escape hatch. New rules go in `calendar-filter.ts`, never in the client.
+
+⚠ **The real ICS feed could not be exercised: Microsoft's published-calendar endpoint 500s from this network**
+(fetched directly with the app's own UA to confirm — this is the documented transient, and a different symptom
+from the **417** recorded in the carry-over table below; add 500 to that list). Everything above was therefore
+verified by driving the real component in Chromium behind a **latency-controlled `fetch` stub** — 0 requests on
+open, one per range action (newest wins a rapid switch), only the real meetings in the POST body, closed after
+the POST, still open after a forced 502, blank on reopen — plus a 390 px pass. `prepush` + full
+`npm run build` green.
+
+---
+
 ## ✅ 2026-08-04 (s2): post-cutover checklist worked to completion — **ALL GREEN**, free-tier risk R10 closed with real numbers
 
 Owner asked to be walked through the post-Netlify checks. Every item came back clean (table under START
@@ -86,11 +116,12 @@ safety net — just the only one-command one.
 
 | Item | Why |
 |---|---|
+| ⚠ **Outlook import changes (`4839e35`) are NOT owner-confirmed yet** | Shipped 2026-08-05, verified only against a stubbed feed (Microsoft's ICS endpoint 500s from here). **Ask first:** does the picker open blank, does a range come back with lunch/travel collapsed into the "N skipped — Show" line, does the dialog close after importing? Also worth asking whether the **hide-vs-drop** call is what they wanted — the ask was "should not import", and what shipped is "never imported by default, but revealable", because a first-word rule catches `Hotel Industry Roundtable`. |
 | ⚠ **Leftover credentials file — ask the owner, don't just delete** | `%LOCALAPPDATA%\Temp\claude\c--dev-personal-searchbook\037afcb5-…\scratchpad\phase4.env.ps1` (Jul 26, 1842 B) holds `BLOB_READ_WRITE_TOKEN`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL`. **It may hold a *working* Turso token** — `CLAUDE.md` records the committed one as stale, which is the whole reason DDL is hand-pasted into the web console — so deleting it may throw away a capability. **Unverified**: the read-only probe was blocked by the permission classifier (reading a credentials file) and deliberately not circumvented. Owner's choice: keep the paste-into-console workflow and delete it, or approve a test and rotate it into `server/.env` (commented). Decoupled from Phase 6; also listed as its step 5. |
 | ~~Backup job alert threshold~~ | **DONE 2026-08-04 — owner set `searchbook-backup` to alert after 2 consecutive failures** (was 3, i.e. three silent days). Backups themselves confirmed running. |
 | Desktop push | Never displays on Windows/Chrome even though FCM returns 201 — device-side, unresolved, low priority. iPhone works. |
 | Vercel-native backup cron | Still in `vercel.json`, still writing to Vercel Blob daily until the project is deleted. Harmless extra net. |
-| ⚠ **GitHub itself may be blocked on the NCQA work network** | Hit 2026-07-31: `git push` failed from the work network — `github.com` (140.82.114.3), `api.github.com` and `codeload.github.com` **all timed out on IPv4 *and* IPv6**, while `google.com`, `ari-search-book.netlify.app` and `raw.githubusercontent.com` (Fastly-hosted, so a different AS) were all fine. Same shape as the Vercel / `*.run.app` blocks. **Owner switched networks and the push went straight through.** If a push hangs, this is why — it is not git, credentials, or the agent's sandbox (verified with the sandbox disabled). The **published Outlook ICS feed also 417s** from that network (after 2 redirects, with any User-Agent), so local Outlook import shows "Could not read the Outlook calendar feed" there while working fine from Netlify. |
+| ⚠ **GitHub itself may be blocked on the NCQA work network** | Hit 2026-07-31: `git push` failed from the work network — `github.com` (140.82.114.3), `api.github.com` and `codeload.github.com` **all timed out on IPv4 *and* IPv6**, while `google.com`, `ari-search-book.netlify.app` and `raw.githubusercontent.com` (Fastly-hosted, so a different AS) were all fine. Same shape as the Vercel / `*.run.app` blocks. **Owner switched networks and the push went straight through.** If a push hangs, this is why — it is not git, credentials, or the agent's sandbox (verified with the sandbox disabled). The **published Outlook ICS feed also fails** from that network — **417** on 2026-07-31 (after 2 redirects, with any User-Agent) and **500 with an HTML error page** on 2026-08-05 — so local Outlook import shows "Could not read the Outlook calendar feed" there while working fine from Netlify. Treat a local feed failure as environmental until proven otherwise: fetch the URL from `server/.env` directly with the app's own UA (`server/scripts/probe-ics.mjs`, or an inline `fetch`) and read Microsoft's status + `x-ms-diagnostics` before suspecting the code. |
 | Contact edit form overflows at 390 px | Noticed 2026-07-30 while re-testing mobile: `/contacts/:id/edit` has 78 elements reaching `right=451` in a 390 px viewport (the `sm:col-span-2` fields in the Basic Info card). Pre-existing — confirmed by stash-and-remeasure. Not reported by the owner; ask before spending time on it. |
 | ~~Global search: does any **single** group still time out?~~ | **RESOLVED 2026-08-04 — owner: "has been great."** No amber banner seen in 9 days of real use, so no group exceeds the 9 s budget on the live data. The per-group `[TIMING] search … scopes=<group> → Nms` log lines remain the diagnostic if it ever regresses. |
 

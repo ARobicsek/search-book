@@ -5,7 +5,7 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
-## ⏳ 2026-08-05 (s2): Mentions is now ONE feed, with the "Now" border (`a3e7085`) — **awaiting owner confirmation**
+## ✅ 2026-08-05 (s2): Mentions is now ONE feed, with the "Now" border (`a3e7085`) — **owner confirmed: "it all looks fine to me"**
 
 Owner: *"in the @ mentions section, let's try to order ALL items by date descending AND time descending
 where time is avail (mixing meetings, notes and ideas based on when logged); and let's try to have the
@@ -44,9 +44,16 @@ timestamp form, day boundaries in both directions, the assumed-hour end); real d
 `fetch` in the browser — no DB writes** — interleaving at their Eastern times, an undated one sinking to the
 bottom, and the in-progress meeting rendering a measured 4 px emerald border. `prepush` + full
 `npm run build` green; **390 px** and 1425 px both clean (zero overflowing elements, no horizontal scroll).
-⚠ Not exercised on the live site by the agent (standing app-password limitation) — **ask the owner whether
-the ordering matches what they wanted**, since "based on when logged" was their phrase and the
-`Contact.updatedAt` caveat above is the one place it could read wrong.
+Not exercised on the live site by the agent (standing app-password limitation) — **✅ the owner then looked
+at it and confirmed the same day: "it all looks fine to me."**
+
+⚠ **What that confirmation does and does not cover.** It is the only look the merged ordering has had against
+the owner's real mention data — worth having, since local `dev.db` holds **no** note-source mentions at all,
+so the interleave could only be exercised here with stubbed sources. It also implicitly accepts the two
+limits above (`Contact.updatedAt` as a note's date; "Load more" not being append-only), which were written
+down and explained but never put to them as a separate question. If either ever reads wrong in daily use,
+that is a **live design question, not a defect** — the first needs a dedicated "notes last edited" column
+(a schema change), the second a server-side unified feed endpoint.
 
 ---
 
@@ -168,7 +175,7 @@ safety net — just the only one-command one.
 
 | Item | Why |
 |---|---|
-| ⏳ **Mentions merged feed (`a3e7085`) not owner-confirmed** | Shipped 2026-08-05 s2, verified locally and at 390 px but never seen by the owner. Two things to ask about specifically, because both are judgment calls inside their phrase *"based on when logged"*: (1) a **contact note** is placed by `Contact.updatedAt`, the record's last-touched time — editing an unrelated field on the contact floats that card up, and if that reads wrong the fix is a dedicated "notes last edited" timestamp, i.e. a schema change; (2) **"Load more" is not append-only** — older meetings can insert above the older notes tail, since note sources all load at once while meetings paginate. Both are recorded as accepted limits; neither is a defect to chase without the owner saying it bothers them. |
+| ~~Mentions merged feed (`a3e7085`) not owner-confirmed~~ | **DONE 2026-08-05 s2 — owner: "it all looks fine to me."** Nothing to re-check. What stays open is a *preference*, not a bug: two judgment calls inside their phrase *"based on when logged"* were explained but never put to them separately — (1) a **contact note** is placed by `Contact.updatedAt`, the record's last-touched time, so editing an unrelated field on the contact floats that card up (a real fix needs a dedicated "notes last edited" column, i.e. additive DDL); (2) **"Load more" is not append-only** — older meetings can insert above the older notes tail, since note sources load in full while meetings paginate (a real fix needs a server-side unified feed endpoint). Don't chase either without the owner saying it bothers them. |
 | ~~Outlook import changes (`4839e35`) not owner-confirmed~~ | **DONE 2026-08-05 — owner: "I confirm that they work well."** Nothing to re-check. The only thing left open is a *preference*, not a bug: the **hide-vs-drop** call on excluded blocks was never put to them separately, so if the "N skipped — Show" line ever irritates, dropping those events outright is a one-line change in `calendar-filter.ts`'s consumer. |
 | ⚠ **Leftover credentials file — ask the owner, don't just delete** | `%LOCALAPPDATA%\Temp\claude\c--dev-personal-searchbook\037afcb5-…\scratchpad\phase4.env.ps1` (Jul 26, 1842 B) holds `BLOB_READ_WRITE_TOKEN`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL`. **It may hold a *working* Turso token** — `CLAUDE.md` records the committed one as stale, which is the whole reason DDL is hand-pasted into the web console — so deleting it may throw away a capability. **Unverified**: the read-only probe was blocked by the permission classifier (reading a credentials file) and deliberately not circumvented. Owner's choice: keep the paste-into-console workflow and delete it, or approve a test and rotate it into `server/.env` (commented). Decoupled from Phase 6; also listed as its step 5. |
 | ~~Backup job alert threshold~~ | **DONE 2026-08-04 — owner set `searchbook-backup` to alert after 2 consecutive failures** (was 3, i.e. three silent days). Backups themselves confirmed running. |

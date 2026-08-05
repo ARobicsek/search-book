@@ -5,6 +5,51 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+## ⏳ 2026-08-05 (s2): Mentions is now ONE feed, with the "Now" border (`a3e7085`) — **awaiting owner confirmation**
+
+Owner: *"in the @ mentions section, let's try to order ALL items by date descending AND time descending
+where time is avail (mixing meetings, notes and ideas based on when logged); and let's try to have the
+green border that we use in the meetings activity for meetings that are currently happening."*
+**One commit to `main`, `a3e7085`, schema-free** (`startTime`/`endTime` already exist on `Conversation`
+— they were only added to a `select`, so **no Turso DDL**).
+
+1. **One reverse-chronological stream.** The page used to stack two lists — every contact note / idea, then
+   every meeting behind a "Load more" — so a note written today sat pages away from a meeting held today.
+   Merge + ordering live in **`mentionFeed()` (`client/src/lib/mentions.ts`)**, not the page component.
+2. **The green "Now" border + pulsing badge** on a meeting in progress, identical to the meetings list.
+
+⚠ **"When logged" is two different fields, and they are not the same kind of value — don't "simplify" the
+Eastern projection away.** A meeting sorts by its own `date` + `startTime` (Eastern **wall clock**); a note
+source sorts by `updatedAt`, an **instant**. `easternPartsOfTimestamp` projects the latter into Eastern
+before they are compared — without it a note logged at 9 PM ET sorts into the next day — and it also
+normalizes the zoneless `YYYY-MM-DD HH:MM:SS` form a **backup restore / raw-SQL write** leaves behind,
+which `new Date()` would read as *local*. Untimed items sort **last within their day** (the meetings list's
+null-`startTime` convention). `GET /mentions` now breaks its date tie with `startTime` because the client
+merges its **pages** with the note sources and re-sorts — correct only if each page is itself in order.
+
+⚠ **The "now" rule was MOVED, not copied** — `easternNowParts` / `isHappeningNow` / `addMinutes` /
+`ASSUMED_MEETING_MINUTES` now live in **`client/src/lib/meeting-time.ts`**, `useClockTick` in
+**`client/src/hooks/use-clock-tick.ts`**, and `meetings.tsx` imports them. Any new surface that flags a live
+meeting imports these too **and must call `useClockTick()`**, or the marker never turns itself off.
+
+**Two limits that are accepted behaviour, not bugs to re-fix blind:** `Contact.updatedAt` is the *record's*
+last-touched time, not when the note text was written (editing any field floats that card up), and because
+note sources load in full while meetings paginate, **"Load more" can insert older meetings above the older
+notes tail** — the list is correctly ordered at every point but is not append-only. Fixing either properly
+means a server-side unified feed endpoint; neither was worth that yet.
+
+**Verified in three layers:** 19 direct checks of the ordering and "now" rules (DST both ways, the zoneless
+timestamp form, day boundaries in both directions, the assumed-hour end); real data in the running app
+(Jul 22 ordering 3:30 PM → 11:00 AM → 10:30 AM → untimed); and **stubbed note sources injected by patching
+`fetch` in the browser — no DB writes** — interleaving at their Eastern times, an undated one sinking to the
+bottom, and the in-progress meeting rendering a measured 4 px emerald border. `prepush` + full
+`npm run build` green; **390 px** and 1425 px both clean (zero overflowing elements, no horizontal scroll).
+⚠ Not exercised on the live site by the agent (standing app-password limitation) — **ask the owner whether
+the ordering matches what they wanted**, since "based on when logged" was their phrase and the
+`Contact.updatedAt` caveat above is the one place it could read wrong.
+
+---
+
 ## ✅ 2026-08-05: Outlook import picker — four owner asks, all shipped (`4839e35`) — **owner confirmed: "they work well"**
 
 Owner listed four things wrong with "Import from Outlook". **One commit to `main`, `4839e35`, schema-free.**
@@ -123,6 +168,7 @@ safety net — just the only one-command one.
 
 | Item | Why |
 |---|---|
+| ⏳ **Mentions merged feed (`a3e7085`) not owner-confirmed** | Shipped 2026-08-05 s2, verified locally and at 390 px but never seen by the owner. Two things to ask about specifically, because both are judgment calls inside their phrase *"based on when logged"*: (1) a **contact note** is placed by `Contact.updatedAt`, the record's last-touched time — editing an unrelated field on the contact floats that card up, and if that reads wrong the fix is a dedicated "notes last edited" timestamp, i.e. a schema change; (2) **"Load more" is not append-only** — older meetings can insert above the older notes tail, since note sources all load at once while meetings paginate. Both are recorded as accepted limits; neither is a defect to chase without the owner saying it bothers them. |
 | ~~Outlook import changes (`4839e35`) not owner-confirmed~~ | **DONE 2026-08-05 — owner: "I confirm that they work well."** Nothing to re-check. The only thing left open is a *preference*, not a bug: the **hide-vs-drop** call on excluded blocks was never put to them separately, so if the "N skipped — Show" line ever irritates, dropping those events outright is a one-line change in `calendar-filter.ts`'s consumer. |
 | ⚠ **Leftover credentials file — ask the owner, don't just delete** | `%LOCALAPPDATA%\Temp\claude\c--dev-personal-searchbook\037afcb5-…\scratchpad\phase4.env.ps1` (Jul 26, 1842 B) holds `BLOB_READ_WRITE_TOKEN`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL`. **It may hold a *working* Turso token** — `CLAUDE.md` records the committed one as stale, which is the whole reason DDL is hand-pasted into the web console — so deleting it may throw away a capability. **Unverified**: the read-only probe was blocked by the permission classifier (reading a credentials file) and deliberately not circumvented. Owner's choice: keep the paste-into-console workflow and delete it, or approve a test and rotate it into `server/.env` (commented). Decoupled from Phase 6; also listed as its step 5. |
 | ~~Backup job alert threshold~~ | **DONE 2026-08-04 — owner set `searchbook-backup` to alert after 2 consecutive failures** (was 3, i.e. three silent days). Backups themselves confirmed running. |

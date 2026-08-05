@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import { icsProvider, getAppTimezone, CalendarEvent } from '../lib/ics';
+import { isExcludedSubject } from '../lib/calendar-filter';
 
 const router = Router();
 
@@ -45,6 +46,9 @@ function missingTimes(row: StoredTimes, ev: CalendarEvent): { startTime?: string
 // GET /api/calendar/events?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Returns the events in the window, each annotated with `alreadyImported` and — for those
 // already imported — `needsTimeFix` when the feed carries times the stored meeting lacks.
+// `excluded` marks the non-meeting blocks (lunch/travel/private placeholders — see
+// lib/calendar-filter): still returned so the picker can disclose them, never offered
+// for import by default.
 router.get('/events', async (req: Request, res: Response) => {
   if (!icsProvider.isConfigured()) {
     res.status(503).json(NOT_CONFIGURED);
@@ -91,6 +95,7 @@ router.get('/events', async (req: Request, res: Response) => {
         isRecurring: e.isRecurring,
         alreadyImported: !!row,
         needsTimeFix: !!row && !!missingTimes(row, e),
+        excluded: isExcludedSubject(e.subject),
       };
     });
 

@@ -65,6 +65,37 @@ function notUpcomingClause(today: string, now: string): Record<string, unknown> 
   return { OR: keep };
 }
 
+// How long a timed meeting is assumed to run when no end time was recorded — mirrors the
+// client's ASSUMED_MEETING_MINUTES (client/src/lib/meeting-time.ts).
+const ASSUMED_MEETING_MINUTES = 60;
+
+// Add minutes to an "HH:MM" wall clock, clamped to the end of the day (a single-day
+// record can't hold an end that reads as earlier than its start).
+function addMinutes(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const total = h * 60 + m + minutes;
+  if (!Number.isFinite(total)) return hhmm;
+  if (total >= 24 * 60) return '23:59';
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// Mirror of the client's `isHappeningNow`: a timed meeting is in progress when its start
+// has passed and it hasn't ended — the recorded endTime, or start + ASSUMED_MEETING_MINUTES
+// when none was recorded (or when a stored end reads as earlier than the start, which a
+// midnight-crossing import leaves behind). Kept as an app-code check rather than a
+// where-clause because that assumed-end arithmetic doesn't translate to a column
+// comparison; the caller narrows the rows to one day's started meetings first, so the
+// set it runs over is tiny. Keep in sync with the client rule — that's the one the
+// green "Now" marker reads.
+function isHappeningNow(meeting: { startTime: string | null; endTime: string | null }, now: string): boolean {
+  if (!meeting.startTime) return false;
+  const end =
+    meeting.endTime && meeting.endTime > meeting.startTime
+      ? meeting.endTime
+      : addMinutes(meeting.startTime, ASSUMED_MEETING_MINUTES);
+  return meeting.startTime <= now && now < end;
+}
+
 // Org filter, widened: a meeting matches `companyId` when the company is the
 // meeting's anchor/additional org OR when the meeting's anchor contact / any named
 // participant CURRENTLY works there. The "currently works there" set can't be
@@ -178,16 +209,51 @@ router.get('/', async (req: Request, res: Response) => {
     const orderBy: Record<string, 'asc' | 'desc'>[] =
       sortField === 'date' ? [{ date: dir }, { startTime: dir }] : [{ [sortField]: dir }];
 
-    const [total, data] = await Promise.all([
+    // A meeting happening RIGHT NOW is pinned to the very top, ahead of the sort (owner
+    // ask, 2026-08-06). Under date-desc it would otherwise sit below every future meeting
+    // AND every later meeting today — far enough down to be unfindable mid-meeting, which
+    // is exactly when it's wanted. This is done server-side because the client only holds
+    // the pages it has loaded, and the in-progress meeting can fall on any of them.
+    // Candidates = today's already-started timed meetings that pass the SAME filters (so a
+    // series view / "Upcoming only" still bounds the pin — an in-progress meeting isn't
+    // upcoming, so that mode correctly pins nothing); each is then confirmed with the full
+    // end-time rule. Skipped entirely when the client didn't send its Eastern wall clock.
+    const pinned =
+      todayParam && nowParam
+        ? (
+          await prisma.conversation.findMany({
+            where: {
+              AND: [...AND, { date: todayParam }, { startTime: { not: null } }, { startTime: { lte: nowParam } }],
+            },
+            include: meetingListInclude,
+            orderBy,
+          })
+        ).filter((m) => isHappeningNow(m, nowParam))
+        : [];
+
+    // Pinned rows occupy the first slots of the overall result, so the requested page
+    // window is split between them and the rest of the list — which excludes them, so a
+    // pinned meeting can't also appear in its date position. `total` still counts every
+    // matching meeting, so the "N meetings" readout and hasMore are unaffected.
+    const pinnedIds = pinned.map((m) => m.id);
+    const restWhere = pinnedIds.length ? { AND: [...AND, { id: { notIn: pinnedIds } }] } : where;
+    const pinnedPage = pinned.slice(skip, skip + take);
+    const restTake = take - pinnedPage.length;
+
+    const [total, rest] = await Promise.all([
       prisma.conversation.count({ where }),
-      prisma.conversation.findMany({
-        where,
-        include: meetingListInclude,
-        orderBy,
-        take,
-        skip,
-      }),
+      restTake > 0
+        ? prisma.conversation.findMany({
+          where: restWhere,
+          include: meetingListInclude,
+          orderBy,
+          take: restTake,
+          skip: Math.max(0, skip - pinnedIds.length),
+        })
+        : Promise.resolve([]),
     ]);
+
+    const data = [...pinnedPage, ...rest];
 
     res.json({
       data,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -763,8 +763,12 @@ export function MeetingsPage() {
   const toFilter = searchParams.get('to') || ''
   const qFilter = searchParams.get('q') || ''
   const idFilter = searchParams.get('id') || ''
-  // Default sort: most-recently-updated first (owner preference).
-  const sortBy = searchParams.get('sortBy') || 'updatedAt'
+  // Default sort: meeting date, newest first — with any in-progress meeting pinned above
+  // it (see `orderedMeetings` below and the server's pin). This defaulted to `updatedAt`
+  // ("Recently updated") until 2026-08-06, which is why a meeting happening RIGHT NOW
+  // could sit pages below meetings from days earlier: the owner opened the list mid-
+  // meeting and couldn't find its card. "Recently updated" is still in the sort menu.
+  const sortBy = searchParams.get('sortBy') || 'date'
   const sortDir = searchParams.get('sortDir') || 'desc'
   // Past/upcoming scope — 'past' drops not-yet-happened meetings, 'upcoming' shows
   // ONLY them (both server-side, so counts and pagination stay correct). Persisted
@@ -844,13 +848,15 @@ export function MeetingsPage() {
     if (toFilter) params.set('to', toFilter)
     if (qFilter) params.set('q', qFilter)
     if (idFilter) params.set('id', idFilter)
-    // Past/upcoming scoping needs the client's Eastern wall clock so the server
-    // applies the same cutoff as the "Upcoming" badge.
+    // Anything that compares a meeting against "now" needs the client's Eastern wall
+    // clock: the past/upcoming scoping below, and the server's pinning of an in-progress
+    // meeting to the top. Read at call time, NOT as a dep — buildQuery is memoized on the
+    // filters only, so the 30s clock tick can't retrigger the load effect.
+    const { date: today, hhmm } = easternNowParts()
+    params.set('today', today)
+    params.set('now', hhmm)
     if (whenFilter === 'past' || whenFilter === 'upcoming') {
-      const { date: today, hhmm } = easternNowParts()
       params.set(whenFilter === 'past' ? 'hideUpcoming' : 'onlyUpcoming', '1')
-      params.set('today', today)
-      params.set('now', hhmm)
     }
     params.set('sortBy', sortBy)
     params.set('sortDir', sortDir)
@@ -895,7 +901,13 @@ export function MeetingsPage() {
       const res = await api.get<{ data: Conversation[]; pagination: { total: number; hasMore: boolean } }>(
         `/meetings?${buildQuery(meetings.length)}`
       )
-      setMeetings((prev) => [...prev, ...res.data])
+      // Dedupe on append: the server's pinned in-progress rows are keyed off the `now`
+      // sent with each request, so a meeting that ENDS between page 1 and page 2 shifts
+      // the window by one row. Rare, but a duplicate id would be a duplicate React key.
+      setMeetings((prev) => {
+        const seen = new Set(prev.map((m) => m.id))
+        return [...prev, ...res.data.filter((m) => !seen.has(m.id))]
+      })
       setTotal(res.pagination.total)
       setHasMore(res.pagination.hasMore)
     } catch { /* keep what we have */ } finally {
@@ -993,6 +1005,18 @@ export function MeetingsPage() {
   // timer so the "Now" marker turns itself on and off as meetings start and end.
   useClockTick()
   const { date: todayStr, hhmm: nowHHMM } = easternNowParts()
+
+  // In-progress meetings ride at the TOP, ahead of the sort; everything else keeps the
+  // server's order (date desc by default). The server pins them too — that's what puts an
+  // in-progress meeting on page 1 at all when it would otherwise sort onto page 3 — but
+  // the loaded list is re-partitioned here as well so the order stays right across the 30s
+  // clock tick, without a refetch, as a meeting starts and then ends.
+  const orderedMeetings = useMemo(() => {
+    const live: Conversation[] = []
+    const rest: Conversation[] = []
+    for (const m of meetings) (isHappeningNow(m, todayStr, nowHHMM) ? live : rest).push(m)
+    return live.length ? [...live, ...rest] : meetings
+  }, [meetings, todayStr, nowHHMM])
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -1201,7 +1225,7 @@ export function MeetingsPage() {
             {total} meeting{total === 1 ? '' : 's'}
           </p>
           <div className="space-y-3">
-            {meetings.map((conv) => (
+            {orderedMeetings.map((conv) => (
               <MeetingCard
                 key={conv.id}
                 conv={conv}

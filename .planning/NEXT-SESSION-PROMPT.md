@@ -5,6 +5,54 @@ agent-agnostic, see `AGENTS.md`). Keep this file **lean**: a short "just complet
 carry-overs, open bugs, and a kickoff prompt. Per-session detail goes in `SESSION-HISTORY.md`, not
 here.
 
+## ⏳ 2026-08-06: Meetings list — in-progress meeting first, then date/time desc (`9f9578e`) — **NOT yet owner-confirmed**
+
+Owner: *"this morning I was trying to find the card for the meeting I was in in the meetings activity and I
+simply couldn't. Eventually I discovered that I had to scroll way down… can we make sure that meetings are
+sorted: a) known CURRENT meeting on top; b) THEN sort by descending date/time."*
+**One commit to `main`, `9f9578e`, schema-free.**
+
+**Their screenshot was the diagnosis.** Aug 5 11:00 → Aug 5 9:30 → **Aug 6 9:30** is impossible under date
+sorting and exactly right under `updatedAt` — the `/meetings` client default had been **`sortBy=updatedAt`
+("Recently updated") since 2026-06-15**. Nothing was broken; the list wasn't ordered the way the page implies,
+and only the sort dropdown said so. It had never looked wrong before because it misplaces only the meeting you
+have *not* just edited — which is the one you're sitting in. Default is now **`date:desc`**; "Recently updated"
+stays in the menu.
+
+⚠ **Fixing the default alone would NOT have answered the ask, and this is the part to remember.** Under
+date-desc a live meeting still sorts below every *future* meeting **and** every later meeting today — **13th**
+down in the stale local snapshot, further with a week of Outlook imports loaded. So (a) is an explicit pin, and
+**the pin is computed server-side**: the client only holds the pages it has fetched, so a client-side hoist is
+a no-op in exactly the case that produced the complaint. `GET /meetings` now receives the Eastern `today`/`now`
+on **every** request (was: past/upcoming modes only), selects today's already-started meetings **under the same
+filters**, confirms each with a server mirror of `isHappeningNow`, and splits the page window between the pinned
+rows and a rest-query that excludes them — so `total`/`hasMore`/offsets stay exact. The client re-partitions its
+loaded list too, so the order tracks the 30 s `useClockTick` without a refetch; `loadMore` dedupes by id.
+
+⚠ **`isHappeningNow` now has a deliberate second copy, server-side** (`routes/meetings.ts`) — `CLAUDE.md` says
+that rule lives in one place, and this is the documented exception: the server can't import client code and the
+assumed-60-min end doesn't translate to a column comparison, so it follows the `notUpcomingClause` /
+`isUpcomingMeeting` precedent. **Change one, change both.**
+
+**Verified in three layers:** 13 checks against the running endpoint (pin position, the rest still date-desc,
+`total` unchanged, both assumed-duration edges — live at 59 min not 61, four pages of pagination with no dupes
+or gaps, `onlyUpcoming` and a date range each still bounding the pin); the real UI at **390 px** (sort reads
+"Date (newest)", a temporary in-progress meeting first with its 4 px emerald border + "Now" badge, zero
+overflow); and the **client hoist isolated with a controllable fake clock** — advancing an hour with no user
+action moved the newly-live meeting to the top and released the old one **with the request count unchanged**.
+Test meeting + undo snapshot removed (`dev.db` back to 348). `prepush` + full `npm run build` green.
+
+**Accepted transient (measured, not assumed):** the meeting that was live *at fetch time* keeps its top slot
+until the next fetch — so if it ends while the page sits open, it sits above the date order with no badge.
+Self-correcting on any navigation or filter change. A client-side re-sort would fix it only by duplicating the
+server's NULL-`startTime` ranking and mixed-format `updatedAt` comparison (the trap already documented for the
+Mentions feed), so it was written down rather than built around. **Raise it only if the owner notices.**
+
+⚠ **Not exercised on the live site** (standing app-password limitation) — owner confirmation is what closes
+this one.
+
+---
+
 ## ✅ 2026-08-05 (s2): Mentions is now ONE feed, with the "Now" border (`a3e7085`) — **owner confirmed: "it all looks fine to me"**
 
 Owner: *"in the @ mentions section, let's try to order ALL items by date descending AND time descending
@@ -175,6 +223,7 @@ safety net — just the only one-command one.
 
 | Item | Why |
 |---|---|
+| ⏳ **Meetings sort (`9f9578e`) not owner-confirmed** | Shipped 2026-08-06 in response to the owner not being able to find the meeting they were in. Ask whether the list now behaves: **an in-progress meeting on top, everything else newest-date-first**. Two things to listen for rather than pre-emptively change: (1) the default sort moved off **"Recently updated"**, which had been the default since 2026-06-15 — if they relied on it, it is still in the sort dropdown; (2) the **accepted transient** — a meeting that ends while the meetings page is left open keeps its top slot (no badge) until the next fetch. Both are described in the top section. |
 | ~~Mentions merged feed (`a3e7085`) not owner-confirmed~~ | **DONE 2026-08-05 s2 — owner: "it all looks fine to me."** Nothing to re-check. What stays open is a *preference*, not a bug: two judgment calls inside their phrase *"based on when logged"* were explained but never put to them separately — (1) a **contact note** is placed by `Contact.updatedAt`, the record's last-touched time, so editing an unrelated field on the contact floats that card up (a real fix needs a dedicated "notes last edited" column, i.e. additive DDL); (2) **"Load more" is not append-only** — older meetings can insert above the older notes tail, since note sources load in full while meetings paginate (a real fix needs a server-side unified feed endpoint). Don't chase either without the owner saying it bothers them. |
 | ~~Outlook import changes (`4839e35`) not owner-confirmed~~ | **DONE 2026-08-05 — owner: "I confirm that they work well."** Nothing to re-check. The only thing left open is a *preference*, not a bug: the **hide-vs-drop** call on excluded blocks was never put to them separately, so if the "N skipped — Show" line ever irritates, dropping those events outright is a one-line change in `calendar-filter.ts`'s consumer. |
 | ⚠ **Leftover credentials file — ask the owner, don't just delete** | `%LOCALAPPDATA%\Temp\claude\c--dev-personal-searchbook\037afcb5-…\scratchpad\phase4.env.ps1` (Jul 26, 1842 B) holds `BLOB_READ_WRITE_TOKEN`, `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL`. **It may hold a *working* Turso token** — `CLAUDE.md` records the committed one as stale, which is the whole reason DDL is hand-pasted into the web console — so deleting it may throw away a capability. **Unverified**: the read-only probe was blocked by the permission classifier (reading a credentials file) and deliberately not circumvented. Owner's choice: keep the paste-into-console workflow and delete it, or approve a test and rotate it into `server/.env` (commented). Decoupled from Phase 6; also listed as its step 5. |
